@@ -26,6 +26,7 @@ crash.*.log
 *.box
 output-*/
 manifest.json
+packer/http/preseed.cfg
 
 # Ansible
 *.retry
@@ -68,3 +69,4 @@ logs/
 
 # Claude Code
 .claude/
+packer/http/preseed.cfg

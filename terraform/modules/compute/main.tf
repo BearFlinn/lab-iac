@@ -77,15 +77,15 @@ resource "proxmox_virtual_environment_vm" "debian_vm" {
     ]
   }
 
-  provisioner "remote-exec" {
-    inline = ["echo 'VM is ready'"]
+  # provisioner "remote-exec" {
+  #   inline = ["echo 'VM is ready'"]
 
-    connection {
-      type        = "ssh"
-      user        = "debian"
-      private_key = file(var.ssh_private_key_path)
-      host        = self.ipv4_addresses[0][0]
-      timeout     = "2m"
-    }
-  }
+  #   connection {
+  #     type        = "ssh"
+  #     user        = "debian"
+  #     private_key = file(var.ssh_private_key_path)
+  #     host        = self.ipv4_addresses[0][0]
+  #     timeout     = "2m"
+  #   }
+  # }
 }

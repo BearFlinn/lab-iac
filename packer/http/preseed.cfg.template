@@ -1,25 +1,33 @@
-#### Contents of the preconfiguration file (for Debian 12 bookworm)
+#### Contents of the preconfiguration file (for Debian 13 trixie)
 ### Localization
 d-i debian-installer/locale string en_US.UTF-8
 d-i keyboard-configuration/xkb-keymap select us
+d-i console-setup/ask_detect boolean false
+d-i debconf/priority select critical
 
 ### Network configuration
 d-i netcfg/choose_interface select auto
 d-i netcfg/get_hostname string debian-base
 d-i netcfg/get_domain string local
+d-i netcfg/wireless_wep string
 
 ### Mirror settings
 d-i mirror/country string manual
 d-i mirror/http/hostname string deb.debian.org
 d-i mirror/http/directory string /debian
 d-i mirror/http/proxy string
+d-i mirror/suite string trixie
+d-i apt-setup/non-free boolean true
+d-i apt-setup/contrib boolean true
+d-i apt-setup/services-select multiselect security, updates
+d-i apt-setup/security_host string security.debian.org
 
 ### Account setup
 d-i passwd/root-login boolean false
 d-i passwd/user-fullname string Debian User
 d-i passwd/username string debian
-d-i passwd/user-password password debian
-d-i passwd/user-password-again password debian
+d-i passwd/user-password password __SSH_PASSWORD__
+d-i passwd/user-password-again password __SSH_PASSWORD__
 d-i user-setup/allow-password-weak boolean true
 d-i user-setup/encrypt-home boolean false
 
