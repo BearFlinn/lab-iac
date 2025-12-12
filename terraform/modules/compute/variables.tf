@@ -1,6 +1,6 @@
 variable "template_name" {
-  description = "Name of the Proxmox VM template to clone from"
-  type        = string
+  description = "VM ID of the Proxmox VM template to clone from"
+  type        = number
 }
 
 variable "cloudinit_storage" {
@@ -13,13 +13,22 @@ variable "ssh_private_key_path" {
   type        = string
 }
 
+variable "ssh_public_key" {
+  description = "SSH public key for VM access"
+  type        = string
+}
+
+variable "vm_password" {
+  description = "Password for the VM user account"
+  type        = string
+}
+
 variable "vms" {
   description = "Map of VMs to create"
   type = map(object({
     name       = string
     node       = string
     vmid       = number
-    full_clone = optional(bool, true)
     cores      = number
     sockets    = number
     memory     = number
@@ -30,11 +39,10 @@ variable "vms" {
     }))
     disks = list(object({
       slot     = number
-      size     = string
-      type     = optional(string, "virtio")
+      size     = number
       storage  = string
       discard  = optional(string, "on")
-      iothread = optional(number, 0)
+      iothread = optional(bool, false)
     }))
   }))
 }

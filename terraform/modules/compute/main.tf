@@ -1,26 +1,43 @@
-resource "proxmox_vm_qemu" "debian_vm" {
+terraform {
+  required_providers {
+    proxmox = {
+      source  = "bpg/proxmox"
+      version = ">= 0.50.0"
+    }
+  }
+}
+
+resource "proxmox_virtual_environment_vm" "debian_vm" {
   for_each = var.vms
 
   name        = each.value.name
-  target_node = each.value.node
-  vmid        = each.value.vmid
+  node_name   = each.value.node
+  vm_id       = each.value.vmid
 
-  clone       = var.template_name
-  full_clone  = each.value.full_clone
+  clone {
+    vm_id = var.template_name
+  }
 
-  cores   = each.value.cores
-  sockets = each.value.sockets
-  memory  = each.value.memory
+  cpu {
+    cores   = each.value.cores
+    sockets = each.value.sockets
+  }
 
-  agent = 1
+  memory {
+    dedicated = each.value.memory
+  }
+
+  agent {
+    enabled = true
+  }
 
   # Network configuration
-  dynamic "network" {
+  dynamic "network_device" {
     for_each = each.value.networks
     content {
-      model  = network.value.model
-      bridge = network.value.bridge
-      mtu    = lookup(network.value, "mtu", 1500)
+      model  = network_device.value.model
+      bridge = network_device.value.bridge
+      mtu    = lookup(network_device.value, "mtu", 1500)
     }
   }
 
@@ -28,22 +45,35 @@ resource "proxmox_vm_qemu" "debian_vm" {
   dynamic "disk" {
     for_each = each.value.disks
     content {
-      slot     = disk.value.slot
-      size     = disk.value.size
-      type     = disk.value.type
-      storage  = disk.value.storage
-      discard  = lookup(disk.value, "discard", "on")
-      iothread = lookup(disk.value, "iothread", 0)
+      datastore_id = disk.value.storage
+      interface    = "scsi${disk.value.slot}"
+      size         = disk.value.size
+      discard      = lookup(disk.value, "discard", "on")
+      iothread     = lookup(disk.value, "iothread", 0)
     }
   }
 
   # Cloud-init configuration
-  cloudinit_cdrom_storage = var.cloudinit_storage
+  initialization {
+    datastore_id = var.cloudinit_storage
+
+    ip_config {
+      ipv4 {
+        address = "dhcp"
+      }
+    }
+
+    user_account {
+      keys     = [var.ssh_public_key]
+      password = var.vm_password
+      username = "debian"
+    }
+  }
 
   lifecycle {
     ignore_changes = [
       disk,
-      network,
+      network_device,
     ]
   }
 
@@ -54,7 +84,7 @@ resource "proxmox_vm_qemu" "debian_vm" {
       type        = "ssh"
       user        = "debian"
       private_key = file(var.ssh_private_key_path)
-      host        = self.default_ipv4_address
+      host        = self.ipv4_addresses[0][0]
       timeout     = "2m"
     }
   }

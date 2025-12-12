@@ -1,7 +1,30 @@
-variable "template_name" {
-  description = "Name of the Proxmox VM template to clone"
+variable "proxmox_url" {
+  description = "Proxmox VE API endpoint (e.g., https://proxmox.example.com:8006)"
   type        = string
-  default     = "debian-base"
+}
+
+variable "proxmox_api_token" {
+  description = "Proxmox VE API token in format user@realm!tokenid=tokensecret"
+  type        = string
+  sensitive   = true
+}
+
+variable "proxmox_insecure" {
+  description = "Ignore SSL certificate verification (not recommended for production)"
+  type        = bool
+  default     = false
+}
+
+variable "proxmox_ssh_user" {
+  description = "SSH username for Proxmox host"
+  type        = string
+  default     = "root"
+}
+
+variable "template_name" {
+  description = "VM ID of the Proxmox VM template to clone"
+  type        = number
+  default     = 9000  # debian-base template VM ID
 }
 
 variable "cloudinit_storage" {
@@ -14,13 +37,23 @@ variable "ssh_private_key_path" {
   type        = string
 }
 
+variable "ssh_public_key" {
+  description = "SSH public key for VM access"
+  type        = string
+}
+
+variable "vm_password" {
+  description = "Password for the VM user account"
+  type        = string
+  sensitive   = true
+}
+
 variable "vms" {
   description = "VMs to create in dev environment"
   type = map(object({
     name       = string
     node       = string
     vmid       = number
-    full_clone = optional(bool, true)
     cores      = number
     sockets    = number
     memory     = number
@@ -31,11 +64,10 @@ variable "vms" {
     }))
     disks = list(object({
       slot     = number
-      size     = string
-      type     = optional(string, "virtio")
+      size     = number
       storage  = string
       discard  = optional(string, "on")
-      iothread = optional(number, 0)
+      iothread = optional(bool, false)
     }))
   }))
 }
