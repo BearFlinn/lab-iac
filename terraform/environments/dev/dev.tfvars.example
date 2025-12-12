@@ -1,0 +1,55 @@
+# Proxmox Configuration (set via environment or terraform.tfvars)
+# proxmox_url = "https://proxmox.example.com:8006"
+# proxmox_api_token = "user@pam!tokenid=tokensecret"
+# proxmox_insecure = true  # Only for self-signed certs in dev
+
+cloudinit_storage   = "local-lvm"
+ssh_private_key_path = "~/.ssh/id_rsa"
+
+vms = {
+  web1 = {
+    name     = "web1"
+    node     = "proxmox1"
+    vmid     = 100
+    cores    = 2
+    sockets  = 1
+    memory   = 2048
+    networks = [
+      {
+        model  = "virtio"
+        bridge = "vmbr0"
+      }
+    ]
+    disks = [
+      {
+        slot    = 0
+        size    = "30G"
+        type    = "virtio"
+        storage = "local-lvm"
+      }
+    ]
+  }
+
+  web2 = {
+    name     = "web2"
+    node     = "proxmox1"
+    vmid     = 101
+    cores    = 2
+    sockets  = 1
+    memory   = 2048
+    networks = [
+      {
+        model  = "virtio"
+        bridge = "vmbr0"
+      }
+    ]
+    disks = [
+      {
+        slot    = 0
+        size    = "30G"
+        type    = "virtio"
+        storage = "local-lvm"
+      }
+    ]
+  }
+}
