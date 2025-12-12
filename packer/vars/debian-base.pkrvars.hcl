@@ -12,7 +12,7 @@ cpus      = "2"
 
 # SSH Credentials (change for production!)
 ssh_username = "debian"
-ssh_password = "<REDACTED>"
+# ssh_password is set via environment variable PKR_VAR_ssh_password
 
 # You can override the ISO URL and checksum if needed
 # iso_url = "https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/debian-13.2.0-amd64-netinst.iso"

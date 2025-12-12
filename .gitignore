@@ -47,6 +47,7 @@ env/
 .env
 .env.local
 .env.*.local
+packer.env
 secrets/
 *.key
 *.pem
