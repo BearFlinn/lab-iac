@@ -1,0 +1,94 @@
+---
+# Tasks for preparing nodes with Kubernetes prerequisites
+# This role configures the OS for running Kubernetes
+
+- name: Load required kernel modules
+  community.general.modprobe:
+    name: "{{ item }}"
+    state: present
+    persistent: present
+  loop:
+    - overlay
+    - br_netfilter
+  become: yes
+
+- name: Set sysctl parameters for Kubernetes
+  ansible.posix.sysctl:
+    name: "{{ item.name }}"
+    value: "{{ item.value }}"
+    state: present
+    sysctl_set: yes
+    reload: yes
+  loop:
+    - { name: 'net.bridge.bridge-nf-call-iptables', value: '1' }
+    - { name: 'net.bridge.bridge-nf-call-ip6tables', value: '1' }
+    - { name: 'net.ipv4.ip_forward', value: '1' }
+  become: yes
+
+- name: Disable swap permanently
+  block:
+    - name: Disable swap immediately
+      ansible.builtin.command: swapoff -a
+      changed_when: false
+
+    - name: Remove swap entries from /etc/fstab
+      ansible.builtin.lineinfile:
+        path: /etc/fstab
+        regexp: '^.*\s+swap\s+swap.*$'
+        state: absent
+  become: yes
+
+- name: Install containerd and dependencies
+  ansible.builtin.apt:
+    name:
+      - containerd
+      - runc
+    state: present
+    update_cache: yes
+  become: yes
+
+- name: Create containerd config directory
+  ansible.builtin.file:
+    path: /etc/containerd
+    state: directory
+    mode: '0755'
+  become: yes
+
+- name: Generate default containerd configuration
+  ansible.builtin.shell: containerd config default > /etc/containerd/config.toml
+  args:
+    creates: /etc/containerd/config.toml
+  become: yes
+
+- name: Configure containerd to use systemd cgroup driver
+  ansible.builtin.lineinfile:
+    path: /etc/containerd/config.toml
+    regexp: '^\s+SystemdCgroup\s*='
+    line: '            SystemdCgroup = true'
+    insertafter: '^\s+\[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc.options\]'
+  become: yes
+  notify: restart containerd
+
+- name: Enable and start containerd service
+  ansible.builtin.systemd:
+    name: containerd
+    enabled: yes
+    state: started
+  become: yes
+
+- name: Install crictl (CRI CLI tool)
+  ansible.builtin.apt:
+    name: cri-tools
+    state: present
+  become: yes
+  ignore_errors: yes
+
+- name: Configure crictl to use containerd
+  ansible.builtin.copy:
+    content: |
+      runtime-endpoint: unix:///var/run/containerd/containerd.sock
+      image-endpoint: unix:///var/run/containerd/containerd.sock
+      timeout: 10
+    dest: /etc/crictl.yaml
+    mode: '0644'
+  become: yes

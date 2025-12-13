@@ -1,0 +1,91 @@
+---
+# Tasks for initializing Kubernetes control plane
+
+- name: Check if Kubernetes is already initialized
+  ansible.builtin.stat:
+    path: /etc/kubernetes/admin.conf
+  register: k8s_initialized
+  become: yes
+
+- name: Initialize Kubernetes control plane
+  ansible.builtin.command: |
+    kubeadm init \
+      --pod-network-cidr={{ pod_network_cidr }} \
+      --control-plane-endpoint={{ ansible_host }}
+  become: yes
+  when: not k8s_initialized.stat.exists
+  register: kubeadm_init
+
+- name: Create .kube directory for debian user
+  ansible.builtin.file:
+    path: /home/debian/.kube
+    state: directory
+    owner: debian
+    group: debian
+    mode: '0755'
+  become: yes
+
+- name: Copy admin.conf to debian user's kube config
+  ansible.builtin.copy:
+    src: /etc/kubernetes/admin.conf
+    dest: /home/debian/.kube/config
+    owner: debian
+    group: debian
+    mode: '0600'
+    remote_src: yes
+  become: yes
+
+- name: Wait for API server to be ready
+  ansible.builtin.command: kubectl cluster-info
+  become: no
+  environment:
+    KUBECONFIG: /home/debian/.kube/config
+  retries: 30
+  delay: 2
+  register: cluster_info
+  until: cluster_info.rc == 0
+
+- name: Download Calico manifest
+  ansible.builtin.get_url:
+    url: "https://raw.githubusercontent.com/projectcalico/calico/{{ calico_version }}/manifests/calico.yaml"
+    dest: /tmp/calico.yaml
+    mode: '0644'
+  become: no
+
+- name: Install Calico CNI
+  ansible.builtin.command: kubectl apply -f /tmp/calico.yaml --validate=false
+  become: no
+  environment:
+    KUBECONFIG: /home/debian/.kube/config
+  retries: 3
+  delay: 5
+  register: calico_install
+  until: calico_install.rc == 0
+
+- name: Wait for Calico pods to be ready
+  ansible.builtin.command: kubectl wait --for=condition=Ready pods --all -n kube-system --timeout=300s
+  become: no
+  environment:
+    KUBECONFIG: /home/debian/.kube/config
+  retries: 3
+  delay: 10
+  register: calico_ready
+  until: calico_ready.rc == 0
+
+- name: Generate join command for worker nodes
+  ansible.builtin.command: kubeadm token create --print-join-command
+  become: yes
+  register: join_command_output
+  changed_when: false
+
+- name: Save join command to local fact
+  ansible.builtin.set_fact:
+    k8s_join_command: "{{ join_command_output.stdout }}"
+
+- name: Save join command to file for reference
+  ansible.builtin.copy:
+    content: "{{ k8s_join_command }}"
+    dest: /tmp/k8s-join-command.sh
+    mode: '0644'
+  delegate_to: localhost
+  become: no

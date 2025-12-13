@@ -1,0 +1,69 @@
+---
+# Kubernetes Cluster Setup Playbook
+# Fully automated deployment of a kubeadm-based Kubernetes cluster
+
+- name: Prepare all nodes with Kubernetes prerequisites
+  hosts: k8s_cluster
+  gather_facts: yes
+  roles:
+    - k8s-prerequisites
+    - k8s-packages
+
+- name: Initialize Kubernetes control plane
+  hosts: k8s_control_plane
+  gather_facts: no
+  roles:
+    - k8s-control-plane
+
+- name: Join worker nodes to the cluster
+  hosts: k8s_workers
+  gather_facts: no
+  roles:
+    - k8s-worker
+
+- name: Display cluster status
+  hosts: k8s_control_plane
+  gather_facts: no
+  tasks:
+    - name: Get cluster nodes
+      ansible.builtin.command: kubectl get nodes -o wide
+      become: no
+      environment:
+        KUBECONFIG: /home/debian/.kube/config
+      register: cluster_nodes
+      changed_when: false
+
+    - name: Display nodes
+      ansible.builtin.debug:
+        msg: "{{ cluster_nodes.stdout_lines }}"
+
+    - name: Get cluster pods
+      ansible.builtin.command: kubectl get pods -A
+      become: no
+      environment:
+        KUBECONFIG: /home/debian/.kube/config
+      register: cluster_pods
+      changed_when: false
+
+    - name: Display pods
+      ansible.builtin.debug:
+        msg: "{{ cluster_pods.stdout_lines }}"
+
+    - name: Display success message
+      ansible.builtin.debug:
+        msg: |
+          =========================================
+          Kubernetes Cluster Setup Complete!
+          =========================================
+
+          To access your cluster, SSH to the control plane:
+            ssh debian@{{ ansible_host }}
+
+          Then run kubectl commands:
+            kubectl get nodes
+            kubectl get pods -A
+
+          Or copy the kubeconfig to your local machine:
+            scp debian@{{ ansible_host }}:~/.kube/config ~/.kube/k8s-cluster-config
+            export KUBECONFIG=~/.kube/k8s-cluster-config
+            kubectl get nodes

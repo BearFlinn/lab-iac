@@ -1,0 +1,13 @@
+---
+# DEPRECATED: This is a static inventory file kept for reference only
+#
+# For automated deployment, use the dynamic inventory script instead:
+#   ansible/inventory/terraform-inventory.sh
+#
+# The dynamic inventory automatically pulls VM IPs from Terraform output,
+# making the deployment fully automated without manual IP updates.
+#
+# Usage:
+#   ansible-playbook -i inventory/terraform-inventory.sh playbooks/k8s-cluster-setup.yml
+#
+# See docs/K8S_CLUSTER_SETUP.md for complete deployment instructions.

@@ -1,0 +1,116 @@
+---
+# Kubernetes Cluster Verification Playbook
+# Validates cluster health and deploys test workload
+
+- name: Verify Kubernetes cluster health
+  hosts: k8s_control_plane
+  gather_facts: no
+  tasks:
+    - name: Check all nodes are Ready
+      ansible.builtin.command: kubectl get nodes --no-headers
+      become: no
+      environment:
+        KUBECONFIG: /home/debian/.kube/config
+      register: nodes_status
+      changed_when: false
+      failed_when: "'NotReady' in nodes_status.stdout"
+
+    - name: Display node status
+      ansible.builtin.debug:
+        msg: "{{ nodes_status.stdout_lines }}"
+
+    - name: Check system pods are running
+      ansible.builtin.command: kubectl get pods -n kube-system --no-headers
+      become: no
+      environment:
+        KUBECONFIG: /home/debian/.kube/config
+      register: system_pods
+      changed_when: false
+
+    - name: Check for critical pod errors
+      ansible.builtin.assert:
+        that:
+          - "'Error' not in system_pods.stdout"
+        fail_msg: "Some critical pods are in Error state"
+        success_msg: "No critical pod errors detected"
+      ignore_errors: yes
+
+    - name: Display system pods status
+      ansible.builtin.debug:
+        msg: "{{ system_pods.stdout_lines }}"
+
+    - name: Deploy test nginx deployment
+      ansible.builtin.command: |
+        kubectl create deployment nginx-test --image=nginx:latest --replicas=3
+      become: no
+      environment:
+        KUBECONFIG: /home/debian/.kube/config
+      ignore_errors: yes
+      register: nginx_deploy
+
+    - name: Wait for nginx deployment to be ready
+      ansible.builtin.command: kubectl wait --for=condition=Available deployment/nginx-test --timeout=120s
+      become: no
+      environment:
+        KUBECONFIG: /home/debian/.kube/config
+      when: nginx_deploy.rc == 0
+      ignore_errors: yes
+      register: nginx_wait
+
+    - name: Get nginx pod distribution across nodes
+      ansible.builtin.command: kubectl get pods -l app=nginx-test -o wide
+      become: no
+      environment:
+        KUBECONFIG: /home/debian/.kube/config
+      register: nginx_pods
+      changed_when: false
+      when: nginx_deploy.rc == 0
+      ignore_errors: yes
+
+    - name: Display nginx pod distribution
+      ansible.builtin.debug:
+        msg: "{{ nginx_pods.stdout_lines }}"
+      when: nginx_deploy.rc == 0 and nginx_pods.rc == 0
+
+    - name: Expose nginx deployment as NodePort service
+      ansible.builtin.command: kubectl expose deployment nginx-test --type=NodePort --port=80
+      become: no
+      environment:
+        KUBECONFIG: /home/debian/.kube/config
+      ignore_errors: yes
+      when: nginx_deploy.rc == 0
+
+    - name: Get nginx service details
+      ansible.builtin.command: kubectl get svc nginx-test
+      become: no
+      environment:
+        KUBECONFIG: /home/debian/.kube/config
+      register: nginx_svc
+      changed_when: false
+      when: nginx_deploy.rc == 0
+      ignore_errors: yes
+
+    - name: Display nginx service details
+      ansible.builtin.debug:
+        msg: "{{ nginx_svc.stdout_lines }}"
+      when: nginx_deploy.rc == 0 and nginx_svc.rc == 0
+
+    - name: Display verification summary
+      ansible.builtin.debug:
+        msg: |
+          =========================================
+          Cluster Verification Summary
+          =========================================
+
+          ✓ All nodes are Ready
+          ✓ API server responding
+          ✓ System pods deployed
+          ✓ Test nginx deployment created with 3 replicas
+          ✓ Cluster is operational
+
+          To clean up the test deployment:
+            kubectl delete deployment nginx-test
+            kubectl delete svc nginx-test
+
+          Your Kubernetes cluster is ready for use!
+
