@@ -16,6 +16,11 @@
   when: not k8s_initialized.stat.exists
   register: kubeadm_init
 
+- name: Display kubeadm init output
+  ansible.builtin.debug:
+    var: kubeadm_init.stdout_lines
+  when: kubeadm_init is changed
+
 - name: Create .kube directory for debian user
   ansible.builtin.file:
     path: /home/debian/.kube
@@ -52,8 +57,15 @@
     mode: '0644'
   become: no
 
+- name: Update Calico pod CIDR in manifest
+  ansible.builtin.replace:
+    path: /tmp/calico.yaml
+    regexp: '# - name: CALICO_IPV4POOL_CIDR\n\s+#   value: "192\.168\.0\.0/16"'
+    replace: '- name: CALICO_IPV4POOL_CIDR\n              value: "{{ pod_network_cidr }}"'
+  become: no
+
 - name: Install Calico CNI
-  ansible.builtin.command: kubectl apply -f /tmp/calico.yaml --validate=false
+  ansible.builtin.command: kubectl apply -f /tmp/calico.yaml
   become: no
   environment:
     KUBECONFIG: /home/debian/.kube/config
@@ -71,6 +83,26 @@
   delay: 10
   register: calico_ready
   until: calico_ready.rc == 0
+
+- name: Wait for Calico to be fully operational
+  ansible.builtin.command: kubectl wait --for=condition=Ready nodes --all --timeout=60s
+  become: no
+  environment:
+    KUBECONFIG: /home/debian/.kube/config
+  retries: 5
+  delay: 5
+  register: control_plane_ready
+  until: control_plane_ready.rc == 0
+
+- name: Verify control plane node has pod CIDR assigned
+  ansible.builtin.shell: kubectl get node {{ inventory_hostname }} -o jsonpath='{.spec.podCIDR}' | grep -q '192.168'
+  become: no
+  environment:
+    KUBECONFIG: /home/debian/.kube/config
+  retries: 10
+  delay: 3
+  register: pod_cidr_check
+  until: pod_cidr_check.rc == 0
 
 - name: Generate join command for worker nodes
   ansible.builtin.command: kubeadm token create --print-join-command

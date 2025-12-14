@@ -16,11 +16,43 @@
   ansible.builtin.command: "{{ k8s_join_command }}"
   become: yes
   when: not node_joined.stat.exists
+  register: join_result
 
-- name: Wait for node to be registered
-  ansible.builtin.pause:
-    seconds: 10
-  when: not node_joined.stat.exists
+- name: Wait for node to appear in cluster
+  ansible.builtin.command: kubectl get node {{ inventory_hostname }}
+  delegate_to: "{{ groups['k8s_control_plane'][0] }}"
+  become: no
+  environment:
+    KUBECONFIG: /home/debian/.kube/config
+  retries: 30
+  delay: 5
+  register: node_registered
+  until: node_registered.rc == 0
+  when: not node_joined.stat.exists or join_result.changed
+
+- name: Wait for node to be Ready
+  ansible.builtin.command: kubectl wait --for=condition=Ready node/{{ inventory_hostname }} --timeout=180s
+  delegate_to: "{{ groups['k8s_control_plane'][0] }}"
+  become: no
+  environment:
+    KUBECONFIG: /home/debian/.kube/config
+  retries: 3
+  delay: 10
+  register: node_ready
+  until: node_ready.rc == 0
+  when: not node_joined.stat.exists or join_result.changed
+
+- name: Verify worker node has pod CIDR assigned
+  ansible.builtin.shell: kubectl get node {{ inventory_hostname }} -o jsonpath='{.spec.podCIDR}' | grep -q '192.168'
+  delegate_to: "{{ groups['k8s_control_plane'][0] }}"
+  become: no
+  environment:
+    KUBECONFIG: /home/debian/.kube/config
+  retries: 20
+  delay: 3
+  register: worker_cidr_check
+  until: worker_cidr_check.rc == 0
+  when: not node_joined.stat.exists or join_result.changed
 
 - name: Label worker nodes
   ansible.builtin.command: kubectl label node {{ inventory_hostname }} node-role.kubernetes.io/worker=worker --overwrite
@@ -28,4 +60,4 @@
   become: no
   environment:
     KUBECONFIG: /home/debian/.kube/config
-  when: not node_joined.stat.exists
+  when: not node_joined.stat.exists or join_result.changed
