@@ -21,21 +21,21 @@
     var: kubeadm_init.stdout_lines
   when: kubeadm_init is changed
 
-- name: Create .kube directory for debian user
+- name: Create .kube directory for ansible user
   ansible.builtin.file:
-    path: /home/debian/.kube
+    path: "/home/{{ ansible_user }}/.kube"
     state: directory
-    owner: debian
-    group: debian
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
     mode: '0755'
   become: yes
 
-- name: Copy admin.conf to debian user's kube config
+- name: Copy admin.conf to ansible user's kube config
   ansible.builtin.copy:
     src: /etc/kubernetes/admin.conf
-    dest: /home/debian/.kube/config
-    owner: debian
-    group: debian
+    dest: "/home/{{ ansible_user }}/.kube/config"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
     mode: '0600'
     remote_src: yes
   become: yes
@@ -44,7 +44,7 @@
   ansible.builtin.command: kubectl cluster-info
   become: no
   environment:
-    KUBECONFIG: /home/debian/.kube/config
+    KUBECONFIG: "/home/{{ ansible_user }}/.kube/config"
   retries: 30
   delay: 2
   register: cluster_info
@@ -68,7 +68,7 @@
   ansible.builtin.command: kubectl apply -f /tmp/calico.yaml
   become: no
   environment:
-    KUBECONFIG: /home/debian/.kube/config
+    KUBECONFIG: "/home/{{ ansible_user }}/.kube/config"
   retries: 3
   delay: 5
   register: calico_install
@@ -78,7 +78,7 @@
   ansible.builtin.command: kubectl wait --for=condition=Ready pods --all -n kube-system --timeout=300s
   become: no
   environment:
-    KUBECONFIG: /home/debian/.kube/config
+    KUBECONFIG: "/home/{{ ansible_user }}/.kube/config"
   retries: 3
   delay: 10
   register: calico_ready
@@ -88,17 +88,17 @@
   ansible.builtin.command: kubectl wait --for=condition=Ready nodes --all --timeout=60s
   become: no
   environment:
-    KUBECONFIG: /home/debian/.kube/config
+    KUBECONFIG: "/home/{{ ansible_user }}/.kube/config"
   retries: 5
   delay: 5
   register: control_plane_ready
   until: control_plane_ready.rc == 0
 
 - name: Verify control plane node has pod CIDR assigned
-  ansible.builtin.shell: kubectl get node {{ inventory_hostname }} -o jsonpath='{.spec.podCIDR}' | grep -q '192.168'
+  ansible.builtin.shell: kubectl get node {{ inventory_hostname }} -o jsonpath='{.spec.podCIDR}' | grep -q '10.244'
   become: no
   environment:
-    KUBECONFIG: /home/debian/.kube/config
+    KUBECONFIG: "/home/{{ ansible_user }}/.kube/config"
   retries: 10
   delay: 3
   register: pod_cidr_check

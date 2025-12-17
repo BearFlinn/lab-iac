@@ -1,0 +1,74 @@
+---
+# Kubernetes Control Plane Setup - Dell Inspiron 15
+# This playbook sets up the Dell Inspiron 15 as a Kubernetes control plane node
+# Based on ARCHITECTURE.md Phase 1
+
+- name: Prepare control plane node with Kubernetes prerequisites
+  hosts: k8s_control_plane
+  gather_facts: yes
+  roles:
+    - k8s-prerequisites
+    - k8s-packages
+
+- name: Initialize Kubernetes control plane
+  hosts: k8s_control_plane
+  gather_facts: no
+  roles:
+    - k8s-control-plane
+
+- name: Display cluster status and next steps
+  hosts: k8s_control_plane
+  gather_facts: no
+  tasks:
+    - name: Get cluster nodes
+      ansible.builtin.command: kubectl get nodes -o wide
+      become: no
+      environment:
+        KUBECONFIG: "/home/{{ ansible_user }}/.kube/config"
+      register: cluster_nodes
+      changed_when: false
+
+    - name: Display nodes
+      ansible.builtin.debug:
+        msg: "{{ cluster_nodes.stdout_lines }}"
+
+    - name: Get cluster pods
+      ansible.builtin.command: kubectl get pods -A
+      become: no
+      environment:
+        KUBECONFIG: "/home/{{ ansible_user }}/.kube/config"
+      register: cluster_pods
+      changed_when: false
+
+    - name: Display pods
+      ansible.builtin.debug:
+        msg: "{{ cluster_pods.stdout_lines }}"
+
+    - name: Display success message
+      ansible.builtin.debug:
+        msg: |
+          =========================================
+          Kubernetes Control Plane Setup Complete!
+          =========================================
+
+          Control Plane: {{ ansible_host }}
+          Hostname: {{ inventory_hostname }}
+
+          Kubeconfig has been configured for user '{{ ansible_user }}'.
+
+          To use kubectl:
+            ssh {{ ansible_user }}@{{ ansible_host }}
+            kubectl get nodes
+            kubectl get pods -A
+
+          Or copy kubeconfig to your local machine:
+            scp {{ ansible_user }}@{{ ansible_host }}:~/.kube/config ~/.kube/lab-k8s-config
+            export KUBECONFIG=~/.kube/lab-k8s-config
+            kubectl get nodes
+
+          Worker join command saved to: /tmp/k8s-join-command.sh (by k8s-control-plane role)
+
+          Next Steps (Phase 2):
+          - Join worker nodes using the command in /tmp/k8s-join-command.sh (or regenerate with: kubeadm token create --print-join-command)
+          - Configure node labels and taints per ARCHITECTURE.md
+          - Set up storage on tower-pc (NFS + Garage)

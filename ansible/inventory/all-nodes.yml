@@ -1,0 +1,122 @@
+---
+# Complete Cluster Inventory - All Nodes
+# Use this AFTER all machines have been set up individually with baseline-setup.yml
+# For initial setup of individual machines, use the single-machine inventories instead
+
+all:
+  vars:
+    # Network configuration (auto-detected if not specified)
+    # network_gateway: "10.0.0.1"  # Auto-detected from current gateway
+    network_dns:
+      - "8.8.8.8"
+      - "8.8.4.4"
+    # Timezone
+    timezone: "America/New_York"  # Adjust to your timezone
+    # Firewall (set to true if you want ufw enabled)
+    enable_firewall: false  # Recommended: false for dev/test K8s clusters
+    # Add all nodes to /etc/hosts on each machine
+    add_hosts_file: true
+
+  children:
+    k8s_control_plane:
+      hosts:
+        dell-inspiron-15:
+          ansible_host: 10.0.0.226  # Current IP address
+          # static_ip: 10.0.0.226  # Optional: uncomment to set a specific static IP
+          ansible_connection: ssh
+          ansible_user: bearf
+          # Specs
+          cpu: "Intel i3-7100U (2 cores, 4 threads @ 2.7 GHz)"
+          cpu_cores: 2
+          cpu_threads: 4
+          ram: "8GB"
+          ram_gb: 8
+          storage:
+            - name: "SSD"
+              capacity: "256GB"
+              capacity_gb: 256
+              type: "SSD"
+          total_storage_gb: 256
+          form_factor: "Laptop"
+          model: "Dell Inspiron 15-3567"
+
+    k8s_workers:
+      hosts:
+        tower-pc:
+          ansible_host: 10.0.0.XXX  # Update with current IP
+          # static_ip: 10.0.0.XXX  # Optional: uncomment to set a specific static IP
+          ansible_connection: ssh
+          ansible_user: bearf  # Update if different
+          # Specs
+          cpu: "Intel i7-4790 (4 cores, 8 threads)"
+          cpu_cores: 4
+          cpu_threads: 8
+          ram: "32GB"
+          ram_gb: 32
+          gpu: "NVIDIA GTX 1060 (3GB)"
+          storage:
+            - name: "M.2 NVMe"
+              capacity: "128GB"
+              type: "NVMe"
+            - name: "SSD1"
+              capacity: "1TB"
+              type: "SSD"
+            - name: "SSD2"
+              capacity: "1TB"
+              type: "SSD"
+            - name: "HDD1"
+              capacity: "2TB"
+              type: "HDD"
+            - name: "HDD2"
+              capacity: "2TB"
+              type: "HDD"
+            - name: "HDD3"
+              capacity: "2TB"
+              type: "HDD"
+          total_storage_gb: 9344
+          roles: ["storage"]
+
+        msi-laptop:
+          ansible_host: 10.0.0.XXX  # Update with current IP
+          # static_ip: 10.0.0.XXX  # Optional: uncomment to set a specific static IP
+          ansible_connection: ssh
+          ansible_user: bearf  # Update if different
+          # Specs
+          cpu: "Intel i7-6700HQ (4 cores, 8 threads)"
+          cpu_cores: 4
+          cpu_threads: 8
+          ram: "32GB"
+          ram_gb: 32
+          gpu: "NVIDIA GTX 1060 (3GB)"
+          storage:
+            - name: "SSD"
+              capacity: "1TB"
+              type: "SSD"
+            - name: "HDD"
+              capacity: "1TB"
+              type: "HDD"
+          total_storage_gb: 2048
+          roles: ["monitoring", "observability"]
+
+        dell-optiplex-9020:
+          ansible_host: 10.0.0.XXX  # Update with current IP
+          # static_ip: 10.0.0.XXX  # Optional: uncomment to set a specific static IP
+          ansible_connection: ssh
+          ansible_user: bearf  # Update if different
+          # Specs
+          cpu: "Intel i7-4790 (4 cores, 8 threads)"
+          cpu_cores: 4
+          cpu_threads: 8
+          ram: "32GB"
+          ram_gb: 32
+          storage:
+            - name: "SSD"
+              capacity: "512GB"
+              type: "SSD"
+          total_storage_gb: 512
+          roles: ["compute", "general"]
+
+    k8s_cluster:
+      children:
+        k8s_control_plane:
+        k8s_workers:

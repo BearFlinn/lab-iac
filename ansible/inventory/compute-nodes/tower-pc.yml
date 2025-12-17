@@ -5,7 +5,7 @@
 all:
   hosts:
     tower-pc:
-      ansible_host: 192.168.1.10
+      ansible_host: 10.0.0.XXX  # TODO: Update with actual 10.0.0.x IP address
       ansible_connection: ssh
       ansible_user: bearf
       # Specs

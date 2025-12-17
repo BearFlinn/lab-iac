@@ -1,0 +1,150 @@
+# Cluster Setup Workflow
+
+This document outlines the step-by-step process to set up your Kubernetes cluster from scratch.
+
+## Phase 0: Individual Machine Baseline Setup
+
+Set up each machine **individually** before attempting cluster setup. This ensures each machine is properly configured with static IP, hostname, and essential packages.
+
+### Step 1: Dell Inspiron 15 (Control Plane)
+
+```bash
+# Test connectivity
+ansible -i ansible/inventory/control-plane.yml all -m ping
+
+# Run baseline setup
+ansible-playbook -i ansible/inventory/control-plane.yml \
+  ansible/playbooks/baseline-setup.yml -v
+
+# Verify
+ssh bearf@10.0.0.226
+hostname  # Should show: dell-inspiron-15
+ip addr   # Verify static IP
+exit
+```
+
+### Step 2: Other Machines (One at a time)
+
+For each remaining machine (tower-pc, msi-laptop, dell-optiplex-9020):
+
+1. **Use the individual compute node inventory file**:
+   ```bash
+   # Files already exist in ansible/inventory/compute-nodes/
+   # tower-pc.yml, msi-laptop.yml, dell-optiplex-9020.yml
+   ```
+
+2. **Update the IP address** in the file (currently set to 10.0.0.XXX placeholder):
+   ```yaml
+   all:
+     hosts:
+       tower-pc:
+         ansible_host: 10.0.0.XXX  # Update with actual IP
+         ansible_user: bearf
+   ```
+
+3. **Copy SSH key** to the machine:
+   ```bash
+   ssh-copy-id bearf@10.0.0.XXX
+   ```
+
+4. **Run baseline setup**:
+   ```bash
+   ansible-playbook -i ansible/inventory/compute-nodes/tower-pc.yml \
+     ansible/playbooks/baseline-setup.yml -v
+   ```
+
+5. **Verify** the machine is set up correctly:
+   ```bash
+   ssh bearf@10.0.0.XXX
+   hostname  # Should show correct hostname
+   ip addr   # Verify static IP
+   exit
+   ```
+
+### Step 3: Update All-Nodes Inventory
+
+After all machines are set up individually, update `ansible/inventory/all-nodes.yml` with the actual IP addresses of all machines.
+
+### Step 4: Verify All Machines
+
+```bash
+# Test connectivity to all machines
+ansible -i ansible/inventory/all-nodes.yml all -m ping
+
+# Optionally: Add all machines to each other's /etc/hosts
+ansible-playbook -i ansible/inventory/all-nodes.yml \
+  ansible/playbooks/baseline-setup.yml \
+  --tags hosts -v
+```
+
+## Phase 1: Kubernetes Control Plane Setup
+
+Once all machines are baseline-configured:
+
+```bash
+# Deploy Kubernetes control plane on Dell Inspiron
+ansible-playbook -i ansible/inventory/control-plane.yml \
+  ansible/playbooks/setup-control-plane.yml -v
+
+# Verify cluster is running
+ssh bearf@10.0.0.226
+kubectl get nodes
+kubectl get pods -A
+exit
+```
+
+## Phase 2: Join Worker Nodes
+
+```bash
+# Use the join command from /tmp/k8s-join-command.sh
+# (Future playbook will automate this)
+```
+
+## Phase 3: Configure Node Labels
+
+```bash
+# Label nodes according to ARCHITECTURE.md
+kubectl label node msi-laptop node-role.kubernetes.io/monitoring=true workload=observability
+kubectl label node tower-pc node-role.kubernetes.io/storage=true workload=storage
+kubectl label node dell-optiplex-9020 node-role.kubernetes.io/compute=true workload=general
+```
+
+## Phase 4: Storage, Monitoring, etc.
+
+Follow ARCHITECTURE.md for subsequent phases.
+
+---
+
+## Quick Reference
+
+### Single Machine Setup (Baseline Only)
+```bash
+# 1. Use existing compute node inventory file
+# Files: ansible/inventory/compute-nodes/{tower-pc,msi-laptop,dell-optiplex-9020}.yml
+# Or use control-plane.yml for dell-inspiron-15
+
+# 2. Edit inventory with machine's actual IP (replace 10.0.0.XXX placeholder)
+
+# 3. Copy SSH key
+ssh-copy-id bearf@IP_ADDRESS
+
+# 4. Run baseline
+ansible-playbook -i ansible/inventory/compute-nodes/HOSTNAME.yml \
+  ansible/playbooks/baseline-setup.yml -v
+```
+
+### What baseline-setup.yml Does (Per Machine)
+- ✅ Sets hostname
+- ✅ Configures static IP (auto-detects current IP and network settings)
+- ✅ Installs essential packages
+- ✅ Sets timezone
+- ✅ Disables automatic updates
+- ✅ Does **NOT** install Kubernetes (that's separate)
+
+### What baseline-setup.yml Does NOT Do
+- ❌ Install Kubernetes packages
+- ❌ Join nodes to cluster
+- ❌ Configure CNI networking
+- ❌ Require all nodes to be online
+
+This keeps baseline setup completely independent from Kubernetes setup!

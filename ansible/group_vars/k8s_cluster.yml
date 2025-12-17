@@ -1,0 +1,16 @@
+---
+# Kubernetes Cluster Variables
+# These variables apply to all nodes in the k8s_cluster group
+
+# Kubernetes version (1.31 is latest stable)
+kubernetes_version: "1.31"
+
+# Pod network CIDR for Calico
+# This is the internal IP range for pods in the cluster
+pod_network_cidr: "10.244.0.0/16"
+
+# Calico version
+calico_version: "v3.28.0"
+
+# Service CIDR (default for kubeadm)
+service_cidr: "10.96.0.0/12"

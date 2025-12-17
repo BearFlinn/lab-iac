@@ -1,0 +1,237 @@
+---
+# Baseline Machine Setup Playbook
+# This playbook handles initial machine configuration - completely independent of Kubernetes
+# - Static IP configuration
+# - Hostname setup
+# - Essential packages
+# - Basic system configuration
+#
+# Use this on each machine individually before proceeding with Kubernetes setup
+
+- name: Baseline machine setup
+  hosts: all
+  gather_facts: yes
+  become: yes
+  vars:
+    # Network configuration - override in inventory or group_vars
+    gateway: "{{ network_gateway | default(ansible_default_ipv4.gateway) }}"
+    dns_servers: "{{ network_dns | default(['8.8.8.8', '8.8.4.4']) }}"
+    network_interface: "{{ ansible_default_ipv4.interface }}"
+    # Use current IP as static IP if not explicitly defined
+    current_static_ip: "{{ static_ip | default(ansible_default_ipv4.address) }}"
+    # Detect subnet mask
+    current_netmask: "{{ ansible_default_ipv4.netmask }}"
+
+  tasks:
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install baseline packages
+      ansible.builtin.apt:
+        name:
+          - curl
+          - wget
+          - git
+          - vim
+          - htop
+          - net-tools
+          - dnsutils
+          - iputils-ping
+          - traceroute
+          - tcpdump
+          - nfs-common
+          - open-iscsi
+          - lvm2
+          - python3
+          - python3-pip
+        state: present
+
+    - name: Set hostname
+      ansible.builtin.hostname:
+        name: "{{ inventory_hostname }}"
+      when: inventory_hostname is defined
+
+    - name: Update /etc/hosts with hostname
+      ansible.builtin.lineinfile:
+        path: /etc/hosts
+        regexp: '^127\.0\.1\.1'
+        line: "127.0.1.1 {{ inventory_hostname }}"
+        state: present
+
+    - name: Add cluster nodes to /etc/hosts (optional)
+      ansible.builtin.blockinfile:
+        path: /etc/hosts
+        block: |
+          # Cluster Nodes
+          {% for host in groups['all'] %}
+          {% if host in hostvars and (hostvars[host].get('static_ip') or hostvars[host].get('ansible_host')) %}
+          {{ hostvars[host].get('static_ip', hostvars[host].get('ansible_host', '')) }} {{ host }}
+          {% endif %}
+          {% endfor %}
+        marker: "# {mark} ANSIBLE MANAGED BLOCK - CLUSTER NODES"
+      when: add_hosts_file | default(false) | bool
+
+    - name: Check if system uses netplan
+      ansible.builtin.stat:
+        path: /etc/netplan
+      register: netplan_dir
+
+    - name: Check if system uses NetworkManager
+      ansible.builtin.stat:
+        path: /etc/NetworkManager
+      register: networkmanager_dir
+
+    - name: Configure static IP with netplan
+      when: netplan_dir.stat.exists
+      block:
+        - name: Backup existing netplan config
+          ansible.builtin.shell: |
+            mkdir -p /etc/netplan/backups
+            cp /etc/netplan/*.yaml /etc/netplan/backups/ 2>/dev/null || true
+          args:
+            creates: /etc/netplan/backups
+
+        - name: Remove default netplan configs
+          ansible.builtin.shell: rm -f /etc/netplan/*.yaml
+          args:
+            warn: false
+
+        - name: Calculate CIDR prefix from netmask
+          ansible.builtin.set_fact:
+            cidr_prefix: "{{ current_netmask | ansible.utils.ipaddr('prefix') }}"
+
+        - name: Create netplan static IP configuration
+          ansible.builtin.copy:
+            content: |
+              network:
+                version: 2
+                renderer: networkd
+                ethernets:
+                  {{ network_interface }}:
+                    dhcp4: no
+                    addresses:
+                      - {{ current_static_ip }}/{{ cidr_prefix }}
+                    routes:
+                      - to: default
+                        via: {{ gateway }}
+                    nameservers:
+                      addresses: {{ dns_servers | to_json }}
+            dest: /etc/netplan/01-static-ip.yaml
+            mode: '0600'
+
+        - name: Apply netplan configuration
+          ansible.builtin.command: netplan apply
+          async: 45
+          poll: 0
+          register: netplan_apply
+
+        - name: Wait for network to stabilize after netplan apply
+          ansible.builtin.wait_for:
+            timeout: 10
+          delegate_to: localhost
+
+        - name: Verify connectivity after netplan change
+          ansible.builtin.wait_for_connection:
+            timeout: 30
+            delay: 5
+
+    - name: Configure static IP with NetworkManager
+      when:
+        - networkmanager_dir.stat.exists
+        - not netplan_dir.stat.exists
+      block:
+        - name: Get active connection name
+          ansible.builtin.shell: nmcli -t -f NAME connection show --active | head -1
+          register: nm_connection
+          changed_when: false
+
+        - name: Calculate CIDR prefix from netmask
+          ansible.builtin.set_fact:
+            cidr_prefix: "{{ current_netmask | ansible.utils.ipaddr('prefix') }}"
+
+        - name: Configure static IP via nmcli
+          ansible.builtin.shell: |
+            nmcli connection modify "{{ nm_connection.stdout }}" \
+              ipv4.addresses "{{ current_static_ip }}/{{ cidr_prefix }}" \
+              ipv4.gateway "{{ gateway }}" \
+              ipv4.dns "{{ dns_servers | join(' ') }}" \
+              ipv4.method manual
+          when: nm_connection.stdout != ""
+
+        - name: Restart NetworkManager connection
+          ansible.builtin.shell: nmcli connection up "{{ nm_connection.stdout }}"
+          when: nm_connection.stdout != ""
+          async: 45
+          poll: 0
+
+        - name: Wait for network to stabilize after NetworkManager change
+          ansible.builtin.wait_for:
+            timeout: 10
+          delegate_to: localhost
+
+        - name: Verify connectivity after NetworkManager change
+          ansible.builtin.wait_for_connection:
+            timeout: 30
+            delay: 5
+
+    - name: Disable automatic updates (prevent surprise reboots)
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        enabled: no
+        state: stopped
+      loop:
+        - unattended-upgrades
+        - apt-daily.timer
+        - apt-daily-upgrade.timer
+      ignore_errors: yes
+
+    - name: Configure timezone
+      community.general.timezone:
+        name: "{{ timezone | default('UTC') }}"
+
+    - name: Enable and configure firewall (ufw)
+      block:
+        - name: Install ufw
+          ansible.builtin.apt:
+            name: ufw
+            state: present
+
+        - name: Allow SSH
+          community.general.ufw:
+            rule: allow
+            port: '22'
+            proto: tcp
+
+        - name: Allow Kubernetes API server (control plane only)
+          community.general.ufw:
+            rule: allow
+            port: '6443'
+            proto: tcp
+          when: "'k8s_control_plane' in group_names"
+
+        - name: Set default policies
+          community.general.ufw:
+            direction: "{{ item.direction }}"
+            policy: "{{ item.policy }}"
+          loop:
+            - { direction: 'incoming', policy: 'deny' }
+            - { direction: 'outgoing', policy: 'allow' }
+
+        - name: Enable ufw
+          community.general.ufw:
+            state: enabled
+      when: enable_firewall | default(false) | bool
+
+    - name: Display machine info
+      ansible.builtin.debug:
+        msg:
+          - "Hostname: {{ inventory_hostname }}"
+          - "IP Address: {{ current_static_ip }}"
+          - "Netmask: {{ current_netmask }}"
+          - "Interface: {{ network_interface }}"
+          - "Gateway: {{ gateway }}"
+          - "DNS Servers: {{ dns_servers | join(', ') }}"
+          - "OS: {{ ansible_distribution }} {{ ansible_distribution_version }}"
+          - "Kernel: {{ ansible_kernel }}"

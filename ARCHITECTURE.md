@@ -185,11 +185,14 @@ Development/testing Kubernetes cluster optimized for resource efficiency and spe
 
 ## Network Topology
 ```
-192.168.1.0/24 Network
-├── 192.168.1.10 - tower-pc (Storage Worker)
-├── 192.168.1.11 - msi-laptop (Monitoring Worker)
-├── 192.168.1.12 - dell-optiplex-9020 (Compute Worker)
-└── 192.168.1.13 - dell-inspiron-15 (Control Plane)
+10.0.0.0/24 Network
+├── 10.0.0.XXX - tower-pc (Storage Worker)
+├── 10.0.0.XXX - msi-laptop (Monitoring Worker)
+├── 10.0.0.XXX - dell-optiplex-9020 (Compute Worker)
+└── 10.0.0.226 - dell-inspiron-15 (Control Plane)
+
+Note: Machines will use their current DHCP-assigned IPs, which will be
+configured as static during baseline setup.
 ```
 
 ## Next Steps
