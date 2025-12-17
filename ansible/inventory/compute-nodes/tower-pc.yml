@@ -1,0 +1,52 @@
+---
+# Full Tower PC
+# Primary workstation with GPU and extensive storage
+
+all:
+  hosts:
+    tower-pc:
+      ansible_host: 192.168.1.10
+      ansible_connection: ssh
+      ansible_user: bearf
+      # Specs
+      cpu: "Intel i7-4790 (4 cores, 8 threads @ 3.6-4.0 GHz)"
+      cpu_cores: 4
+      cpu_threads: 8
+      ram: "32GB"
+      ram_gb: 32
+      gpu: "NVIDIA GTX 1060"
+      gpu_memory_gb: 3
+      # Storage
+      storage:
+        - name: "M.2 SSD"
+          capacity: "128GB"
+          capacity_gb: 128
+          type: "NVMe"
+        - name: "SATA SSD"
+          capacity: "240GB"
+          capacity_gb: 240
+          type: "SSD"
+        - name: "HDD 1"
+          capacity: "1TB"
+          capacity_gb: 1000
+          type: "HDD"
+        - name: "HDD 2"
+          capacity: "1TB"
+          capacity_gb: 1000
+          type: "HDD"
+        - name: "HDD 3"
+          capacity: "2TB"
+          capacity_gb: 2000
+          type: "HDD"
+        - name: "HDD 4"
+          capacity: "2TB"
+          capacity_gb: 2000
+          type: "HDD"
+        - name: "HDD 5"
+          capacity: "2TB"
+          capacity_gb: 2000
+          type: "HDD"
+      total_storage_gb: 9368
+      form_factor: "Full Tower"
+      roles: ["compute", "storage", "gpu-enabled"]
+      use_cases: ["kubernetes", "ml-workloads", "media-encoding"]

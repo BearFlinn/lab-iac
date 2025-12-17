@@ -1,0 +1,27 @@
+---
+# Dell Optiplex 9020
+# Server-class workstation with solid performance
+
+all:
+  hosts:
+    dell-optiplex-9020:
+      ansible_host: 192.168.1.12
+      ansible_connection: ssh
+      ansible_user: bearf
+      # Specs
+      cpu: "Intel i7-4790 (4 cores, 8 threads @ 3.6-4.0 GHz)"
+      cpu_cores: 4
+      cpu_threads: 8
+      ram: "32GB"
+      ram_gb: 32
+      # Storage
+      storage:
+        - name: "SSD"
+          capacity: "512GB"
+          capacity_gb: 512
+          type: "SSD"
+      total_storage_gb: 512
+      form_factor: "Desktop"
+      model: "Dell Optiplex 9020"
+      roles: ["compute", "storage"]
+      use_cases: ["kubernetes", "services", "control-plane"]

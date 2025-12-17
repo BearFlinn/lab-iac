@@ -1,0 +1,27 @@
+---
+# Dell Inspiron 15-3567
+# Lightweight portable device for edge computing
+
+all:
+  hosts:
+    dell-inspiron-15:
+      ansible_host: 192.168.1.13
+      ansible_connection: ssh
+      ansible_user: bearf
+      # Specs
+      cpu: "Intel i3-7100U (2 cores, 4 threads @ 2.7 GHz)"
+      cpu_cores: 2
+      cpu_threads: 4
+      ram: "8GB"
+      ram_gb: 8
+      # Storage
+      storage:
+        - name: "SSD"
+          capacity: "256GB"
+          capacity_gb: 256
+          type: "SSD"
+      total_storage_gb: 256
+      form_factor: "Laptop"
+      model: "Dell Inspiron 15-3567"
+      roles: ["light-compute"]
+      use_cases: ["monitoring", "bastion", "testing"]
