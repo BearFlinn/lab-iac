@@ -1,0 +1,77 @@
+---
+# Tower PC Storage Configuration Playbook
+# Configures complete storage infrastructure for tower-pc:
+# - ZFS RAID-Z1 pool on 3x2TB HDDs for object storage (Garage/S3)
+# - bcache caching layer on M.2 NVMe (128GB) for performance
+# - Single 1TB HDD backed by bcache as NFS tier
+# - NFS server for Kubernetes persistent volumes
+#
+# Usage: ansible-playbook ansible/playbooks/tower-storage-setup.yml
+
+- name: Configure tower-pc storage infrastructure
+  hosts: tower-pc
+  gather_facts: yes
+  become: yes
+
+  roles:
+    - tower-storage-setup
+
+  post_tasks:
+    - name: Verify storage configuration
+      block:
+        - name: Check ZFS pool status
+          ansible.builtin.command: zpool status storage
+          register: zpool_status
+          changed_when: false
+          failed_when: false
+
+        - name: Check ZFS filesystem
+          ansible.builtin.command: zfs list storage/garage
+          register: zfs_list
+          changed_when: false
+          failed_when: false
+
+        - name: Check NFS mount status
+          ansible.builtin.command: df -h /mnt/nfs-storage
+          register: nfs_mount_status
+          changed_when: false
+          failed_when: false
+
+        - name: Check NFS server status
+          ansible.builtin.systemd:
+            name: nfs-server
+          register: nfs_status
+          changed_when: false
+
+        - name: Check NFS exports
+          ansible.builtin.command: exportfs -v
+          register: nfs_exports
+          changed_when: false
+
+        - name: Display final verification summary
+          ansible.builtin.debug:
+            msg:
+              - ""
+              - "=== STORAGE CONFIGURATION VERIFICATION ==="
+              - ""
+              - "ZFS RAID-Z1 Pool:"
+              - "{{ zpool_status.stdout | default('Pool check unavailable') }}"
+              - ""
+              - "ZFS Filesystem:"
+              - "{{ zfs_list.stdout | default('Filesystem check unavailable') }}"
+              - ""
+              - "NFS Mount Status:"
+              - "{{ nfs_mount_status.stdout | default('Mount check unavailable') }}"
+              - ""
+              - "NFS Server Status: {{ nfs_status.status.ActiveState | default('Unknown') }}"
+              - ""
+              - "NFS Exports:"
+              - "{{ nfs_exports.stdout | default('Exports unavailable') }}"
+              - ""
+              - "Next Steps:"
+              - "1. Deploy Garage S3 container on storage/garage ZFS filesystem"
+              - "2. Verify NFS connectivity from cluster nodes"
+              - "3. Create Kubernetes StorageClass and PersistentVolume"
+              - "4. Test NFS provisioning with sample PVC"
+              - "5. Monitor bcache hit rates: cat /sys/fs/bcache/*/stats_total/cache_hit_ratio"
+              - ""

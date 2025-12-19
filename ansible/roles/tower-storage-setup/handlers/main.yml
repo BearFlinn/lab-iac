@@ -1,0 +1,14 @@
+---
+# Handlers for tower-storage-setup role
+
+- name: restart nfs-server
+  ansible.builtin.systemd:
+    name: nfs-server
+    state: restarted
+    daemon_reload: yes
+
+- name: restart nfs-idmapd
+  ansible.builtin.systemd:
+    name: nfs-idmapd
+    state: restarted
+    daemon_reload: yes

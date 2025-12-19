@@ -1,0 +1,24 @@
+---
+# Tower PC Storage Configuration Variables
+
+# bcache Configuration (Performance Tier Cache)
+# M.2 NVMe backing device for single 1TB HDD
+bcache_nvme_device: "/dev/sdh"   # M.2 NVMe (128GB) - backing device for cache
+
+# Single HDD Configuration (NFS Tier with bcache backing)
+nfs_backing_device: "/dev/sdb"   # HDD 1 (1TB) - backed by bcache for performance
+
+# ZFS RAID-Z1 Configuration (Object Storage - Garage/S3)
+zfs_raid_disk_1: "/dev/sdg"      # HDD 3 (2TB)
+zfs_raid_disk_2: "/dev/sdi"      # HDD 4 (2TB)
+zfs_raid_disk_3: "/dev/sdj"      # HDD 5 (2TB)
+
+# NFS Configuration
+nfs_export_path: "/mnt/nfs-storage"
+nfs_export_network: "10.0.0.0/24"  # Adjust based on your cluster network
+
+# Feature Flags
+configure_zfs: true              # Configure ZFS RAID-Z1 from Debian backports
+configure_bcache: true           # Use bcache for performance optimization
+configure_raid0: false           # No RAID0 needed - single drive with bcache
+configure_nfs: true              # Configure NFS server for Kubernetes

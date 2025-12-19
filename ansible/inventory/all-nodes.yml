@@ -43,8 +43,8 @@ all:
     k8s_workers:
       hosts:
         tower-pc:
-          ansible_host: 10.0.0.XXX  # Update with current IP
-          # static_ip: 10.0.0.XXX  # Optional: uncomment to set a specific static IP
+          ansible_host: 10.0.0.249  # Current IP address
+          # static_ip: 10.0.0.249  # Optional: uncomment to set a specific static IP
           ansible_connection: ssh
           ansible_user: bearf  # Update if different
           # Specs

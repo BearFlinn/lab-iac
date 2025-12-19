@@ -1,0 +1,225 @@
+---
+# Tower PC Storage Configuration
+# Handles: ZFS RAID-Z1 setup, bcache configuration, and NFS server setup
+
+- name: Get Debian codename for backports
+  ansible.builtin.command: lsb_release -cs
+  register: debian_codename
+  changed_when: false
+
+- name: Add Debian backports repository
+  ansible.builtin.lineinfile:
+    path: /etc/apt/sources.list
+    line: "deb http://deb.debian.org/debian {{ debian_codename.stdout }}-backports main contrib non-free"
+    state: present
+
+- name: Update apt cache
+  ansible.builtin.apt:
+    update_cache: yes
+
+- name: Install Linux headers for ZFS DKMS compilation
+  ansible.builtin.apt:
+    name: "linux-headers-amd64"
+    state: present
+
+- name: Install ZFS packages from backports
+  ansible.builtin.apt:
+    name:
+      - "zfsutils-linux"
+      - "zfs-dkms"
+      - "bcache-tools"
+      - "nfs-kernel-server"
+      - "nfs-common"
+    state: present
+    default_release: "{{ debian_codename.stdout }}-backports"
+
+- name: Load ZFS kernel module
+  community.general.modprobe:
+    name: zfs
+    state: present
+
+- name: Load bcache kernel module
+  community.general.modprobe:
+    name: bcache
+    state: present
+
+- name: Create ZFS RAID-Z1 pool for object storage
+  block:
+    - name: Check if ZFS pool 'storage' already exists
+      ansible.builtin.command: zpool list storage
+      register: zpool_exists
+      changed_when: false
+      failed_when: false
+
+    - name: Create ZFS RAID-Z1 pool 'storage' (3x2TB HDDs)
+      ansible.builtin.command: >
+        zpool create -f storage raidz1
+        {{ zfs_raid_disk_1 }}
+        {{ zfs_raid_disk_2 }}
+        {{ zfs_raid_disk_3 }}
+      when: zpool_exists.rc != 0
+      register: zpool_created
+
+    - name: Display ZFS pool creation status
+      ansible.builtin.debug:
+        msg: "ZFS RAID-Z1 pool 'storage' created successfully"
+      when: zpool_created.changed
+
+    - name: Create ZFS filesystem for Garage S3
+      ansible.builtin.command: zfs create storage/garage
+      register: zfs_garage_fs
+      changed_when: false
+      failed_when: zfs_garage_fs.rc != 0 and "already exists" not in zfs_garage_fs.stderr
+
+    - name: Set ZFS filesystem properties
+      ansible.builtin.command: "zfs set {{ item.prop }}={{ item.value }} storage/garage"
+      loop:
+        - { prop: "compression", value: "lz4" }
+        - { prop: "atime", value: "off" }
+        - { prop: "checksum", value: "sha512" }
+      register: zfs_props
+      changed_when: true
+      failed_when: false
+
+  when: configure_zfs | default(true) | bool
+
+- name: Configure bcache for NFS performance tier
+  block:
+    - name: Check if bcache is already configured for NVMe
+      ansible.builtin.stat:
+        path: "/sys/fs/bcache"
+      register: bcache_sysfs
+
+    - name: Register NVMe as bcache backing device
+      ansible.builtin.shell: |
+        echo {{ bcache_nvme_device }} > /sys/fs/bcache/register
+      changed_when: false
+      failed_when: false
+      when: bcache_sysfs.stat.exists
+
+    - name: Wait for bcache device registration
+      ansible.builtin.pause:
+        seconds: 5
+
+    - name: Display bcache configuration message
+      ansible.builtin.debug:
+        msg: "bcache backing device configured with NVMe ({{ bcache_nvme_device }})"
+
+  when: configure_bcache | default(true) | bool
+
+- name: Configure single HDD for NFS with bcache backing
+  block:
+    - name: Check if NFS device already has filesystem
+      ansible.builtin.command: blkid {{ nfs_backing_device }}
+      register: blkid_result
+      changed_when: false
+      failed_when: false
+
+    - name: Create ext4 filesystem on HDD (if needed)
+      ansible.builtin.filesystem:
+        fstype: ext4
+        dev: "{{ nfs_backing_device }}"
+        force: yes
+      when: blkid_result.rc != 0 or "PTUUID" in (blkid_result.stdout | default(""))
+
+    - name: Create NFS export mount directory
+      ansible.builtin.file:
+        path: "{{ nfs_export_path }}"
+        state: directory
+        mode: '0755'
+
+    - name: Mount HDD for NFS
+      ansible.builtin.mount:
+        path: "{{ nfs_export_path }}"
+        src: "{{ nfs_backing_device }}"
+        fstype: ext4
+        opts: defaults,noatime
+        state: mounted
+
+    - name: Display NFS mount status
+      ansible.builtin.debug:
+        msg:
+          - "NFS backing device mounted"
+          - "Device: {{ nfs_backing_device }}"
+          - "Mount Point: {{ nfs_export_path }}"
+          - "Backing Cache: {{ bcache_nvme_device }} (M.2 NVMe)"
+
+  when: configure_nfs | default(true) | bool
+
+- name: Configure NFS server
+  block:
+    - name: Create NFS exports file
+      ansible.builtin.copy:
+        content: |
+          # NFS Exports for Kubernetes PVCs
+          # Single 1TB HDD backed by M.2 NVMe bcache layer
+
+          {{ nfs_export_path }} {{ nfs_export_network }}(rw,sync,no_subtree_check,no_root_squash)
+        dest: /etc/exports
+        mode: '0644'
+      register: nfs_exports
+
+    - name: Apply NFS exports
+      ansible.builtin.command: exportfs -ra
+      when: nfs_exports.changed
+
+    - name: Enable and start NFS server
+      ansible.builtin.systemd:
+        name: nfs-server
+        enabled: yes
+        state: started
+
+    - name: Enable and start NFS idmapd (for UID/GID mapping)
+      ansible.builtin.systemd:
+        name: nfs-idmapd
+        enabled: yes
+        state: started
+
+    - name: Open NFS ports in firewall (if ufw enabled)
+      community.general.ufw:
+        rule: allow
+        port: "{{ item }}"
+        proto: tcp
+      loop:
+        - '2049'  # NFS
+        - '111'   # Portmapper
+        - '20048' # mountd
+      ignore_errors: yes
+
+    - name: Display NFS configuration summary
+      ansible.builtin.debug:
+        msg:
+          - "NFS Server configured successfully"
+          - "Export Path: {{ nfs_export_path }}"
+          - "Export Network: {{ nfs_export_network }}"
+          - "Exports file: /etc/exports"
+          - "Status: Active"
+
+  when: configure_nfs | default(true) | bool
+
+- name: Display storage configuration summary
+  ansible.builtin.debug:
+    msg:
+      - "=== Tower PC Storage Configuration Complete ==="
+      - ""
+      - "ZFS RAID-Z1 Pool (Object Storage):"
+      - "  Pool Name: storage"
+      - "  Devices: {{ zfs_raid_disk_1 }}, {{ zfs_raid_disk_2 }}, {{ zfs_raid_disk_3 }}"
+      - "  Capacity: ~4TB usable (3x2TB RAID-Z1)"
+      - "  Filesystem: storage/garage"
+      - "  Purpose: Garage S3-compatible object storage"
+      - "  Properties: compression=lz4, atime=off, checksum=sha512"
+      - ""
+      - "NFS Storage Tier (High Performance):"
+      - "  Device: {{ nfs_backing_device }} (1TB HDD)"
+      - "  Mount Point: {{ nfs_export_path }}"
+      - "  Filesystem: ext4"
+      - ""
+      - "Performance Cache Layer:"
+      - "  Backing Device: {{ bcache_nvme_device }} (M.2 NVMe, 128GB)"
+      - "  Caches: {{ nfs_backing_device }}"
+      - ""
+      - "NFS Server:"
+      - "  Status: Running"
+      - "  Export Network: {{ nfs_export_network }}"
+      - "  Kubernetes Integration: Ready for PersistentVolume/StorageClass"
