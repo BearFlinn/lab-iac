@@ -33,10 +33,10 @@ ansible-playbook -i ansible/inventory/control-plane.yml ansible/playbooks/setup-
 ansible-playbook -i ansible/inventory/control-plane.yml ansible/playbooks/setup-control-plane.yml -v
 ```
 
-**Note:** The playbook includes all required Kubernetes version variables. If you want to customize versions, you can override them:
+**Note:** Kubernetes version variables are defined in `ansible/group_vars/k8s_cluster.yml`. To override them for a specific run:
 ```bash
 ansible-playbook -i ansible/inventory/control-plane.yml ansible/playbooks/setup-control-plane.yml \
-  -e "kubernetes_version=1.31 pod_network_cidr=10.244.0.0/16 calico_version=v3.28.0"
+  -e "kubernetes_version=1.30 pod_network_cidr=10.245.0.0/16 calico_version=v3.27.0"
 ```
 
 ## What the Playbook Does
