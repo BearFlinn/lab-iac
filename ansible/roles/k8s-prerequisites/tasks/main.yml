@@ -25,6 +25,15 @@
     - { name: 'net.ipv4.ip_forward', value: '1' }
   become: yes
 
+- name: Install Kubernetes prerequisite packages
+  ansible.builtin.apt:
+    name:
+      - conntrack
+      - ethtool
+    state: present
+    update_cache: yes
+  become: yes
+
 - name: Disable swap permanently
   block:
     - name: Disable swap immediately
@@ -96,12 +105,17 @@
 
 - name: Install CNI plugins
   block:
-    - name: Download CNI plugins
+    - name: Download CNI plugins (with retries)
       ansible.builtin.get_url:
         url: "https://github.com/containernetworking/plugins/releases/download/v1.3.0/cni-plugins-linux-amd64-v1.3.0.tgz"
         dest: /tmp/cni-plugins.tgz
         mode: '0644'
+        timeout: 60
       become: yes
+      retries: 3
+      delay: 5
+      register: cni_download
+      until: cni_download is succeeded
 
     - name: Extract CNI plugins
       ansible.builtin.unarchive:

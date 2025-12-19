@@ -23,6 +23,36 @@ all:
       caddy_dns_provider: "cloudflare"
       caddy_use_wildcard: true
 
+      # Kubernetes cluster proxy configuration
+      enable_k8s_proxy: true
+
+      # K8s cluster endpoints (internal network)
+      k8s_api_server: "10.0.0.226:6443"
+      k8s_ingress_service_name: "nginx-ingress-controller"
+      k8s_ingress_namespace: "ingress-nginx"
+
+      # Proxy routing - Map external domains to internal k8s services
+      k8s_proxy_routes:
+        # Example: route api.bearflinn.com to k8s API server
+        - domain: "api.bearflinn.com"
+          type: "k8s_api"
+          backend: "{{ k8s_api_server }}"
+          skip_verify: true  # For self-signed certs, can be overridden
+
+        # Example: route app subdomains to k8s ingress
+        - domain: "app.bearflinn.com"
+          type: "k8s_ingress"
+          backend_service: "app-service"
+          backend_namespace: "default"
+          backend_port: 80
+
+        # Catch-all for other subdomains - proxy to ingress
+        - domain: "*.bearflinn.com"
+          type: "k8s_ingress"
+          backend_service: "ingress-nginx-controller"
+          backend_namespace: "ingress-nginx"
+          backend_port: 80
+
   vars:
     # Timezone
     timezone: "UTC"
@@ -34,3 +64,4 @@ all:
     ufw_web_rules:
       - { port: '80', proto: 'tcp', comment: 'HTTP' }
       - { port: '443', proto: 'tcp', comment: 'HTTPS' }
+      - { port: '6443', proto: 'tcp', comment: 'K8s API Server' }

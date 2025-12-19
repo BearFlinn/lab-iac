@@ -43,7 +43,7 @@
   when: not node_joined.stat.exists or join_result.changed
 
 - name: Verify worker node has pod CIDR assigned
-  ansible.builtin.shell: kubectl get node {{ inventory_hostname }} -o jsonpath='{.spec.podCIDR}' | grep -q '192.168'
+  ansible.builtin.shell: kubectl get node {{ inventory_hostname }} -o jsonpath='{.spec.podCIDR}' | grep -q '.'
   delegate_to: "{{ groups['k8s_control_plane'][0] }}"
   become: no
   environment:

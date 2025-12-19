@@ -95,18 +95,31 @@ exit
 
 ## Phase 2: Join Worker Nodes
 
+### Automated setup (recommended):
 ```bash
-# Use the join command from /tmp/k8s-join-command.sh
-# (Future playbook will automate this)
+# Join both worker nodes to the cluster in one command
+ansible-playbook -i ansible/inventory/all-nodes.yml \
+  ansible/playbooks/setup-workers.yml
 ```
+
+The playbook will:
+- Install Kubernetes prerequisites on worker nodes
+- Generate join command from control plane
+- Join workers to cluster
+- Apply node labels per ARCHITECTURE.md
+- Verify cluster health
+
+### Manual setup (if needed):
+If you prefer to join nodes manually, the join command is saved to `/tmp/k8s-join-command.sh` on your local machine after running the control plane setup.
 
 ## Phase 3: Configure Node Labels
 
+Node labels are now automatically applied by the setup-workers.yml playbook per ARCHITECTURE.md.
+
+If you need to update labels manually:
 ```bash
-# Label nodes according to ARCHITECTURE.md
-kubectl label node msi-laptop node-role.kubernetes.io/monitoring=true workload=observability
-kubectl label node tower-pc node-role.kubernetes.io/storage=true workload=storage
-kubectl label node dell-optiplex-9020 node-role.kubernetes.io/compute=true workload=general
+kubectl label node msi-laptop node-role.kubernetes.io/monitoring=true workload=observability --overwrite
+kubectl label node tower-pc node-role.kubernetes.io/storage=true workload=storage --overwrite
 ```
 
 ## Phase 4: Storage, Monitoring, etc.

@@ -1,0 +1,229 @@
+---
+# Kubernetes Cluster Proxy Setup via VPS
+#
+# This playbook configures a VPS to act as a reverse proxy for the Kubernetes cluster.
+# It handles:
+# - Proxying requests to the K8s API server (for external kubectl access)
+# - Proxying HTTP/HTTPS traffic to K8s ingress services
+# - TLS/SSL termination for all traffic
+# - Domain-to-service routing based on subdomains
+#
+# Prerequisites:
+# - VPS provisioned with cloud-init (proxy-vps-1_cloud-init.yml)
+# - SSH configured in ~/.ssh/config with Host proxy-vps
+# - Domain DNS pointed to VPS IP for automatic SSL
+# - Kubernetes cluster running and accessible from VPS
+# - setup-proxy-vps.yml already executed
+#
+# Usage:
+#   ansible-playbook -i ansible/inventory/proxy-vps.yml \
+#     ansible/playbooks/setup-k8s-proxy.yml -v
+#
+# Or if only setting up K8s proxy (skip general VPS setup):
+#   ansible-playbook -i ansible/inventory/proxy-vps.yml \
+#     ansible/playbooks/setup-k8s-proxy.yml --tags k8s_proxy -v
+
+- name: Setup Kubernetes Cluster Proxy
+  hosts: all
+  gather_facts: yes
+  become: yes
+
+  vars_files:
+    - ../roles/caddy/defaults/main.yml
+
+  pre_tasks:
+    - name: Verify SSH connectivity
+      ansible.builtin.ping:
+
+    - name: Validate K8s proxy configuration
+      ansible.builtin.assert:
+        that:
+          - enable_k8s_proxy | bool
+          - k8s_api_server is defined
+          - k8s_api_server | length > 0
+          - k8s_proxy_routes is defined
+          - k8s_proxy_routes | length > 0
+        fail_msg: |
+          K8s proxy is not properly configured in inventory:
+          - enable_k8s_proxy: {{ enable_k8s_proxy | default('MISSING') }}
+          - k8s_api_server: {{ k8s_api_server | default('MISSING') }}
+          - k8s_proxy_routes: {{ k8s_proxy_routes | default('MISSING') }}
+
+    - name: Verify K8s cluster accessibility
+      ansible.builtin.wait_for:
+        host: "{{ k8s_api_server.split(':')[0] }}"
+        port: "{{ k8s_api_server.split(':')[1] | default('6443') | int }}"
+        timeout: 30
+      register: k8s_api_check
+      failed_when: false
+
+    - name: Warn if K8s API server is not accessible
+      ansible.builtin.debug:
+        msg: |
+          WARNING: K8s API server at {{ k8s_api_server }} is not currently accessible.
+          This may be expected if the cluster is not yet running or if there are network issues.
+          The proxy will be configured to route to this endpoint when it becomes available.
+      when: not k8s_api_check.state | default('started') == 'started'
+
+  tasks:
+    - name: Display K8s proxy configuration
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "Kubernetes Cluster Proxy Configuration"
+          - "=========================================="
+          - "K8s API Server: {{ k8s_api_server }}"
+          - "Domain: {{ caddy_domain }}"
+          - ""
+          - "Configured proxy routes:"
+          - "{{ k8s_proxy_routes | to_nice_yaml }}"
+          - "=========================================="
+      tags:
+        - k8s_proxy
+
+    - name: Configure K8s cluster network access
+      tags:
+        - k8s_proxy
+      block:
+        - name: Update firewall to allow K8s API server connectivity
+          community.general.ufw:
+            rule: allow
+            to_port: "{{ k8s_api_server.split(':')[1] | default('6443') }}"
+            to_ip: "{{ k8s_api_server.split(':')[0] }}"
+            proto: tcp
+            comment: "K8s API Server"
+          when: enable_firewall | default(false) | bool
+
+        - name: Verify /etc/hosts has K8s cluster entries
+          ansible.builtin.lineinfile:
+            path: /etc/hosts
+            regexp: "^{{ item.split(':')[0] }}\\s"
+            line: "{{ item.split(':')[0] }} k8s-api-server"
+            state: present
+          loop:
+            - "{{ k8s_api_server }}"
+
+    - name: Configure Caddy for K8s proxy
+      tags:
+        - k8s_proxy
+      block:
+        - name: Include Caddy role with K8s proxy settings
+          ansible.builtin.include_role:
+            name: caddy
+          vars:
+            caddy_config_template: "Caddyfile-k8s.j2"
+
+    - name: Verify K8s proxy configuration
+      tags:
+        - k8s_proxy
+      block:
+        - name: Validate generated Caddyfile
+          ansible.builtin.command:
+            cmd: "caddy validate --adapter caddyfile --config /etc/caddy/Caddyfile"
+          register: caddyfile_validation
+          changed_when: false
+
+        - name: Display Caddyfile validation result
+          ansible.builtin.debug:
+            var: caddyfile_validation.stdout_lines
+          when: caddyfile_validation.stdout_lines is defined
+
+    - name: Test K8s proxy connectivity
+      tags:
+        - k8s_proxy
+      block:
+        - name: Wait for Caddy to be ready
+          ansible.builtin.wait_for:
+            port: 443
+            delay: 2
+            timeout: 30
+
+        - name: Test K8s API proxy endpoint (if public DNS available)
+          ansible.builtin.uri:
+            url: "https://api.bearflinn.com/healthz"
+            method: GET
+            validate_certs: no
+            status_code: [200, 401, 403]
+          register: api_proxy_test
+          failed_when: false
+          changed_when: false
+          when: caddy_domain != 'localhost'
+
+        - name: Display proxy test results
+          ansible.builtin.debug:
+            msg:
+              - "K8s proxy test result:"
+              - "  Status: {{ api_proxy_test.status | default('N/A') }}"
+              - "  URL: https://api.{{ caddy_domain }}/healthz"
+          when: api_proxy_test is defined
+
+    - name: Display K8s proxy setup summary
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "Kubernetes Proxy Setup Complete"
+          - "=========================================="
+          - "Proxy VPS Hostname: {{ inventory_hostname }}"
+          - ""
+          - "Proxy Endpoints:"
+          - "  - K8s API Server: https://api.{{ caddy_domain }}"
+          - "    Backend: {{ k8s_api_server }}"
+{% for route in k8s_proxy_routes %}
+{% if route.type == 'k8s_api' %}
+          - "  - {{ route.domain }}"
+          - "    Backend: {{ route.backend }}"
+{% elif route.type == 'k8s_ingress' %}
+          - "  - {{ route.domain }}"
+          - "    Backend: {{ route.backend_service }}.{{ route.backend_namespace }}.svc.cluster.local:{{ route.backend_port }}"
+{% endif %}
+{% endfor %}
+          - ""
+          - "Configuration:"
+          - "  - Domain: {{ caddy_domain }}"
+          - "  - Wildcard: {{ caddy_wildcard_domain | default('Not configured') }}"
+          - "  - Auto HTTPS: Enabled"
+          - "  - Web Root: /var/www/html"
+          - ""
+          - "Next Steps:"
+          - "  1. Update your local kubeconfig to use https://api.{{ caddy_domain }}"
+          - "  2. Deploy nginx Ingress Controller in K8s cluster"
+          - "  3. Create Ingress resources in K8s for your applications"
+          - "  4. Test: curl -k https://{{ caddy_domain }}"
+          - "  5. Monitor logs: tail -f /var/log/caddy/access.log"
+          - ""
+          - "Security Notes:"
+          - "  - All traffic is encrypted with automatic SSL certificates"
+          - "  - K8s API certificates are verified (or skipped if configured)"
+          - "  - HSTS headers enforce HTTPS on all subdomains"
+          - "  - SSH on port 2222 (not 22)"
+          - "=========================================="
+      tags:
+        - k8s_proxy
+
+  post_tasks:
+    - name: Final K8s proxy status check
+      tags:
+        - k8s_proxy
+      block:
+        - name: Check Caddy service status
+          ansible.builtin.systemd:
+            name: caddy
+            state: started
+          register: caddy_service
+
+        - name: Display Caddy service status
+          ansible.builtin.debug:
+            msg: "Caddy service is {{ caddy_service.status.ActiveState | default('unknown') }}"
+          when: caddy_service.status is defined
+
+        - name: Check if Caddyfile is loaded
+          ansible.builtin.command:
+            cmd: "curl -s http://localhost:2019/config/"
+          register: caddy_config_check
+          changed_when: false
+          failed_when: false
+
+        - name: Display number of configured routes
+          ansible.builtin.debug:
+            msg: "Caddy admin API is accessible"
+          when: caddy_config_check.rc == 0

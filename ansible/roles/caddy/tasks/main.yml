@@ -135,9 +135,13 @@
     - caddy_dns_provider | length > 0
   notify: restart caddy
 
+- name: Determine which Caddyfile template to use
+  ansible.builtin.set_fact:
+    caddy_config_template_final: "{% if enable_k8s_proxy | bool %}Caddyfile-k8s.j2{% else %}{{ caddy_config_template }}{% endif %}"
+
 - name: Deploy Caddyfile configuration
   ansible.builtin.template:
-    src: "{{ caddy_config_template }}"
+    src: "{{ caddy_config_template_final }}"
     dest: "{{ caddy_config_dir }}/Caddyfile"
     owner: "{{ caddy_user }}"
     group: "{{ caddy_group }}"

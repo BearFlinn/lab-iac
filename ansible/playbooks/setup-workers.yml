@@ -1,0 +1,124 @@
+---
+# Kubernetes Worker Nodes Setup
+# This playbook sets up worker nodes and joins them to the Kubernetes cluster
+# Prerequisites:
+#   - Control plane must be initialized (run setup-control-plane.yml first)
+#   - Baseline setup must be completed on all worker nodes
+
+- name: Prepare worker nodes with Kubernetes prerequisites
+  hosts: k8s_workers
+  gather_facts: yes
+  vars:
+    kubernetes_version: "1.31"
+    pod_network_cidr: "10.244.0.0/16"
+    calico_version: "v3.28.0"
+  roles:
+    - k8s-prerequisites
+    - k8s-packages
+
+- name: Get join command from control plane
+  hosts: k8s_control_plane
+  gather_facts: no
+  tasks:
+    - name: Generate join command
+      ansible.builtin.command: kubeadm token create --print-join-command
+      become: yes
+      register: join_command_raw
+      changed_when: false
+
+    - name: Store join command
+      ansible.builtin.set_fact:
+        k8s_join_command: "{{ join_command_raw.stdout }}"
+
+- name: Join worker nodes to cluster
+  hosts: k8s_workers
+  gather_facts: no
+  vars:
+    k8s_join_command: "{{ hostvars[groups['k8s_control_plane'][0]]['k8s_join_command'] }}"
+  roles:
+    - k8s-worker
+
+- name: Configure node labels per ARCHITECTURE.md
+  hosts: k8s_control_plane
+  gather_facts: no
+  tasks:
+    - name: Label msi-laptop for monitoring/observability
+      ansible.builtin.command: >
+        kubectl label node msi-laptop
+        node-role.kubernetes.io/monitoring=true
+        workload=observability
+        --overwrite
+      become: no
+      environment:
+        KUBECONFIG: "/home/{{ ansible_user }}/.kube/config"
+      when: "'msi-laptop' in groups['k8s_workers']"
+      ignore_errors: yes
+
+    - name: Label tower-pc for storage
+      ansible.builtin.command: >
+        kubectl label node tower-pc
+        node-role.kubernetes.io/storage=true
+        workload=storage
+        --overwrite
+      become: no
+      environment:
+        KUBECONFIG: "/home/{{ ansible_user }}/.kube/config"
+      when: "'tower-pc' in groups['k8s_workers']"
+      ignore_errors: yes
+
+    - name: Label dell-optiplex-9020 for general compute
+      ansible.builtin.command: >
+        kubectl label node dell-optiplex-9020
+        node-role.kubernetes.io/compute=true
+        workload=general
+        --overwrite
+      become: no
+      environment:
+        KUBECONFIG: "/home/{{ ansible_user }}/.kube/config"
+      when: "'dell-optiplex-9020' in groups['k8s_workers']"
+      ignore_errors: yes
+
+- name: Display cluster status
+  hosts: k8s_control_plane
+  gather_facts: no
+  tasks:
+    - name: Get cluster nodes
+      ansible.builtin.command: kubectl get nodes -o wide
+      become: no
+      environment:
+        KUBECONFIG: "/home/{{ ansible_user }}/.kube/config"
+      register: cluster_nodes
+      changed_when: false
+
+    - name: Display nodes
+      ansible.builtin.debug:
+        msg: "{{ cluster_nodes.stdout_lines }}"
+
+    - name: Get cluster pods
+      ansible.builtin.command: kubectl get pods -A
+      become: no
+      environment:
+        KUBECONFIG: "/home/{{ ansible_user }}/.kube/config"
+      register: cluster_pods
+      changed_when: false
+
+    - name: Display pods
+      ansible.builtin.debug:
+        msg: "{{ cluster_pods.stdout_lines }}"
+
+    - name: Display success message
+      ansible.builtin.debug:
+        msg: |
+          =========================================
+          Worker Nodes Setup Complete!
+          =========================================
+
+          All worker nodes have been joined to the cluster and labeled according to ARCHITECTURE.md.
+
+          Cluster Status: {{ cluster_nodes.stdout_lines | length }} nodes
+
+          Next Steps (Phase 2+):
+          - Configure storage on tower-pc (NFS + Garage)
+          - Deploy observability stack on msi-laptop (Prometheus + Grafana + Loki)
+          - Configure GPU support (if needed)
+          - Deploy ingress controller (nginx)

@@ -46,3 +46,27 @@ caddy_service_state: "started"
 # xcaddy build settings (for custom builds with DNS plugins)
 caddy_build_with_xcaddy: false
 caddy_xcaddy_plugins: []
+
+# Kubernetes proxy configuration
+enable_k8s_proxy: false
+
+# K8s API server endpoint (e.g., "10.0.0.226:6443")
+k8s_api_server: ""
+
+# K8s ingress service details
+k8s_ingress_service_name: "ingress-nginx-controller"
+k8s_ingress_namespace: "ingress-nginx"
+
+# Proxy routing rules (list of dicts with domain, type, and backend info)
+# Example:
+# k8s_proxy_routes:
+#   - domain: "api.example.com"
+#     type: "k8s_api"
+#     backend: "10.0.0.226:6443"
+#     skip_verify: true
+#   - domain: "app.example.com"
+#     type: "k8s_ingress"
+#     backend_service: "app-service"
+#     backend_namespace: "default"
+#     backend_port: 80
+k8s_proxy_routes: []

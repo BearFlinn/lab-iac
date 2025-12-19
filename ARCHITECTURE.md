@@ -85,10 +85,15 @@ Development/testing Kubernetes cluster optimized for resource efficiency and spe
 ## Implementation Phases
 
 ### Phase 1: Base Cluster Setup
-- [ ] Deploy K8s control plane on Dell Inspiron 15
-- [ ] Join worker nodes to cluster
-- [ ] Configure node labels and taints
-- [ ] Verify cluster connectivity and health
+- [x] Deploy K8s control plane on Dell Inspiron 15
+  - Run: `ansible-playbook -i ansible/inventory/control-plane.yml ansible/playbooks/setup-control-plane.yml`
+- [x] Join worker nodes to cluster
+  - Run: `ansible-playbook -i ansible/inventory/all-nodes.yml ansible/playbooks/setup-workers.yml`
+- [x] Configure node labels and taints
+  - Automatically applied by setup-workers.yml
+- [x] Verify cluster connectivity and health
+  - Verified: 3 nodes (control-plane + 2 workers) all Ready
+  - All system pods running (etcd, api-server, kube-controller, kube-scheduler, CoreDNS, Calico CNI)
 
 ### Phase 2: Storage Configuration
 - [ ] Set up bcache on Tower PC (M.2 backing 2x1TB SSD stripe)
