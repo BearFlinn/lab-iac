@@ -33,6 +33,12 @@ ansible-playbook -i ansible/inventory/control-plane.yml ansible/playbooks/setup-
 ansible-playbook -i ansible/inventory/control-plane.yml ansible/playbooks/setup-control-plane.yml -v
 ```
 
+**Note:** The playbook includes all required Kubernetes version variables. If you want to customize versions, you can override them:
+```bash
+ansible-playbook -i ansible/inventory/control-plane.yml ansible/playbooks/setup-control-plane.yml \
+  -e "kubernetes_version=1.31 pod_network_cidr=10.244.0.0/16 calico_version=v3.28.0"
+```
+
 ## What the Playbook Does
 
 ### Phase 1: Prerequisites (k8s-prerequisites role)
@@ -100,6 +106,42 @@ Edit `ansible/group_vars/k8s_cluster.yml` to customize:
 5. **Phase 4: GPU Support**
 
 ## Troubleshooting
+
+### Calico pods stuck in NotReady state (BGP peering failures)
+
+**Symptoms:**
+- Calico pods show `0/1 Running` instead of `1/1 Ready`
+- Readiness probe fails with: "BGP not established with 10.0.0.XXX"
+- BIRD peering shows `start` or `down` state instead of `Established`
+
+**Root Cause:**
+Calico's default IP autodetection may select the wrong interface (e.g., tunnel interface `wt0` with IP 100.96.94.27 instead of management network 10.0.0.226). This prevents BGP from establishing connections.
+
+**Fix:**
+The control plane setup playbook automatically patches Calico with `IP_AUTODETECTION_METHOD=can-reach=8.8.8.8`, which selects the correct routable interface. If you still see BGP failures:
+
+1. **Verify the patch is applied:**
+   ```bash
+   kubectl get ds calico-node -n kube-system -o yaml | grep -A5 "IP_AUTODETECTION_METHOD"
+   ```
+
+2. **Check which IP Calico detected:**
+   ```bash
+   kubectl logs -n kube-system -l k8s-app=calico-node | grep "Using autodetected"
+   ```
+   Should show your management IP (10.0.0.226), not a tunnel IP.
+
+3. **Verify BGP peer status:**
+   ```bash
+   kubectl exec -it -n kube-system $(kubectl get pods -n kube-system -l k8s-app=calico-node -o name | head -1) -- birdcl show protocols | grep -E "Mesh|BGP"
+   ```
+   All peers should show `up` and `Established`.
+
+4. **Force pod restart if needed:**
+   ```bash
+   kubectl delete pods -n kube-system -l k8s-app=calico-node
+   # DaemonSet will immediately recreate them
+   ```
 
 ### Check containerd status:
 ```bash
