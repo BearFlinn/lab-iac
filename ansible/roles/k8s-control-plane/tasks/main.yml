@@ -1,5 +1,10 @@
 ---
 # Tasks for initializing Kubernetes control plane
+#
+# Note on IP_AUTODETECTION_METHOD:
+# When Calico's default autodetection runs, it may pick up tunnel interfaces (wt0)
+# instead of the primary management network interface, causing BGP peering failures.
+# The "can-reach=8.8.8.8" method ensures the correct routable interface is selected.
 
 - name: Check if Kubernetes is already initialized
   ansible.builtin.stat:
@@ -73,6 +78,26 @@
   delay: 5
   register: calico_install
   until: calico_install.rc == 0
+
+- name: Patch Calico DaemonSet with IP autodetection method
+  ansible.builtin.command: |
+    kubectl patch ds calico-node -n kube-system --type='json' -p='[
+      {
+        "op": "add",
+        "path": "/spec/template/spec/containers/0/env/-",
+        "value": {
+          "name": "IP_AUTODETECTION_METHOD",
+          "value": "can-reach=8.8.8.8"
+        }
+      }
+    ]'
+  become: no
+  environment:
+    KUBECONFIG: "/home/{{ ansible_user }}/.kube/config"
+  register: calico_patch
+  retries: 3
+  delay: 5
+  until: calico_patch.rc == 0
 
 - name: Wait for Calico pods to be ready
   ansible.builtin.command: kubectl wait --for=condition=Ready pods --all -n kube-system --timeout=300s
