@@ -191,6 +191,32 @@
       community.general.timezone:
         name: "{{ timezone | default('UTC') }}"
 
+    - name: Prevent hibernation when lid is closed (laptop optimization)
+      block:
+        - name: Configure logind to prevent hibernation on lid close
+          ansible.builtin.lineinfile:
+            path: /etc/systemd/logind.conf
+            regexp: '^#?HandleLidSwitch='
+            line: 'HandleLidSwitch=ignore'
+            state: present
+          notify: restart systemd-logind
+
+        - name: Configure logind to prevent hibernation on lid close (external power)
+          ansible.builtin.lineinfile:
+            path: /etc/systemd/logind.conf
+            regexp: '^#?HandleLidSwitchExternalPower='
+            line: 'HandleLidSwitchExternalPower=ignore'
+            state: present
+          notify: restart systemd-logind
+
+        - name: Configure logind to prevent hibernation on lid close (docked)
+          ansible.builtin.lineinfile:
+            path: /etc/systemd/logind.conf
+            regexp: '^#?HandleLidSwitchDocked='
+            line: 'HandleLidSwitchDocked=ignore'
+            state: present
+          notify: restart systemd-logind
+
     - name: Enable and configure firewall (ufw)
       block:
         - name: Install ufw
@@ -235,3 +261,10 @@
           - "DNS Servers: {{ dns_servers | join(', ') }}"
           - "OS: {{ ansible_distribution }} {{ ansible_distribution_version }}"
           - "Kernel: {{ ansible_kernel }}"
+
+  handlers:
+    - name: restart systemd-logind
+      ansible.builtin.systemd:
+        name: systemd-logind
+        state: restarted
+        daemon_reload: yes

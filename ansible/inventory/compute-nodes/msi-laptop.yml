@@ -5,7 +5,7 @@
 all:
   hosts:
     msi-laptop:
-      ansible_host: 10.0.0.XXX  # TODO: Update with actual 10.0.0.x IP address
+      ansible_host: 10.0.0.177
       ansible_connection: ssh
       ansible_user: bearf
       # Specs
