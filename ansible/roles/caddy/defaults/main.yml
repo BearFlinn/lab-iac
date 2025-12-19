@@ -1,0 +1,48 @@
+---
+# Caddy role default variables
+
+# Caddy version (leave empty for latest)
+caddy_version: ""
+
+# Caddy installation method: 'package' or 'binary'
+caddy_install_method: "package"
+
+# Caddy configuration directory
+caddy_config_dir: "/etc/caddy"
+caddy_data_dir: "/var/lib/caddy"
+caddy_log_dir: "/var/log/caddy"
+
+# Caddy service user
+caddy_user: "caddy"
+caddy_group: "caddy"
+
+# Domain for Caddy (override in inventory)
+caddy_domain: "localhost"
+
+# Wildcard domain support (requires DNS-01 challenge)
+caddy_wildcard_domain: ""
+caddy_use_wildcard: false
+
+# Email for Let's Encrypt (override in inventory)
+caddy_email: ""
+
+# Enable automatic HTTPS
+caddy_auto_https: true
+
+# DNS provider for DNS-01 challenge (for wildcard certs)
+# Options: cloudflare, route53, digitalocean, etc.
+caddy_dns_provider: ""
+
+# Caddy configuration template
+caddy_config_template: "Caddyfile.j2"
+
+# Additional Caddy directives (can be overridden)
+caddy_additional_config: ""
+
+# Enable/disable Caddy service
+caddy_service_enabled: true
+caddy_service_state: "started"
+
+# xcaddy build settings (for custom builds with DNS plugins)
+caddy_build_with_xcaddy: false
+caddy_xcaddy_plugins: []

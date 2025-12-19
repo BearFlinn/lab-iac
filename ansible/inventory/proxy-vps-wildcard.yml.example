@@ -1,0 +1,42 @@
+---
+# Proxy VPS Inventory with Wildcard Certificate Support
+# This is an EXAMPLE - copy to proxy-vps-wildcard.yml and customize
+
+all:
+  hosts:
+    proxy-vps-1:
+      ansible_host: proxy-vps  # Uses SSH config
+      ansible_user: bearf
+      ansible_port: 2222
+      ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
+
+      # Domain configuration for wildcard certificates
+      caddy_domain: "bearflinn.com"              # Root domain
+      caddy_wildcard_domain: "*.bearflinn.com"   # Wildcard for all subdomains
+      caddy_email: "bearflinn@gmail.com"         # Email for Let's Encrypt
+      enable_caddy: true
+
+      # Enable wildcard certificate with DNS-01 challenge
+      caddy_use_wildcard: true
+      caddy_dns_provider: "cloudflare"           # Options: cloudflare, route53, digitalocean
+
+  vars:
+    # Timezone
+    timezone: "UTC"
+
+    # Firewall configuration
+    enable_firewall: true
+
+    # UFW rules for web services
+    ufw_web_rules:
+      - { port: '80', proto: 'tcp', comment: 'HTTP' }
+      - { port: '443', proto: 'tcp', comment: 'HTTPS' }
+
+# IMPORTANT: The Cloudflare API token must be stored in an encrypted vault file:
+# See ansible/CLOUDFLARE-SETUP.md for setup instructions
+#
+# Required vault variable:
+#   vault_cloudflare_api_token: "your-token-here"
+#
+# The token is referenced in ansible/group_vars/all/vars.yml as:
+#   cloudflare_api_token: "{{ vault_cloudflare_api_token }}"

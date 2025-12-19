@@ -1,0 +1,95 @@
+---
+# Build Caddy with xcaddy and DNS plugins
+
+- name: Install build dependencies
+  ansible.builtin.apt:
+    name:
+      - golang-go
+      - git
+    state: present
+
+- name: Check if xcaddy is already installed
+  ansible.builtin.stat:
+    path: /usr/local/bin/xcaddy
+  register: xcaddy_binary
+
+- name: Install xcaddy
+  when: not xcaddy_binary.stat.exists
+  block:
+    - name: Download and install xcaddy
+      ansible.builtin.shell: |
+        go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
+      environment:
+        GOPATH: /tmp/go
+        GO111MODULE: "on"
+
+    - name: Move xcaddy to /usr/local/bin
+      ansible.builtin.copy:
+        src: /tmp/go/bin/xcaddy
+        dest: /usr/local/bin/xcaddy
+        mode: '0755'
+        remote_src: yes
+
+    - name: Clean up Go cache
+      ansible.builtin.file:
+        path: /tmp/go
+        state: absent
+
+- name: Build Caddy with DNS provider plugin
+  ansible.builtin.shell: |
+    /usr/local/bin/xcaddy build \
+      --output /tmp/caddy-custom \
+      --with github.com/caddy-dns/{{ caddy_dns_provider }}
+  args:
+    creates: /tmp/caddy-custom
+  register: caddy_build
+
+- name: Stop Caddy service before replacing binary
+  ansible.builtin.systemd:
+    name: caddy
+    state: stopped
+  when: caddy_build.changed
+  ignore_errors: yes
+
+- name: Backup original Caddy binary
+  ansible.builtin.copy:
+    src: /usr/bin/caddy
+    dest: /usr/bin/caddy.backup
+    mode: '0755'
+    remote_src: yes
+  when: caddy_build.changed
+  ignore_errors: yes
+
+- name: Replace Caddy binary with custom build
+  ansible.builtin.copy:
+    src: /tmp/caddy-custom
+    dest: /usr/bin/caddy
+    mode: '0755'
+    owner: root
+    group: root
+    remote_src: yes
+  when: caddy_build.changed
+  notify: restart caddy
+
+- name: Set CAP_NET_BIND_SERVICE capability on Caddy binary
+  community.general.capabilities:
+    path: /usr/bin/caddy
+    capability: cap_net_bind_service=+ep
+    state: present
+
+- name: Clean up build artifact
+  ansible.builtin.file:
+    path: /tmp/caddy-custom
+    state: absent
+
+- name: Verify Caddy build includes DNS provider
+  ansible.builtin.command: /usr/bin/caddy list-modules
+  register: caddy_modules
+  changed_when: false
+
+- name: Check if DNS module is loaded
+  ansible.builtin.assert:
+    that:
+      - "'dns.providers.{{ caddy_dns_provider }}' in caddy_modules.stdout"
+    fail_msg: "DNS provider module '{{ caddy_dns_provider }}' not found in Caddy build"
+    success_msg: "DNS provider module '{{ caddy_dns_provider }}' successfully loaded"

@@ -1,0 +1,7 @@
+---
+# Public variables (safe to commit to git)
+# These reference the encrypted vault variables
+
+# Cloudflare API token for DNS-01 challenge
+# The actual token is stored in vault.yml (encrypted)
+cloudflare_api_token: "{{ vault_cloudflare_api_token }}"

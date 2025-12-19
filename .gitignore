@@ -33,6 +33,10 @@ packer/http/preseed.cfg
 .ansible/roles/
 venv/
 env/
+# Ansible vault password file (keep this local!)
+.vault_pass
+vault_pass.txt
+*vault_pass*
 
 # IDE
 .vscode/
@@ -70,3 +74,4 @@ logs/
 # Claude Code
 .claude/
 packer/http/preseed.cfg
+ansible/group_vars/all/vault.yml

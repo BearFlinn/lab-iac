@@ -1,0 +1,13 @@
+# Systemd override for Caddy service
+# Managed by Ansible - DO NOT EDIT MANUALLY
+#
+# This file provides environment variables for DNS-01 ACME challenge
+# The API token is stored securely in Ansible vault
+
+[Service]
+# Environment variable for {{ caddy_dns_provider | upper }} DNS provider
+Environment="{% if caddy_dns_provider == 'cloudflare' %}CLOUDFLARE_API_TOKEN={{ cloudflare_api_token }}{% elif caddy_dns_provider == 'route53' %}AWS_ACCESS_KEY_ID={{ aws_access_key_id }} AWS_SECRET_ACCESS_KEY={{ aws_secret_access_key }}{% elif caddy_dns_provider == 'digitalocean' %}DO_AUTH_TOKEN={{ digitalocean_api_token }}{% endif %}"
+
+# Security: Prevent token from appearing in logs
+StandardOutput=journal
+StandardError=journal

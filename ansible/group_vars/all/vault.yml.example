@@ -1,0 +1,14 @@
+---
+# This is an EXAMPLE vault file
+# DO NOT commit the actual vault.yml with real secrets
+#
+# To create your encrypted vault.yml:
+# 1. Copy this file: cp vault.yml.example vault.yml
+# 2. Edit vault.yml and add your real Cloudflare API token
+# 3. Encrypt it: ansible-vault encrypt vault.yml
+# 4. The encrypted vault.yml CAN be committed to git safely
+
+# Cloudflare API token for DNS-01 ACME challenge
+# Get this from: https://dash.cloudflare.com/profile/api-tokens
+# Required permissions: Zone:DNS:Edit for the specific zone
+vault_cloudflare_api_token: "your-cloudflare-api-token-here"

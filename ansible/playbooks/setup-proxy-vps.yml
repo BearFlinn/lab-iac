@@ -1,0 +1,195 @@
+---
+# Proxy VPS Setup Playbook
+# This playbook configures a VPS with Caddy web server and proper security
+#
+# Prerequisites:
+# - VPS provisioned with cloud-init (proxy-vps-1_cloud-init.yml)
+# - SSH configured in ~/.ssh/config with Host proxy-vps
+# - Domain DNS pointed to VPS IP (for automatic SSL)
+#
+# Usage:
+#   ansible-playbook -i ansible/inventory/proxy-vps.yml \
+#     ansible/playbooks/setup-proxy-vps.yml -v
+
+- name: Setup Proxy VPS
+  hosts: all
+  gather_facts: yes
+  become: yes
+
+  pre_tasks:
+    - name: Verify SSH connectivity
+      ansible.builtin.ping:
+
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Upgrade all packages
+      ansible.builtin.apt:
+        upgrade: dist
+        autoremove: yes
+        autoclean: yes
+
+    - name: Install essential packages
+      ansible.builtin.apt:
+        name:
+          - curl
+          - wget
+          - git
+          - vim
+          - htop
+          - net-tools
+          - dnsutils
+          - ufw
+          - fail2ban
+          - python3
+          - python3-pip
+        state: present
+
+  tasks:
+    - name: Configure timezone
+      community.general.timezone:
+        name: "{{ timezone | default('UTC') }}"
+
+    - name: Configure UFW firewall
+      when: enable_firewall | default(true) | bool
+      block:
+        - name: Reset UFW to default state
+          community.general.ufw:
+            state: reset
+
+        - name: Set UFW default policies
+          community.general.ufw:
+            direction: "{{ item.direction }}"
+            policy: "{{ item.policy }}"
+          loop:
+            - { direction: 'incoming', policy: 'deny' }
+            - { direction: 'outgoing', policy: 'allow' }
+
+        - name: Allow SSH on custom port 2222
+          community.general.ufw:
+            rule: allow
+            port: '2222'
+            proto: tcp
+            comment: 'SSH'
+
+        - name: Allow HTTP
+          community.general.ufw:
+            rule: allow
+            port: '80'
+            proto: tcp
+            comment: 'HTTP'
+
+        - name: Allow HTTPS
+          community.general.ufw:
+            rule: allow
+            port: '443'
+            proto: tcp
+            comment: 'HTTPS'
+
+        - name: Apply additional UFW rules
+          community.general.ufw:
+            rule: allow
+            port: "{{ item.port }}"
+            proto: "{{ item.proto }}"
+            comment: "{{ item.comment | default(omit) }}"
+          loop: "{{ ufw_web_rules | default([]) }}"
+          when: ufw_web_rules is defined
+
+        - name: Enable UFW
+          community.general.ufw:
+            state: enabled
+
+        - name: Display UFW status
+          ansible.builtin.command: ufw status verbose
+          register: ufw_status
+          changed_when: false
+
+        - name: Show UFW configuration
+          ansible.builtin.debug:
+            var: ufw_status.stdout_lines
+
+    - name: Verify fail2ban is running
+      ansible.builtin.systemd:
+        name: fail2ban
+        state: started
+        enabled: yes
+
+    - name: Install and configure Caddy
+      when: enable_caddy | default(true) | bool
+      block:
+        - name: Validate Caddy configuration variables
+          ansible.builtin.assert:
+            that:
+              - caddy_domain is defined
+              - caddy_domain | length > 0
+              - caddy_domain != ""
+            fail_msg: "caddy_domain must be set in inventory for SSL/TLS to work"
+          when: caddy_auto_https | default(true)
+
+        - name: Validate email for Let's Encrypt
+          ansible.builtin.assert:
+            that:
+              - caddy_email is defined
+              - caddy_email | length > 0
+              - caddy_email != ""
+              - "'@' in caddy_email"
+            fail_msg: "caddy_email must be a valid email address for Let's Encrypt"
+          when:
+            - caddy_auto_https | default(true)
+            - caddy_domain is defined
+            - caddy_domain != 'localhost'
+
+        - name: Include Caddy role
+          ansible.builtin.include_role:
+            name: caddy
+
+    - name: Display deployment summary
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "Proxy VPS Setup Complete"
+          - "=========================================="
+          - "Hostname: {{ inventory_hostname }}"
+          - "OS: {{ ansible_distribution }} {{ ansible_distribution_version }}"
+          - "Kernel: {{ ansible_kernel }}"
+          - "Timezone: {{ timezone | default('UTC') }}"
+          - ""
+          - "Security:"
+          - "  - UFW Firewall: Enabled"
+          - "  - Fail2ban: Running"
+          - "  - SSH Port: 2222"
+          - "  - Open Ports: 2222 (SSH), 80 (HTTP), 443 (HTTPS)"
+          - ""
+          - "Web Server:"
+          - "  - Caddy: {{ 'Installed' if enable_caddy | default(true) else 'Not Installed' }}"
+          - "  - Domain: {{ caddy_domain | default('Not configured') }}"
+          - "  - Auto HTTPS: {{ 'Enabled' if caddy_auto_https | default(true) else 'Disabled' }}"
+          - "  - Web Root: /var/www/html"
+          - ""
+          - "Next Steps:"
+          - "  1. Verify Caddy is serving: curl http://{{ caddy_domain | default('your-domain.com') }}"
+          - "  2. Check SSL certificate: curl https://{{ caddy_domain | default('your-domain.com') }}"
+          - "  3. Deploy your web application to /var/www/html"
+          - "  4. Review Caddy config: /etc/caddy/Caddyfile"
+          - "  5. Monitor logs: tail -f /var/log/caddy/access.log"
+          - "=========================================="
+
+  post_tasks:
+    - name: Final connectivity check
+      ansible.builtin.wait_for:
+        port: 80
+        timeout: 10
+
+    - name: Check Caddy service status
+      ansible.builtin.systemd:
+        name: caddy
+        state: started
+      register: caddy_service
+      failed_when: false
+
+    - name: Display Caddy service status
+      ansible.builtin.debug:
+        msg: "Caddy service is {{ caddy_service.status.ActiveState | default('unknown') }}"
+      when: caddy_service.status is defined

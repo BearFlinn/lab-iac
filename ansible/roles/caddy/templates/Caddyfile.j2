@@ -1,0 +1,133 @@
+# Caddyfile - Main configuration
+# Managed by Ansible - DO NOT EDIT MANUALLY
+
+# Global options
+{
+    # Email for Let's Encrypt notifications
+{% if caddy_email %}
+    email {{ caddy_email }}
+{% endif %}
+
+    # Automatic HTTPS
+{% if not caddy_auto_https %}
+    auto_https off
+{% endif %}
+
+    # Admin endpoint (local only)
+    admin localhost:2019
+
+    # Log settings
+    log {
+        output file {{ caddy_log_dir }}/caddy.log
+        format json
+        level INFO
+    }
+}
+
+# Main site configuration
+{% if caddy_use_wildcard and caddy_wildcard_domain %}
+# Wildcard certificate configuration with DNS-01 challenge
+{{ caddy_domain }}{% if caddy_wildcard_domain %}, {{ caddy_wildcard_domain }}{% endif %} {
+    # TLS configuration for DNS-01 challenge
+    tls {
+{% if caddy_dns_provider %}
+        dns {{ caddy_dns_provider }} {env.{% if caddy_dns_provider == 'cloudflare' %}CLOUDFLARE_API_TOKEN{% elif caddy_dns_provider == 'route53' %}AWS_ACCESS_KEY_ID{% elif caddy_dns_provider == 'digitalocean' %}DO_AUTH_TOKEN{% endif %}}
+{% endif %}
+    }
+
+    # Route based on hostname
+    @root host {{ caddy_domain }}
+    handle @root {
+        root * /var/www/html
+        file_server
+        encode gzip
+    }
+
+    # Catch-all for subdomains
+    handle {
+        root * /var/www/html
+        file_server
+        encode gzip
+    }
+
+    # Security headers
+    header {
+        # Enable HSTS
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        # Prevent clickjacking
+        X-Frame-Options "SAMEORIGIN"
+        # Prevent MIME sniffing
+        X-Content-Type-Options "nosniff"
+        # XSS protection
+        X-XSS-Protection "1; mode=block"
+        # Referrer policy
+        Referrer-Policy "strict-origin-when-cross-origin"
+        # Remove server header
+        -Server
+    }
+
+    # Access logging
+    log {
+        output file {{ caddy_log_dir }}/access.log
+        format json
+    }
+
+{{ caddy_additional_config | indent(4, first=True) }}
+}
+{% elif caddy_domain and caddy_domain != 'localhost' %}
+# Standard configuration with HTTP-01 challenge
+{{ caddy_domain }} {
+    # Document root
+    root * /var/www/html
+
+    # Enable file server
+    file_server
+
+    # Enable gzip compression
+    encode gzip
+
+    # Security headers
+    header {
+        # Enable HSTS
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        # Prevent clickjacking
+        X-Frame-Options "SAMEORIGIN"
+        # Prevent MIME sniffing
+        X-Content-Type-Options "nosniff"
+        # XSS protection
+        X-XSS-Protection "1; mode=block"
+        # Referrer policy
+        Referrer-Policy "strict-origin-when-cross-origin"
+        # Remove server header
+        -Server
+    }
+
+    # Access logging
+    log {
+        output file {{ caddy_log_dir }}/access.log
+        format json
+    }
+
+{{ caddy_additional_config | indent(4, first=True) }}
+}
+{% else %}
+# Development configuration - HTTP only
+:80 {
+    # Document root
+    root * /var/www/html
+
+    # Enable file server
+    file_server
+
+    # Enable gzip compression
+    encode gzip
+
+    # Access logging
+    log {
+        output file {{ caddy_log_dir }}/access.log
+        format json
+    }
+
+{{ caddy_additional_config | indent(4, first=True) }}
+}
+{% endif %}
