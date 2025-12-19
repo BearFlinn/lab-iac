@@ -25,41 +25,47 @@ exit
 
 ### Step 2: Other Machines (One at a time)
 
-For each remaining machine (tower-pc, msi-laptop, dell-optiplex-9020):
+For each remaining machine (tower-pc, msi-laptop):
 
-1. **Use the individual compute node inventory file**:
+1. **Create a temporary single-host inventory**:
    ```bash
-   # Files already exist in ansible/inventory/compute-nodes/
-   # tower-pc.yml, msi-laptop.yml, dell-optiplex-9020.yml
+   # Copy the template to /tmp/
+   cp ansible/inventory/single-host/template.yml /tmp/tower-pc.yml
    ```
 
-2. **Update the IP address** in the file (currently set to 10.0.0.XXX placeholder):
-   ```yaml
-   all:
-     hosts:
-       tower-pc:
-         ansible_host: 10.0.0.XXX  # Update with actual IP
-         ansible_user: bearf
+2. **Edit the inventory file** with actual values:
+   ```bash
+   # Edit /tmp/tower-pc.yml and update:
+   # - HOSTNAME -> tower-pc
+   # - ansible_host: 10.0.0.XXX -> actual IP (e.g., 10.0.0.249)
+   # - ansible_user: bearf (or your username)
    ```
 
 3. **Copy SSH key** to the machine:
    ```bash
-   ssh-copy-id bearf@10.0.0.XXX
+   ssh-copy-id bearf@10.0.0.249
    ```
 
 4. **Run baseline setup**:
    ```bash
-   ansible-playbook -i ansible/inventory/compute-nodes/tower-pc.yml \
+   ansible-playbook -i /tmp/tower-pc.yml \
      ansible/playbooks/baseline-setup.yml -v
    ```
 
 5. **Verify** the machine is set up correctly:
    ```bash
-   ssh bearf@10.0.0.XXX
+   ssh bearf@10.0.0.249
    hostname  # Should show correct hostname
    ip addr   # Verify static IP
    exit
    ```
+
+6. **Clean up temporary file**:
+   ```bash
+   rm /tmp/tower-pc.yml
+   ```
+
+See `ansible/inventory/single-host/README.md` for more details on single-host inventories.
 
 ### Step 3: Update All-Nodes Inventory
 
@@ -132,19 +138,23 @@ Follow ARCHITECTURE.md for subsequent phases.
 
 ### Single Machine Setup (Baseline Only)
 ```bash
-# 1. Use existing compute node inventory file
-# Files: ansible/inventory/compute-nodes/{tower-pc,msi-laptop,dell-optiplex-9020}.yml
-# Or use control-plane.yml for dell-inspiron-15
+# 1. Create temporary inventory from template
+cp ansible/inventory/single-host/template.yml /tmp/my-host.yml
 
-# 2. Edit inventory with machine's actual IP (replace 10.0.0.XXX placeholder)
+# 2. Edit /tmp/my-host.yml with actual values (hostname, IP, username)
 
 # 3. Copy SSH key
 ssh-copy-id bearf@IP_ADDRESS
 
 # 4. Run baseline
-ansible-playbook -i ansible/inventory/compute-nodes/HOSTNAME.yml \
+ansible-playbook -i /tmp/my-host.yml \
   ansible/playbooks/baseline-setup.yml -v
+
+# 5. Clean up
+rm /tmp/my-host.yml
 ```
+
+For control plane, you can use `ansible/inventory/control-plane.yml` directly.
 
 ### What baseline-setup.yml Does (Per Machine)
 - ✅ Sets hostname

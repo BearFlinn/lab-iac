@@ -1,7 +1,10 @@
 ---
-# Kubernetes Control Plane Inventory
-# Dell Inspiron 15 serving as the single control plane node
-# Use this inventory for control-plane-only operations (initial setup, verification, etc.)
+# Kubernetes Control Plane - Quick Reference Inventory
+# Use for control-plane-only operations
+# All host variables are inherited from all-nodes.yml
+#
+# This inventory contains only connection details for quick targeting.
+# For complete host configuration, see ansible/inventory/all-nodes.yml
 
 all:
   children:
@@ -11,21 +14,6 @@ all:
           ansible_host: 10.0.0.226
           ansible_connection: ssh
           ansible_user: bearf
-          # Specs
-          cpu: "Intel i3-7100U (2 cores, 4 threads @ 2.7 GHz)"
-          cpu_cores: 2
-          cpu_threads: 4
-          ram: "8GB"
-          ram_gb: 8
-          # Storage
-          storage:
-            - name: "SSD"
-              capacity: "256GB"
-              capacity_gb: 256
-              type: "SSD"
-          total_storage_gb: 256
-          form_factor: "Laptop"
-          model: "Dell Inspiron 15-3567"
 
     k8s_cluster:
       children:

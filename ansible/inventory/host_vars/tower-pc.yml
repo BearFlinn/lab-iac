@@ -1,0 +1,26 @@
+---
+# Tower PC Host-Specific Variables
+# Storage configuration for tower-storage-setup playbook
+
+storage_config:
+  zfs_raid_z1:
+    pool_name: "storage"
+    devices:
+      - "/dev/sdg"  # HDD 3 (2TB)
+      - "/dev/sdi"  # HDD 4 (2TB)
+      - "/dev/sdj"  # HDD 5 (2TB)
+    filesystem: "storage/garage"
+    capacity_usable_gb: 4000
+    purpose: "Object storage (Garage/S3)"
+    properties:
+      compression: "lz4"
+      atime: "off"
+      checksum: "sha512"
+  bcache:
+    backing_device: "/dev/sdh"  # M.2 NVMe (128GB)
+    purpose: "Performance cache layer for NFS"
+  nfs:
+    backing_device: "/dev/sdb"  # HDD 1 (1TB)
+    export_path: "/mnt/nfs-storage"
+    export_network: "10.0.0.0/24"
+    purpose: "Kubernetes PersistentVolume provisioning with bcache acceleration"

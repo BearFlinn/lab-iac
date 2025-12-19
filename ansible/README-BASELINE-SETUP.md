@@ -87,30 +87,40 @@ all:
 
 ## Running the Playbook
 
-### Recommended: Use Standalone Inventory (One Machine at a Time)
+### Recommended: Use Single-Host Inventory (One Machine at a Time)
 
 ```bash
 cd /home/bearf/Projects/lab-iac
 
-# Setup Dell Inspiron first
-ansible-playbook -i ansible/inventory/dell-inspiron-15-standalone.yml \
+# For control plane (Dell Inspiron), use existing inventory
+ansible-playbook -i ansible/inventory/control-plane.yml \
   ansible/playbooks/baseline-setup.yml -v
 ```
 
-### For Other Machines:
+### For Worker Nodes:
 
-1. Copy the template:
+1. Create temporary inventory from template:
    ```bash
-   cp ansible/inventory/single-machine.yml ansible/inventory/tower-pc-standalone.yml
+   cp ansible/inventory/single-host/template.yml /tmp/tower-pc.yml
    ```
 
-2. Edit with the machine's info (hostname, IP, user)
+2. Edit `/tmp/tower-pc.yml` with the machine's info:
+   - Change `HOSTNAME` to actual hostname (e.g., `tower-pc`)
+   - Change `ansible_host: 10.0.0.XXX` to actual IP (e.g., `10.0.0.249`)
+   - Change `ansible_user` if needed
 
 3. Run baseline setup:
    ```bash
-   ansible-playbook -i ansible/inventory/tower-pc-standalone.yml \
+   ansible-playbook -i /tmp/tower-pc.yml \
      ansible/playbooks/baseline-setup.yml -v
    ```
+
+4. Clean up temporary file:
+   ```bash
+   rm /tmp/tower-pc.yml
+   ```
+
+See `ansible/inventory/single-host/README.md` for detailed instructions.
 
 ### Advanced: Setup Multiple Machines (if all are online)
 

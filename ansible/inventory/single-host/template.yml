@@ -1,0 +1,35 @@
+---
+# Single Host Inventory Template
+# Copy this file and customize for individual machine baseline setup
+#
+# Example usage:
+#   1. Copy this template:
+#      cp ansible/inventory/single-host/template.yml /tmp/my-host.yml
+#
+#   2. Edit /tmp/my-host.yml with actual values (hostname, IP, username)
+#
+#   3. Run baseline setup:
+#      ansible-playbook -i /tmp/my-host.yml ansible/playbooks/baseline-setup.yml
+#
+#   4. After baseline setup completes, add the host to ansible/inventory/all-nodes.yml
+#
+# See ansible/inventory/single-host/README.md for detailed instructions.
+
+all:
+  hosts:
+    HOSTNAME:  # Replace with actual hostname (e.g., tower-pc, msi-laptop)
+      ansible_host: 10.0.0.XXX  # Replace with current IP
+      ansible_connection: ssh
+      ansible_user: bearf  # Replace with actual username
+
+      # Optional: Set specific static IP (otherwise uses current IP)
+      # static_ip: 10.0.0.XXX
+
+  vars:
+    # Network configuration
+    network_dns:
+      - "8.8.8.8"
+      - "8.8.4.4"
+    timezone: "America/New_York"
+    enable_firewall: false
+    add_hosts_file: false  # Set true only when other hosts exist
