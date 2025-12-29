@@ -75,3 +75,4 @@ logs/
 .claude/
 packer/http/preseed.cfg
 ansible/group_vars/all/vault.yml
+k8s-manifests/github-runner/values.yaml

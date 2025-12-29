@@ -1,0 +1,12 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: docker-daemon-config
+  namespace: actions-runner-system
+data:
+  daemon.json: |
+    {
+      "insecure-registries": ["10.0.0.226:32346"],
+      "mtu": 1450
+    }

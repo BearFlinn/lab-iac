@@ -1,0 +1,35 @@
+# Helm values for actions-runner-controller
+# Copy this to values.yaml and fill in your GitHub credentials
+
+# GitHub authentication
+authSecret:
+  enabled: true
+  create: true
+  github_token: "YOUR_GITHUB_PAT_HERE"  # Replace with actual PAT
+
+# Controller configuration
+replicaCount: 1
+
+# Metrics
+metrics:
+  serviceMonitor:
+    enabled: false
+
+# Resource limits
+resources:
+  limits:
+    cpu: 100m
+    memory: 128Mi
+  requests:
+    cpu: 100m
+    memory: 64Mi
+
+# Docker registry configuration (for building images in runners)
+# This allows runners to push to our self-hosted registry
+dockerRegistryMirror: ""
+
+# Scope - set to organization or repository
+# For organization-wide runners (recommended):
+#   You'll specify the org in the RunnerDeployment manifest
+# For repository-specific runners:
+#   You'll specify the repo in the RunnerDeployment manifest

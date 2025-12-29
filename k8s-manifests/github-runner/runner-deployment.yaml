@@ -1,0 +1,67 @@
+---
+# GitHub Actions Runner Deployment
+# This creates self-hosted runners for your organization/repository
+#
+# IMPORTANT: Update the 'organization' field with your GitHub org name
+# Or use 'repository' instead for repo-specific runners
+
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: RunnerDeployment
+metadata:
+  name: lab-runners
+  namespace: actions-runner-system
+spec:
+  # Number of runner replicas
+  replicas: 2
+
+  template:
+    spec:
+      # Organization or repository
+      # Choose ONE:
+      organization: grizzly-endeavors  # For org-wide runners
+      # repository: grizzly-endeavors/your-repo  # For repo-specific runners
+
+      # Use DinD image that includes Docker daemon
+      image: summerwind/actions-runner-dind:latest
+
+      # Labels for targeting these runners in workflows
+      labels:
+        - self-hosted
+        - kubernetes
+        - linux
+        - lab
+
+      # Enable Docker-in-Docker for building images
+      dockerdWithinRunnerContainer: true
+
+      # Docker MTU (helps with some network issues)
+      dockerMTU: 1450
+
+      # Resource limits
+      resources:
+        limits:
+          cpu: "2"
+          memory: "4Gi"
+        requests:
+          cpu: "1"
+          memory: "2Gi"
+
+      # Docker daemon configuration
+      dockerdContainerResources:
+        limits:
+          cpu: "1"
+          memory: "2Gi"
+        requests:
+          cpu: "500m"
+          memory: "1Gi"
+
+      # Volume mounts for Docker daemon configuration
+      volumeMounts:
+        - name: docker-daemon-config
+          mountPath: /etc/docker
+          readOnly: true
+
+      volumes:
+        - name: docker-daemon-config
+          configMap:
+            name: docker-daemon-config

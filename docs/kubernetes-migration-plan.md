@@ -35,9 +35,9 @@ Internet → VPS (Caddy with TLS) → NetBird tunnel → K8s Ingress → Service
 - ✅ Ingress Controller deployed (nginx, NodePorts: 30487/30356)
 - ✅ Storage Class configured (local-path, default)
 - ✅ Container Registry deployed (NodePort: 32346)
+- ✅ GitHub Actions Runner deployed (2 replicas, DinD working)
 - ✅ TLS handled at edge (VPS Caddy)
 - ✅ Helm installed (v3.19.4)
-- ❌ GitHub Runner (Phase 2 - need to deploy)
 - ❌ Services (Phase 3+ - need to deploy)
 
 ---
@@ -85,6 +85,61 @@ Internet → VPS (Caddy with TLS) → NetBird tunnel → K8s Ingress → Service
 - `k8s-manifests/registry/` - Kubernetes manifests
 - `scripts/configure-insecure-registry.sh` - Configuration script
 - `ansible/playbooks/configure-registry.yml` - Ansible automation
+
+---
+
+## Phase 2: Deploy GitHub Actions Runner ✅ COMPLETED
+
+**Goal**: Self-hosted GitHub Actions runners in K8s with Docker-in-Docker support.
+
+### Completed Steps:
+1. **cert-manager Installed** - Prerequisite for webhook TLS
+   - Version: v1.16.2
+   - Namespace: `cert-manager`
+
+2. **Actions Runner Controller Deployed** - Via Helm
+   - Chart: `actions-runner-controller/actions-runner-controller`
+   - Namespace: `actions-runner-system`
+   - Authentication: GitHub PAT (stored in values.yaml, git-ignored)
+
+3. **Runner Deployment Created** - 2 replicas with DinD
+   - Image: `summerwind/actions-runner-dind:latest`
+   - Organization: `grizzly-endeavors`
+   - Labels: `self-hosted`, `kubernetes`, `linux`, `lab`
+   - Docker daemon: Configured for insecure registry
+
+4. **Docker-in-Docker Working** - Full Docker support in runners
+   - Privileged mode: Enabled
+   - Insecure registry: `10.0.0.226:32346` configured via daemon.json
+   - Tested: Build, push, pull all working
+
+5. **Integration Tested** - Successful workflow run
+   - Repository: `Grizzly-Endeavors/landing-page`
+   - Workflow: Built and pushed nginx container
+   - Image: `10.0.0.226:32346/landing-page:latest`
+
+**Key Configuration:**
+- Docker daemon config via ConfigMap (`docker-daemon-config`)
+- Insecure registry and MTU settings in `/etc/docker/daemon.json`
+- Resource limits: 2 CPU / 4Gi memory per runner
+
+**Known Issues:**
+- Initial attempt used wrong image (`summerwind/actions-runner` instead of `-dind`)
+- Environment variables didn't configure dockerd - solved with ConfigMap volume mount
+
+**Files Created:**
+- `k8s-manifests/github-runner/` - All runner manifests
+- `scripts/install-github-runner.sh` - Helm installation script
+- `docs/GITHUB_RUNNER_SETUP.md` - Operations guide
+
+**Verification:**
+```bash
+# Check runners in K8s
+kubectl get runners -n actions-runner-system
+
+# Check runners in GitHub
+# https://github.com/organizations/grizzly-endeavors/settings/actions/runners
+```
 
 ---
 
