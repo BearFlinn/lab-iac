@@ -32,17 +32,63 @@ Internet → VPS (Caddy with TLS) → NetBird tunnel → K8s Ingress → Service
 
 **Infrastructure Status:**
 - ✅ K8s cluster running (multi-node, kubeadm)
-- ✅ Ingress Controller deployed
-- ✅ Storage Class configured
+- ✅ Ingress Controller deployed (nginx, NodePorts: 30487/30356)
+- ✅ Storage Class configured (local-path, default)
+- ✅ Container Registry deployed (NodePort: 32346)
 - ✅ TLS handled at edge (VPS Caddy)
-- ❌ Container Registry (need to deploy)
-- ❌ GitHub Runner (need to deploy)
-- ❌ Helm installed
-- ❌ Services (need to deploy)
+- ✅ Helm installed (v3.19.4)
+- ❌ GitHub Runner (Phase 2 - need to deploy)
+- ❌ Services (Phase 3+ - need to deploy)
 
 ---
 
-## Phase 1: Deploy Self-Hosted Container Registry (Day 1)
+## Phase 0: Deploy Prerequisites ✅ COMPLETED
+
+**Goal**: Deploy Ingress Controller and Storage Class for cluster.
+
+### Completed Steps:
+1. **NGINX Ingress Controller** - Deployed via manifest
+   - HTTP NodePort: 30487
+   - HTTPS NodePort: 30356
+   - IngressClass: `nginx`
+
+2. **Local Path Storage Provisioner** - Deployed via manifest
+   - StorageClass: `local-path` (default)
+   - Dynamic volume provisioning enabled
+
+**Files Created:**
+- None (used official upstream manifests)
+
+---
+
+## Phase 1: Deploy Self-Hosted Container Registry ✅ COMPLETED
+
+**Goal**: Self-hosted Docker Registry in K8s for storing application images.
+
+### Completed Steps:
+1. **Registry Manifests Created** - `k8s-manifests/registry/`
+   - Namespace, PVC (50Gi), Deployment, Service (NodePort: 32346)
+
+2. **Registry Deployed** - Running in cluster
+   - Endpoint: `10.0.0.226:32346`
+   - Internal DNS: `docker-registry.registry.svc.cluster.local:5000`
+
+3. **Control Plane Configured** - Containerd configured for insecure registry
+   - Script: `scripts/configure-insecure-registry.sh`
+   - Ansible playbook: `ansible/playbooks/configure-registry.yml`
+
+**Known Issues:**
+- Worker nodes (msi-laptop, tower-pc) need SSH access for automated configuration
+- Manual workaround: Run `configure-insecure-registry.sh` directly on workers
+
+**Files Created:**
+- `k8s-manifests/registry/` - Kubernetes manifests
+- `scripts/configure-insecure-registry.sh` - Configuration script
+- `ansible/playbooks/configure-registry.yml` - Ansible automation
+
+---
+
+## Phase 1: Deploy Self-Hosted Container Registry (Day 1) - ORIGINAL PLAN
 
 **Goal**: Self-hosted Docker Registry in K8s for storing application images.
 

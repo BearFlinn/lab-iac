@@ -1,0 +1,42 @@
+---
+# Configure Kubernetes nodes to use insecure self-hosted registry
+# Uses a bash script for safe containerd configuration
+#
+# Usage:
+#   ansible-playbook -i inventory/all-nodes.yml playbooks/configure-registry.yml
+
+- name: Configure containerd for insecure registry
+  hosts: k8s_cluster
+  become: false
+  vars:
+    registry_host: "10.0.0.226"
+    registry_port: "32346"
+    registry_endpoint: "{{ registry_host }}:{{ registry_port }}"
+
+  tasks:
+    - name: Copy registry configuration script to nodes
+      copy:
+        src: ../../scripts/configure-insecure-registry.sh
+        dest: /tmp/configure-insecure-registry.sh
+        mode: '0755'
+
+    - name: Run registry configuration script
+      become: true
+      shell: /tmp/configure-insecure-registry.sh {{ registry_endpoint }}
+      register: script_output
+
+    - name: Display script output
+      debug:
+        var: script_output.stdout_lines
+
+    - name: Verify containerd is running
+      become: true
+      systemd:
+        name: containerd
+        state: started
+      register: containerd_status
+
+    - name: Clean up script
+      file:
+        path: /tmp/configure-insecure-registry.sh
+        state: absent
