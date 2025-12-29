@@ -39,6 +39,12 @@ all:
           backend: "{{ k8s_api_server }}"
           skip_verify: true  # For self-signed certs, can be overridden
 
+        # Route gin-house.bearflinn.com to Home Assistant via Tailscale
+        - domain: "gin-house.bearflinn.com"
+          type: "k8s_api"
+          backend: "100.96.217.175:8123"
+          skip_verify: true
+
         # Example: route app subdomains to k8s ingress
         - domain: "app.bearflinn.com"
           type: "k8s_ingress"

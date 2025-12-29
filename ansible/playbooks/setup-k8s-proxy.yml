@@ -157,6 +157,10 @@
               - "  URL: https://api.{{ caddy_domain }}/healthz"
           when: api_proxy_test is defined
 
+    - name: Display K8s proxy routes
+      ansible.builtin.debug:
+        msg: "{{ k8s_proxy_routes | to_nice_yaml }}"
+
     - name: Display K8s proxy setup summary
       ansible.builtin.debug:
         msg:
@@ -165,24 +169,12 @@
           - "=========================================="
           - "Proxy VPS Hostname: {{ inventory_hostname }}"
           - ""
-          - "Proxy Endpoints:"
-          - "  - K8s API Server: https://api.{{ caddy_domain }}"
-          - "    Backend: {{ k8s_api_server }}"
-{% for route in k8s_proxy_routes %}
-{% if route.type == 'k8s_api' %}
-          - "  - {{ route.domain }}"
-          - "    Backend: {{ route.backend }}"
-{% elif route.type == 'k8s_ingress' %}
-          - "  - {{ route.domain }}"
-          - "    Backend: {{ route.backend_service }}.{{ route.backend_namespace }}.svc.cluster.local:{{ route.backend_port }}"
-{% endif %}
-{% endfor %}
-          - ""
           - "Configuration:"
           - "  - Domain: {{ caddy_domain }}"
           - "  - Wildcard: {{ caddy_wildcard_domain | default('Not configured') }}"
           - "  - Auto HTTPS: Enabled"
           - "  - Web Root: /var/www/html"
+          - "  - K8s API Server: {{ k8s_api_server }}"
           - ""
           - "Next Steps:"
           - "  1. Update your local kubeconfig to use https://api.{{ caddy_domain }}"
