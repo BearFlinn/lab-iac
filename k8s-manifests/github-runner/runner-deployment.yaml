@@ -16,13 +16,16 @@ spec:
 
   template:
     spec:
+      # ServiceAccount for RBAC permissions
+      serviceAccountName: github-runner
+
       # Organization or repository
       # Choose ONE:
       organization: grizzly-endeavors  # For org-wide runners
       # repository: grizzly-endeavors/your-repo  # For repo-specific runners
 
-      # Use DinD image that includes Docker daemon
-      image: summerwind/actions-runner-dind:latest
+      # Use custom DinD image with Helm and kubectl pre-installed
+      image: 10.0.0.226:32346/github-runner-dind:latest
 
       # Labels for targeting these runners in workflows
       labels:

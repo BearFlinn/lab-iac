@@ -143,6 +143,133 @@ kubectl get runners -n actions-runner-system
 
 ---
 
+## Phase 3: Create Helm Charts and Workflows ✅ COMPLETED
+
+**Goal**: Create Helm charts in each application repository and update GitHub Actions workflows for automated Kubernetes deployments.
+
+**Architecture Decision**: Following industry best practices, Helm charts are stored IN each application repository rather than centralized in lab-iac. This follows the GitOps principle where deployment config lives with application code.
+
+### Completed Steps:
+
+1. **Landing Page** - Simple nginx static site
+   - Created `helm/` directory with Chart.yaml, values.yaml, templates
+   - Updated `.github/workflows/deploy.yml` for build → push → helm deploy
+   - Ingress: `landing.grizzly-endeavors.com`
+
+2. **Zork** - Interactive fiction games (nginx)
+   - Created Helm chart following same pattern
+   - Updated GitHub workflow
+   - Ingress: `zork.grizzly-endeavors.com`
+
+3. **Resume Site** - Python backend + pgvector database
+   - Created Helm chart with database StatefulSet
+   - Database: pgvector/pgvector:pg16 with 10Gi PVC
+   - Secrets: CEREBRAS_API_KEY, GEMINI_API_KEY, DB_PASSWORD
+   - Updated workflow to pass secrets via --set flags
+   - Ingress: `resume.grizzly-endeavors.com`
+
+4. **Coaching Website** - Next.js + PostgreSQL
+   - Created complex Helm chart with database + uploads PVC
+   - Database: postgres:16-alpine with 20Gi PVC
+   - Uploads: 5Gi PVC for file storage
+   - Multiple secrets: NextAuth, Discord, Stripe
+   - Build-time args for Next.js public env vars
+   - Ingress: `coaching.grizzly-endeavors.com`
+   - Note: Database migrations must be run manually
+
+5. **Family Dashboard** - Next.js + PostgreSQL
+   - Created Helm chart with database StatefulSet
+   - Database: postgres:16-alpine with 10Gi PVC
+   - Secrets: AUTH_SECRET, AUTH_URL
+   - Workflow includes quality checks (lint, typecheck, tests)
+   - Integrates with Infisical for secret management
+   - Ingress: `family.grizzly-endeavors.com`
+   - Note: Database migrations must be run manually
+
+### Files Created/Modified:
+
+**In each application repository:**
+- `helm/Chart.yaml` - Helm chart metadata
+- `helm/values.yaml.example` - Template with placeholders
+- `helm/.helmignore` - Excludes values.yaml (contains secrets)
+- `helm/templates/deployment.yaml` - Pod deployment
+- `helm/templates/service.yaml` - ClusterIP service
+- `helm/templates/ingress.yaml` - NGINX ingress
+- `helm/templates/secret.yaml` - Kubernetes secrets (database-backed apps)
+- `helm/templates/database-*.yaml` - Database resources (database-backed apps)
+- `helm/templates/*-pvc.yaml` - Persistent volume claims
+- `.github/workflows/deploy.yml` - Updated for Kubernetes deployment
+
+**In lab-iac repository:**
+- `docs/DEPLOYMENT_PATTERN.md` - Comprehensive deployment documentation
+
+### Deployment Pattern:
+
+**Workflow:**
+```
+1. Push to production/main branch
+2. GitHub Actions runner (running in K8s) picks up job
+3. Builds Docker image
+4. Pushes to registry (10.0.0.226:32346)
+5. Deploys via: helm upgrade --install <service> ./helm --set secrets...
+6. Waits for deployment to complete
+```
+
+**Repository Structure:**
+```
+project/
+├── .github/workflows/deploy.yml    # Build + Deploy
+├── helm/                           # Helm chart
+│   ├── Chart.yaml
+│   ├── values.yaml.example
+│   └── templates/
+├── Dockerfile
+└── (application code)
+```
+
+**Why This Pattern:**
+- Self-contained services (code + deployment together)
+- Independent deployments (no need to touch lab-iac)
+- Industry standard (GitOps)
+- CI/CD friendly (build → deploy in one workflow)
+
+### Important Notes:
+
+1. **Secrets Management:**
+   - `values.yaml` is gitignored (contains actual secrets)
+   - Secrets passed via GitHub Actions secrets + `--set` flags
+   - family-dashboard uses Infisical for centralized secret management
+
+2. **Database Migrations:**
+   - Not automated yet (manual step required)
+   - Run migrations manually: `kubectl exec -it deployment/app -- npm run migrate`
+   - Future enhancement: Add Kubernetes Job for migrations
+
+3. **Image Tags:**
+   - Currently using `latest` tag
+   - Future enhancement: Use git SHA for better rollback capability
+
+4. **Health Checks:**
+   - All deployments have liveness and readiness probes
+   - Database StatefulSets have pg_isready checks
+   - Init containers wait for database before starting app
+
+### Verification:
+
+```bash
+# Check all deployments
+kubectl get deployments
+kubectl get statefulsets
+kubectl get ingress
+
+# Check specific service
+helm list
+helm status landing-page
+kubectl logs deployment/landing-page
+```
+
+---
+
 ## Phase 1: Deploy Self-Hosted Container Registry (Day 1) - ORIGINAL PLAN
 
 **Goal**: Self-hosted Docker Registry in K8s for storing application images.
