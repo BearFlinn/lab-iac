@@ -12,7 +12,7 @@ metadata:
   namespace: actions-runner-system
 spec:
   # Number of runner replicas
-  replicas: 2
+  replicas: 1
 
   template:
     spec:
