@@ -1,0 +1,69 @@
+---
+# Fix NetBird nftables for K8s NodePort Forwarding
+#
+# This playbook fixes the NetBird firewall rules on k8s nodes to allow
+# NEW TCP connections from NetBird peers. By default, NetBird only allows
+# ESTABLISHED/RELATED connections in the forward chain, which blocks
+# incoming HTTP requests.
+#
+# Prerequisites:
+#   - NetBird installed and running on k8s nodes
+#   - SSH access to k8s nodes
+#
+# Usage:
+#   ansible-playbook ansible/playbooks/fix-netbird-k8s.yml
+
+- name: Fix NetBird Firewall for K8s NodePort Access
+  hosts: k8s_control
+  become: yes
+  
+  tasks:
+    - name: Check if NetBird is installed
+      ansible.builtin.command:
+        cmd: netbird status
+      register: netbird_status
+      changed_when: false
+      failed_when: false
+    
+    - name: Fail if NetBird not installed
+      ansible.builtin.fail:
+        msg: "NetBird is not installed or not running on this host"
+      when: netbird_status.rc != 0
+    
+    - name: Copy NetBird fix script
+      ansible.builtin.copy:
+        src: ../scripts/fix-netbird-k8s-forwarding.sh
+        dest: /tmp/fix-netbird-k8s-forwarding.sh
+        mode: '0755'
+    
+    - name: Run NetBird fix script
+      ansible.builtin.command:
+        cmd: /tmp/fix-netbird-k8s-forwarding.sh
+      register: fix_result
+      changed_when: "'Rules added successfully' in fix_result.stdout"
+    
+    - name: Display fix script output
+      ansible.builtin.debug:
+        var: fix_result.stdout_lines
+    
+    - name: Verify rules were applied
+      ansible.builtin.command:
+        cmd: nft list chain ip netbird netbird-rt-fwd
+      register: verify_rules
+      changed_when: false
+    
+    - name: Display current forward rules
+      ansible.builtin.debug:
+        msg: "{{ verify_rules.stdout_lines }}"
+    
+    - name: Check if systemd service was created
+      ansible.builtin.stat:
+        path: /etc/systemd/system/netbird-k8s-rules.service
+      register: service_file
+    
+    - name: Display persistence status
+      ansible.builtin.debug:
+        msg: |
+          NetBird fix applied successfully!
+          Systemd service: {{ 'Created' if service_file.stat.exists else 'Not created' }}
+          Rules will persist across reboots: {{ 'Yes' if service_file.stat.exists else 'No' }}
