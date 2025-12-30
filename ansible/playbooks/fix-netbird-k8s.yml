@@ -14,7 +14,7 @@
 #   ansible-playbook ansible/playbooks/fix-netbird-k8s.yml
 
 - name: Fix NetBird Firewall for K8s NodePort Access
-  hosts: k8s_control
+  hosts: k8s_control_plane
   become: yes
   
   tasks:
@@ -32,7 +32,7 @@
     
     - name: Copy NetBird fix script
       ansible.builtin.copy:
-        src: ../scripts/fix-netbird-k8s-forwarding.sh
+        src: ../../scripts/fix-netbird-k8s-forwarding.sh
         dest: /tmp/fix-netbird-k8s-forwarding.sh
         mode: '0755'
     

@@ -24,7 +24,7 @@
 # =============================================================================
 
 {% for service in existing_services %}
-{% if service.type == 'static' %}
+{% if service.type | default('proxy') == 'static' %}
 # {{ service.comment | default(service.domain) }}
 {{ service.domain }} {
     root * {{ service.root }}
