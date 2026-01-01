@@ -6,6 +6,9 @@ local   all       all                  trust
 host    all       all   127.0.0.1/32   scram-sha-256
 host    all       all   ::1/128        scram-sha-256
 
+# Docker bridge network (local management from host)
+host    all       all   172.20.0.0/24  scram-sha-256
+
 {% if postgresql_tls_enabled %}
 # TLS required for all remote connections
 {% for network in postgresql_allowed_networks %}

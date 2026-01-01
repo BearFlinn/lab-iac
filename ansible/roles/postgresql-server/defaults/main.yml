@@ -4,7 +4,7 @@
 
 # PostgreSQL version
 postgresql_version: "16"
-postgresql_image: "postgres:16-alpine"
+postgresql_image: "pgvector/pgvector:pg16"
 
 # Network configuration
 postgresql_listen_address: "0.0.0.0"  # Listen on all interfaces

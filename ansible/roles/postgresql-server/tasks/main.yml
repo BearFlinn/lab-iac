@@ -24,8 +24,8 @@
     path: "{{ postgresql_data_dir }}"
     state: directory
     mode: '0700'
-    owner: '70'  # postgres user in Alpine container
-    group: '70'
+    owner: '999'  # postgres user in Debian container
+    group: '999'
 
 - name: Create PostgreSQL config directory
   ansible.builtin.file:
@@ -38,8 +38,8 @@
     path: "{{ postgresql_tls_dir }}"
     state: directory
     mode: '0755'
-    owner: '70'  # postgres user in Alpine container
-    group: '0'  # root group to avoid user/group mapping issues
+    owner: '999'  # postgres user in Debian container
+    group: '999'
   when: postgresql_tls_enabled
 
 - name: Generate TLS certificates
@@ -65,8 +65,8 @@
         path: "{{ postgresql_tls_dir }}/server.key"
         size: 2048
         mode: '0600'
-        owner: '70'
-        group: '0'
+        owner: '999'
+        group: '999'
 
     - name: Generate server CSR
       community.crypto.openssl_csr:
@@ -89,8 +89,8 @@
         provider: ownca
         ownca_not_after: "+365d"
         mode: '0644'
-        owner: '70'
-        group: '0'
+        owner: '999'
+        group: '999'
 
 - name: Deploy PostgreSQL configuration
   ansible.builtin.template:
@@ -287,6 +287,17 @@
     - postgresql_users | length > 0
     - item.0.owner is defined
     - item.0.owner == item.1.name
+
+- name: Enable pgvector extension in databases
+  community.postgresql.postgresql_ext:
+    name: vector
+    db: "{{ item.name }}"
+    state: present
+    login_host: localhost
+    login_user: postgres
+    login_password: "{{ postgresql_root_password }}"
+  loop: "{{ postgresql_databases }}"
+  when: postgresql_databases | length > 0
 
 - name: Display PostgreSQL deployment summary
   ansible.builtin.debug:

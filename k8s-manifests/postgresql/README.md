@@ -5,9 +5,11 @@ This directory contains Kubernetes manifests for accessing the PostgreSQL instan
 ## Architecture
 
 - **Location**: tower-pc (10.0.0.249) - runs as Docker container
+- **Image**: `pgvector/pgvector:pg16` (PostgreSQL 16 with pgvector extension, Debian-based)
 - **Storage**: `/mnt/nfs-storage/postgresql` (bcache-accelerated HDD)
 - **Backups**: ZFS dataset `storage/postgresql-backups`
 - **Security**: TLS with self-signed CA, password authentication
+- **Extensions**: pgvector (enabled on all databases for vector similarity search)
 
 ## Deployment
 
@@ -82,6 +84,58 @@ conn = psycopg2.connect(os.environ['DATABASE_URL'])
 const { Pool } = require('pg');
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 ```
+
+## Using pgvector
+
+The pgvector extension is enabled on all databases and provides vector similarity search capabilities.
+
+### Create a table with vector column
+
+```sql
+-- Create a table with a vector column (1536 dimensions for OpenAI embeddings)
+CREATE TABLE documents (
+  id SERIAL PRIMARY KEY,
+  content TEXT,
+  embedding VECTOR(1536)
+);
+
+-- Create an index for fast similarity search
+CREATE INDEX ON documents USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+```
+
+### Insert vectors
+
+```python
+import psycopg2
+import numpy as np
+
+conn = psycopg2.connect(os.environ['DATABASE_URL'])
+cur = conn.cursor()
+
+# Insert a document with embedding
+embedding = np.random.rand(1536).tolist()
+cur.execute(
+    "INSERT INTO documents (content, embedding) VALUES (%s, %s)",
+    ("Sample document", embedding)
+)
+conn.commit()
+```
+
+### Similarity search
+
+```sql
+-- Find similar documents using cosine similarity
+SELECT content, 1 - (embedding <=> '[0.1, 0.2, ...]') AS similarity
+FROM documents
+ORDER BY embedding <=> '[0.1, 0.2, ...]'
+LIMIT 5;
+```
+
+### Distance operators
+
+- `<->` - L2 distance (Euclidean)
+- `<#>` - Inner product
+- `<=>` - Cosine distance
 
 ## Network Configuration
 
