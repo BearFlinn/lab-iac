@@ -1,0 +1,86 @@
+---
+# Setup NFS Subdir External Provisioner for Kubernetes
+# Uses tower-pc NFS server for persistent volume provisioning
+#
+# Usage:
+#   ansible-playbook playbooks/setup-nfs-provisioner.yml
+
+- name: Setup NFS Provisioner
+  hosts: k8s_control_plane
+  become: false
+  gather_facts: false
+
+  vars:
+    nfs_server: "10.0.0.249"
+    nfs_path: "/mnt/nfs-storage"
+    helm_repo_name: "nfs-subdir-external-provisioner"
+    helm_repo_url: "https://kubernetes-sigs.github.io/nfs-subdir-external-provisioner/"
+    helm_chart: "nfs-subdir-external-provisioner/nfs-subdir-external-provisioner"
+    helm_release: "nfs-subdir-external-provisioner"
+    helm_namespace: "nfs-provisioner"
+    values_file: "{{ playbook_dir }}/../k8s-manifests/nfs-provisioner/values.yaml"
+
+  tasks:
+    - name: Verify NFS server connectivity
+      ansible.builtin.command:
+        cmd: "showmount -e {{ nfs_server }}"
+      register: nfs_exports
+      changed_when: false
+      failed_when: false
+
+    - name: Display NFS export status
+      ansible.builtin.debug:
+        msg: "{{ 'NFS server accessible' if nfs_exports.rc == 0 else 'WARNING: NFS server not accessible' }}"
+
+    - name: Add Helm repository
+      kubernetes.core.helm_repository:
+        name: "{{ helm_repo_name }}"
+        repo_url: "{{ helm_repo_url }}"
+
+    - name: Install nfs-subdir-external-provisioner via Helm
+      kubernetes.core.helm:
+        name: "{{ helm_release }}"
+        chart_ref: "{{ helm_chart }}"
+        release_namespace: "{{ helm_namespace }}"
+        create_namespace: true
+        values_files:
+          - "{{ values_file }}"
+        wait: true
+        wait_timeout: 5m
+
+    - name: Wait for provisioner pods to be ready
+      kubernetes.core.k8s_info:
+        kind: Pod
+        namespace: "{{ helm_namespace }}"
+        label_selectors:
+          - app=nfs-subdir-external-provisioner
+        wait: yes
+        wait_condition:
+          type: Ready
+          status: "True"
+        wait_timeout: 120
+
+    - name: Verify StorageClass creation
+      kubernetes.core.k8s_info:
+        kind: StorageClass
+        name: nfs-client
+      register: storage_class
+
+    - name: Display StorageClass info
+      ansible.builtin.debug:
+        msg:
+          - "NFS Provisioner installed successfully"
+          - "StorageClass: nfs-client"
+          - "Default: {{ storage_class.resources[0].metadata.annotations['storageclass.kubernetes.io/is-default-class'] | default('false') }}"
+          - "NFS Server: {{ nfs_server }}"
+          - "NFS Path: {{ nfs_path }}"
+
+    - name: Verify provisioner pods
+      ansible.builtin.command:
+        cmd: kubectl get pods -n {{ helm_namespace }}
+      register: pod_status
+      changed_when: false
+
+    - name: Display pod status
+      ansible.builtin.debug:
+        msg: "{{ pod_status.stdout_lines }}"

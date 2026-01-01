@@ -12,10 +12,11 @@
   register: k8s_initialized
   become: yes
 
-- name: Initialize Kubernetes control plane
+- name: Initialize Kubernetes control plane (dual-stack)
   ansible.builtin.command: |
     kubeadm init \
-      --pod-network-cidr={{ pod_network_cidr }} \
+      --pod-network-cidr={{ pod_network_cidr }},{{ pod_network_cidr_ipv6 }} \
+      --service-cidr={{ service_cidr }},{{ service_cidr_ipv6 }} \
       --control-plane-endpoint={{ ansible_host }}
   become: yes
   when: not k8s_initialized.stat.exists
@@ -69,6 +70,13 @@
     replace: '- name: CALICO_IPV4POOL_CIDR\n              value: "{{ pod_network_cidr }}"'
   become: no
 
+- name: Enable FELIX_IPV6SUPPORT in manifest
+  ansible.builtin.replace:
+    path: /tmp/calico.yaml
+    regexp: 'name: FELIX_IPV6SUPPORT\n\s+value: "false"'
+    replace: 'name: FELIX_IPV6SUPPORT\n              value: "true"'
+  become: no
+
 - name: Install Calico CNI
   ansible.builtin.command: kubectl apply -f /tmp/calico.yaml
   become: no
@@ -79,7 +87,7 @@
   register: calico_install
   until: calico_install.rc == 0
 
-- name: Patch Calico DaemonSet with IP autodetection method
+- name: Patch Calico DaemonSet with IP autodetection and IPv6 support
   ansible.builtin.command: |
     kubectl patch ds calico-node -n kube-system --type='json' -p='[
       {
@@ -88,6 +96,30 @@
         "value": {
           "name": "IP_AUTODETECTION_METHOD",
           "value": "can-reach=8.8.8.8"
+        }
+      },
+      {
+        "op": "add",
+        "path": "/spec/template/spec/containers/0/env/-",
+        "value": {
+          "name": "IP6",
+          "value": "autodetect"
+        }
+      },
+      {
+        "op": "add",
+        "path": "/spec/template/spec/containers/0/env/-",
+        "value": {
+          "name": "IP6_AUTODETECTION_METHOD",
+          "value": "can-reach=2001:4860:4860::8888"
+        }
+      },
+      {
+        "op": "add",
+        "path": "/spec/template/spec/containers/0/env/-",
+        "value": {
+          "name": "CALICO_IPV6POOL_CIDR",
+          "value": "{{ pod_network_cidr_ipv6 }}"
         }
       }
     ]'
@@ -98,6 +130,104 @@
   retries: 3
   delay: 5
   until: calico_patch.rc == 0
+
+- name: Update Calico CNI config for dual-stack IPAM
+  ansible.builtin.shell: |
+    cat <<'EOF' | kubectl apply -f -
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: calico-config
+      namespace: kube-system
+    data:
+      calico_backend: bird
+      typha_service_name: none
+      veth_mtu: "0"
+      cni_network_config: |-
+        {
+          "name": "k8s-pod-network",
+          "cniVersion": "0.3.1",
+          "plugins": [
+            {
+              "type": "calico",
+              "log_level": "info",
+              "log_file_path": "/var/log/calico/cni/cni.log",
+              "datastore_type": "kubernetes",
+              "nodename": "__KUBERNETES_NODE_NAME__",
+              "mtu": __CNI_MTU__,
+              "ipam": {
+                  "type": "calico-ipam",
+                  "assign_ipv4": "true",
+                  "assign_ipv6": "true"
+              },
+              "policy": {
+                  "type": "k8s"
+              },
+              "kubernetes": {
+                  "kubeconfig": "__KUBECONFIG_FILEPATH__"
+              }
+            },
+            {
+              "type": "portmap",
+              "snat": true,
+              "capabilities": {"portMappings": true}
+            },
+            {
+              "type": "bandwidth",
+              "capabilities": {"bandwidth": true}
+            }
+          ]
+        }
+    EOF
+  become: no
+  environment:
+    KUBECONFIG: "/home/{{ ansible_user }}/.kube/config"
+  register: calico_config
+  retries: 3
+  delay: 5
+  until: calico_config.rc == 0
+
+- name: Create Calico IPv6 IP pool
+  ansible.builtin.shell: |
+    cat <<EOF | kubectl apply -f -
+    apiVersion: crd.projectcalico.org/v1
+    kind: IPPool
+    metadata:
+      name: default-ipv6-ippool
+    spec:
+      cidr: {{ pod_network_cidr_ipv6 }}
+      blockSize: 122
+      ipipMode: Never
+      natOutgoing: true
+      nodeSelector: all()
+      vxlanMode: Never
+      allowedUses:
+        - Workload
+        - Tunnel
+    EOF
+  become: no
+  environment:
+    KUBECONFIG: "/home/{{ ansible_user }}/.kube/config"
+  register: ipv6_pool
+  retries: 3
+  delay: 5
+  until: ipv6_pool.rc == 0
+
+- name: Restart Calico pods to apply CNI config changes
+  ansible.builtin.command: kubectl rollout restart ds/calico-node -n kube-system
+  become: no
+  environment:
+    KUBECONFIG: "/home/{{ ansible_user }}/.kube/config"
+
+- name: Wait for Calico restart to complete
+  ansible.builtin.command: kubectl rollout status ds/calico-node -n kube-system --timeout=120s
+  become: no
+  environment:
+    KUBECONFIG: "/home/{{ ansible_user }}/.kube/config"
+  retries: 3
+  delay: 10
+  register: calico_restart
+  until: calico_restart.rc == 0
 
 - name: Wait for Calico pods to be ready
   ansible.builtin.command: kubectl wait --for=condition=Ready pods --all -n kube-system --timeout=300s
@@ -119,8 +249,10 @@
   register: control_plane_ready
   until: control_plane_ready.rc == 0
 
-- name: Verify control plane node has pod CIDR assigned
-  ansible.builtin.shell: kubectl get node {{ inventory_hostname }} -o jsonpath='{.spec.podCIDR}' | grep -q '10.244'
+- name: Verify control plane node has dual-stack pod CIDRs assigned
+  ansible.builtin.shell: |
+    kubectl get node {{ inventory_hostname }} -o jsonpath='{.spec.podCIDRs}' | grep -q '10.244' && \
+    kubectl get node {{ inventory_hostname }} -o jsonpath='{.spec.podCIDRs}' | grep -q 'fd00:10:244'
   become: no
   environment:
     KUBECONFIG: "/home/{{ ansible_user }}/.kube/config"

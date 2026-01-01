@@ -8,6 +8,8 @@
 - name: Prepare worker nodes with Kubernetes prerequisites
   hosts: k8s_workers
   gather_facts: yes
+  vars_files:
+    - ../group_vars/k8s_cluster.yml
   roles:
     - k8s-prerequisites
     - k8s-packages

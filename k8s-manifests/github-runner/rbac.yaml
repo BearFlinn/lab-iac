@@ -1,4 +1,12 @@
 ---
+# ServiceAccount for GitHub Actions runners
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: github-runner
+  namespace: actions-runner-system
+
+---
 # ClusterRole for GitHub Actions runners
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole

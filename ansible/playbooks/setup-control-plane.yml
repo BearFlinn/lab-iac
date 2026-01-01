@@ -6,6 +6,8 @@
 - name: Prepare control plane node with Kubernetes prerequisites
   hosts: k8s_control_plane
   gather_facts: yes
+  vars_files:
+    - ../group_vars/k8s_cluster.yml
   roles:
     - k8s-prerequisites
     - k8s-packages
@@ -13,6 +15,8 @@
 - name: Initialize Kubernetes control plane
   hosts: k8s_control_plane
   gather_facts: no
+  vars_files:
+    - ../group_vars/k8s_cluster.yml
   roles:
     - k8s-control-plane
 

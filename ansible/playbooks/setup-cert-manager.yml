@@ -1,0 +1,75 @@
+---
+# Setup cert-manager for Kubernetes
+# Required for TLS certificate management in the cluster
+#
+# Usage:
+#   ansible-playbook playbooks/setup-cert-manager.yml
+
+- name: Setup cert-manager
+  hosts: k8s_control_plane
+  become: false
+  gather_facts: false
+
+  vars:
+    cert_manager_version: "v1.16.2"
+    cert_manager_url: "https://github.com/cert-manager/cert-manager/releases/download/{{ cert_manager_version }}/cert-manager.yaml"
+
+  tasks:
+    - name: Check if cert-manager is already installed
+      kubernetes.core.k8s_info:
+        kind: Namespace
+        name: cert-manager
+      register: cert_manager_ns
+      failed_when: false
+
+    - name: Install cert-manager
+      kubernetes.core.k8s:
+        state: present
+        src: "{{ cert_manager_url }}"
+      when: cert_manager_ns.resources | length == 0
+
+    - name: Wait for cert-manager namespace to be active
+      kubernetes.core.k8s_info:
+        kind: Namespace
+        name: cert-manager
+        wait: yes
+        wait_condition:
+          type: Active
+        wait_timeout: 60
+      when: cert_manager_ns.resources | length == 0
+
+    - name: Wait for cert-manager pods to be ready
+      kubernetes.core.k8s_info:
+        kind: Pod
+        namespace: cert-manager
+        label_selectors:
+          - app.kubernetes.io/instance=cert-manager
+        wait: yes
+        wait_condition:
+          type: Ready
+          status: "True"
+        wait_timeout: 120
+      when: cert_manager_ns.resources | length == 0
+
+    - name: Verify cert-manager installation
+      kubernetes.core.k8s_info:
+        kind: Pod
+        namespace: cert-manager
+      register: cert_manager_pods
+
+    - name: Display cert-manager status
+      ansible.builtin.debug:
+        msg:
+          - "cert-manager installed successfully"
+          - "Pods: {{ cert_manager_pods.resources | length }}"
+          - "Version: {{ cert_manager_version }}"
+
+    - name: Get cert-manager pods
+      ansible.builtin.command:
+        cmd: kubectl get pods -n cert-manager
+      register: pod_status
+      changed_when: false
+
+    - name: Display pod status
+      ansible.builtin.debug:
+        msg: "{{ pod_status.stdout_lines }}"

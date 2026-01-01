@@ -50,7 +50,7 @@ Development/testing Kubernetes cluster optimized for resource efficiency and spe
   - Garage (S3-compatible object storage on ZFS)
   - Velero (backup/restore)
 - **Storage Architecture:**
-  - **Block Storage (NFS):** M.2 NVMe (128GB) as bcache + 2x1TB SATA SSD (striped/RAID0)
+  - **Block Storage (NFS):** M.2 NVMe (128GB) as bcache + 1TB SATA HDD (striped/RAID0)
     - Performance: High-speed tier for hot data
     - Use case: Kubernetes PVCs, databases, ephemeral storage
   - **Object Storage (Garage/S3):** 3x2TB HDD in ZFS RAID-Z1

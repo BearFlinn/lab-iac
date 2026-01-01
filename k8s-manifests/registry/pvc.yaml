@@ -6,6 +6,7 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce
+  storageClassName: nfs-client  # Use NFS storage from tower-pc
   resources:
     requests:
       storage: 50Gi

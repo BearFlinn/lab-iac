@@ -1,0 +1,124 @@
+---
+# Reset Kubernetes Cluster
+# This playbook completely tears down the Kubernetes cluster on all nodes
+# Use this before re-initializing with setup-control-plane.yml and setup-workers.yml
+#
+# Usage:
+#   ansible-playbook -i ansible/inventory/all-nodes.yml ansible/playbooks/reset-cluster.yml
+#
+# WARNING: This will destroy your cluster. All workloads will be lost.
+
+- name: Reset worker nodes first
+  hosts: k8s_workers
+  gather_facts: no
+  become: yes
+  tasks:
+    - name: Check if kubeadm is installed
+      ansible.builtin.command: which kubeadm
+      register: kubeadm_check
+      failed_when: false
+      changed_when: false
+
+    - name: Reset kubeadm on worker nodes
+      ansible.builtin.command: kubeadm reset -f
+      when: kubeadm_check.rc == 0
+      register: reset_result
+      failed_when: false
+
+    - name: Clean up CNI configuration
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/cni/net.d
+        - /var/lib/cni
+        - /var/lib/calico
+      failed_when: false
+
+    - name: Clean up iptables rules
+      ansible.builtin.shell: |
+        iptables -F && iptables -t nat -F && iptables -t mangle -F && iptables -X
+        ip6tables -F && ip6tables -t nat -F && ip6tables -t mangle -F && ip6tables -X
+      failed_when: false
+
+    - name: Remove IPVS rules if present
+      ansible.builtin.shell: ipvsadm --clear
+      failed_when: false
+
+    - name: Clean up kubelet directory
+      ansible.builtin.file:
+        path: /var/lib/kubelet
+        state: absent
+      failed_when: false
+
+- name: Reset control plane
+  hosts: k8s_control_plane
+  gather_facts: no
+  become: yes
+  tasks:
+    - name: Check if kubeadm is installed
+      ansible.builtin.command: which kubeadm
+      register: kubeadm_check
+      failed_when: false
+      changed_when: false
+
+    - name: Reset kubeadm on control plane
+      ansible.builtin.command: kubeadm reset -f
+      when: kubeadm_check.rc == 0
+      register: reset_result
+      failed_when: false
+
+    - name: Clean up CNI configuration
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/cni/net.d
+        - /var/lib/cni
+        - /var/lib/calico
+      failed_when: false
+
+    - name: Clean up iptables rules
+      ansible.builtin.shell: |
+        iptables -F && iptables -t nat -F && iptables -t mangle -F && iptables -X
+        ip6tables -F && ip6tables -t nat -F && ip6tables -t mangle -F && ip6tables -X
+      failed_when: false
+
+    - name: Remove IPVS rules if present
+      ansible.builtin.shell: ipvsadm --clear
+      failed_when: false
+
+    - name: Clean up Kubernetes directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/kubernetes
+        - /var/lib/kubelet
+        - /var/lib/etcd
+      failed_when: false
+
+    - name: Remove user kubeconfig
+      ansible.builtin.file:
+        path: "/home/{{ ansible_user }}/.kube"
+        state: absent
+      failed_when: false
+
+- name: Display completion message
+  hosts: k8s_control_plane
+  gather_facts: no
+  tasks:
+    - name: Reset complete
+      ansible.builtin.debug:
+        msg: |
+          =========================================
+          Kubernetes Cluster Reset Complete
+          =========================================
+
+          All nodes have been reset. The cluster no longer exists.
+
+          To rebuild the cluster:
+            1. ansible-playbook -i ansible/inventory/all-nodes.yml ansible/playbooks/setup-control-plane.yml
+            2. ansible-playbook -i ansible/inventory/all-nodes.yml ansible/playbooks/setup-workers.yml
+
+          Then redeploy your workloads.

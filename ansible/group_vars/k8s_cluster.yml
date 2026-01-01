@@ -9,8 +9,16 @@ kubernetes_version: "1.31"
 # This is the internal IP range for pods in the cluster
 pod_network_cidr: "10.244.0.0/16"
 
+# IPv6 pod network CIDR (ULA - Unique Local Address)
+# fd00:10:244::/56 provides 256 /64 subnets for nodes
+pod_network_cidr_ipv6: "fd00:10:244::/56"
+
 # Calico version
 calico_version: "v3.28.0"
 
 # Service CIDR (default for kubeadm)
 service_cidr: "10.96.0.0/12"
+
+# IPv6 service CIDR (ULA - Unique Local Address)
+# fd00:10:96::/108 provides space for ~1M services
+service_cidr_ipv6: "fd00:10:96::/108"

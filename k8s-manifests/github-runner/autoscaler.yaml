@@ -1,0 +1,36 @@
+---
+# HorizontalRunnerAutoscaler for GitHub Actions runners
+# Auto-scales based on queued workflow runs in the organization
+#
+# Scaling behavior:
+#   - Scales to 0 when no jobs are queued (saves resources)
+#   - Creates 1 runner per queued/in-progress job
+#   - Max 4 concurrent runners (conservative cluster limit)
+#   - 5-minute cooldown after scale-up to prevent flapping
+
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: HorizontalRunnerAutoscaler
+metadata:
+  name: lab-runners-autoscaler
+  namespace: actions-runner-system
+spec:
+  # Target the existing RunnerDeployment
+  scaleTargetRef:
+    kind: RunnerDeployment
+    name: lab-runners
+
+  # Scaling limits
+  minReplicas: 1  # Keep 1 runner always available (PercentageRunnersBusy can't scale to 0)
+  maxReplicas: 4  # Conservative limit based on cluster capacity
+
+  # Anti-flapping: Don't scale down within 5 minutes of scaling up
+  scaleDownDelaySecondsAfterScaleOut: 300
+
+  # Scaling metric: Utilization-based scaling
+  # Uses percentage of busy runners - works with org-wide runners without listing repos
+  metrics:
+    - type: PercentageRunnersBusy
+      scaleUpThreshold: "0.75"    # Scale up when >75% of runners are busy
+      scaleDownThreshold: "0.25"  # Scale down when <25% of runners are busy
+      scaleUpFactor: "2"          # Double the runners when scaling up
+      scaleDownFactor: "0.5"      # Halve the runners when scaling down

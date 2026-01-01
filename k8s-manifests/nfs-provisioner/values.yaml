@@ -1,0 +1,46 @@
+---
+# Helm values for nfs-subdir-external-provisioner
+# Uses tower-pc NFS server for Kubernetes persistent storage
+#
+# NFS Server Details:
+#   Host: 10.0.0.249 (tower-pc)
+#   Export: /mnt/nfs-storage
+#   Network: 10.0.0.0/24
+
+# NFS server configuration
+nfs:
+  server: 10.0.0.249
+  path: /mnt/nfs-storage
+
+# StorageClass configuration
+storageClass:
+  create: true
+  defaultClass: true
+  name: nfs-client
+  archiveOnDelete: true  # Rename PVs to "archived-*" instead of deleting
+  reclaimPolicy: Delete
+  accessModes: ReadWriteMany
+
+# Provisioner configuration
+image:
+  repository: registry.k8s.io/sig-storage/nfs-subdir-external-provisioner
+  tag: v4.0.2
+  pullPolicy: IfNotPresent
+
+# Resource limits
+resources:
+  limits:
+    cpu: 100m
+    memory: 128Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+# Node selector (optional - run on any node)
+nodeSelector: {}
+
+# Tolerations (optional)
+tolerations: []
+
+# Affinity (optional)
+affinity: {}

@@ -9,4 +9,5 @@ spec:
   ports:
   - port: 5000
     targetPort: 5000
+    nodePort: 32346  # Fixed port for consistency with runner config
   type: NodePort

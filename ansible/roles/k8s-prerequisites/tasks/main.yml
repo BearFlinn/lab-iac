@@ -12,7 +12,7 @@
     - br_netfilter
   become: yes
 
-- name: Set sysctl parameters for Kubernetes
+- name: Set sysctl parameters for Kubernetes (dual-stack)
   ansible.posix.sysctl:
     name: "{{ item.name }}"
     value: "{{ item.value }}"
@@ -23,6 +23,12 @@
     - { name: 'net.bridge.bridge-nf-call-iptables', value: '1' }
     - { name: 'net.bridge.bridge-nf-call-ip6tables', value: '1' }
     - { name: 'net.ipv4.ip_forward', value: '1' }
+    - { name: 'net.ipv6.conf.all.forwarding', value: '1' }
+    - { name: 'net.ipv6.conf.default.forwarding', value: '1' }
+    # accept_ra=2 allows accepting Router Advertisements even when forwarding is enabled
+    # Without this, nodes won't get global IPv6 addresses via SLAAC
+    - { name: 'net.ipv6.conf.all.accept_ra', value: '2' }
+    - { name: 'net.ipv6.conf.default.accept_ra', value: '2' }
   become: yes
 
 - name: Install Kubernetes prerequisite packages

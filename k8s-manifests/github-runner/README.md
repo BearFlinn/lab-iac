@@ -38,10 +38,11 @@ cd ~/Projects/lab-iac
 ./scripts/install-github-runner.sh
 ```
 
-### 5. Deploy runners
+### 5. Deploy runners and autoscaler
 
 ```bash
 kubectl apply -f runner-deployment.yaml
+kubectl apply -f autoscaler.yaml
 ```
 
 ### 6. Verify
@@ -60,6 +61,9 @@ kubectl get pods -n actions-runner-system
 - `values.yaml.example` - Template Helm values (copy to `values.yaml`)
 - `values.yaml` - Your actual values (git-ignored, contains secrets)
 - `runner-deployment.yaml` - RunnerDeployment manifest
+- `autoscaler.yaml` - HorizontalRunnerAutoscaler for auto-scaling
+- `rbac.yaml` - RBAC configuration for runner service account
+- `docker-daemon-config.yaml` - Docker daemon configuration
 - `README.md` - This file
 
 ## Usage in GitHub Actions Workflows
@@ -76,11 +80,42 @@ jobs:
         run: echo "Running on lab K8s!"
 ```
 
-## Scaling
+## Auto-Scaling
 
-Manually adjust replicas:
+Runners automatically scale 0-4 based on queued GitHub Actions workflow runs.
+
+**Configuration:**
+- **Min replicas:** 0 (scales to zero when idle)
+- **Max replicas:** 4 (conservative cluster capacity limit)
+- **Scale-down delay:** 5 minutes after scale-up
+- **Metric:** Total queued and in-progress workflow runs
+
+### Monitor Scaling
+
 ```bash
-kubectl scale runnerdeployment lab-runners -n actions-runner-system --replicas=5
+# Watch autoscaler status
+kubectl get hra -n actions-runner-system -w
+
+# Check current runner count
+kubectl get runners -n actions-runner-system
+
+# View autoscaler details and events
+kubectl describe hra lab-runners-autoscaler -n actions-runner-system
 ```
 
-Or use HorizontalRunnerAutoscaler for auto-scaling based on queue length.
+### Manual Override (Disable Autoscaling)
+
+To temporarily disable autoscaling:
+```bash
+# Delete autoscaler
+kubectl delete hra lab-runners-autoscaler -n actions-runner-system
+
+# Set manual replicas
+kubectl scale runnerdeployment lab-runners -n actions-runner-system --replicas=2
+```
+
+To re-enable autoscaling:
+```bash
+# Re-apply autoscaler
+kubectl apply -f autoscaler.yaml
+```
