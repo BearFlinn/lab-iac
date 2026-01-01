@@ -33,7 +33,7 @@
         enabled: true
       - domain: "coaching.bearflinn.com"
         enabled: true
-      - domain: "family.bearflinn.com"
+      - domain: "family-dashboard.bearflinn.com"
         enabled: true
     
     # Existing non-k8s services to preserve
