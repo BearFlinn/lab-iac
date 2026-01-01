@@ -1,0 +1,38 @@
+---
+# Headless service with manual endpoints - allows IP abstraction
+# Update the Endpoints IP if tower-pc gets a second NIC
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgresql
+  namespace: database
+  labels:
+    app: postgresql
+    managed-by: ansible
+spec:
+  type: ClusterIP
+  clusterIP: None  # Headless for direct endpoint routing
+  ports:
+    - name: postgresql
+      port: 5432
+      targetPort: 5432
+      protocol: TCP
+
+---
+# Manual endpoints pointing to tower-pc PostgreSQL instance
+# Update the IP address here if tower-pc network configuration changes
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: postgresql
+  namespace: database
+  labels:
+    app: postgresql
+    managed-by: ansible
+subsets:
+  - addresses:
+      - ip: 10.0.0.249  # tower-pc IP - update when NIC changes
+    ports:
+      - name: postgresql
+        port: 5432
+        protocol: TCP

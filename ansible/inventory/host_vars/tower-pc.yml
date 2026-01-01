@@ -24,3 +24,32 @@ storage_config:
     export_path: "/mnt/nfs-storage"
     export_network: "10.0.0.0/24"
     purpose: "Kubernetes PersistentVolume provisioning with bcache acceleration"
+
+# PostgreSQL Database Configuration
+# External database server for k8s applications
+postgresql_config:
+  data_dir: "/mnt/nfs-storage/postgresql"
+  backup_zfs_dataset: "storage/postgresql-backups"
+  description: "Shared PostgreSQL instance for k8s applications"
+  databases:
+    - name: coaching
+      owner: coaching_user
+      description: "Coaching website database"
+    - name: resume
+      owner: resume_user
+      description: "Resume site database"
+    - name: family_dashboard
+      owner: dashboard_user
+      description: "Family dashboard database"
+
+# PostgreSQL users (passwords in vault)
+postgresql_users:
+  - name: coaching_user
+    password: "{{ vault_postgresql_coaching_user_password }}"
+  - name: resume_user
+    password: "{{ vault_postgresql_resume_user_password }}"
+  - name: dashboard_user
+    password: "{{ vault_postgresql_dashboard_user_password }}"
+
+# Use values from postgresql_config
+postgresql_databases: "{{ postgresql_config.databases }}"

@@ -1,0 +1,179 @@
+---
+# Deploy PostgreSQL Database Server on tower-pc
+# Usage: ansible-playbook playbooks/setup-postgresql.yml --ask-vault-pass
+#
+# This playbook:
+# 1. Deploys PostgreSQL as a Docker container on tower-pc
+# 2. Configures TLS certificates for secure connections
+# 3. Sets up systemd service with resource isolation (cgroup slice)
+# 4. Creates Kubernetes manifests for pod connectivity
+# 5. Configures automated backups to ZFS storage
+
+- name: Deploy PostgreSQL Database Server
+  hosts: tower-pc
+  become: yes
+  gather_facts: yes
+
+  vars_files:
+    - ../group_vars/all/vault.yml
+
+  vars:
+    postgresql_root_password: "{{ vault_postgresql_root_password }}"
+
+  roles:
+    - postgresql-server
+
+  post_tasks:
+    - name: Verify PostgreSQL is healthy
+      ansible.builtin.command:
+        cmd: docker exec postgresql pg_isready -U postgres
+      register: pg_ready
+      changed_when: false
+      retries: 5
+      delay: 5
+      until: pg_ready.rc == 0
+
+    - name: Display PostgreSQL version
+      ansible.builtin.command:
+        cmd: docker exec postgresql psql -U postgres -t -c "SELECT version();"
+      register: pg_version
+      changed_when: false
+
+    - name: Display connection information
+      ansible.builtin.debug:
+        msg:
+          - "=== PostgreSQL Deployment Complete ==="
+          - "Version: {{ pg_version.stdout | trim }}"
+          - "Host: {{ ansible_host }}:{{ postgresql_port }}"
+          - "Data Directory: {{ postgresql_data_dir }}"
+          - "TLS: {{ 'Enabled' if postgresql_tls_enabled else 'Disabled' }}"
+          - "Backups: {{ 'Enabled (daily at ' ~ postgresql_backup_hour ~ ':' ~ postgresql_backup_minute ~ ')' if postgresql_backup_enabled else 'Disabled' }}"
+          - ""
+          - "From K8s pods:"
+          - "  Host: postgresql.database.svc.cluster.local"
+          - "  Port: 5432"
+          - "  SSL Mode: require"
+          - ""
+          - "Next steps:"
+          - "  1. Apply K8s manifests: kubectl apply -f k8s-manifests/postgresql/"
+          - "  2. Create application secrets with database credentials"
+          - "  3. Configure applications to use postgresql.database.svc.cluster.local"
+
+- name: Configure Kubernetes PostgreSQL Access
+  hosts: k8s_control_plane
+  become: yes
+  gather_facts: yes
+
+  vars_files:
+    - ../group_vars/all/vault.yml
+
+  vars:
+    postgresql_tls_enabled: true
+    postgresql_tls_dir: "/etc/postgresql/tls"
+
+  tasks:
+    - name: Install Python Kubernetes library
+      ansible.builtin.apt:
+        name: python3-kubernetes
+        state: present
+        update_cache: yes
+
+    - name: Create database namespace
+      become: no
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: database
+            labels:
+              name: database
+              managed-by: ansible
+
+    - name: Deploy PostgreSQL service
+      become: no
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: postgresql
+            namespace: database
+            labels:
+              app: postgresql
+              managed-by: ansible
+          spec:
+            type: ClusterIP
+            clusterIP: None
+            ports:
+              - name: postgresql
+                port: 5432
+                targetPort: 5432
+                protocol: TCP
+
+    - name: Deploy PostgreSQL endpoints
+      become: no
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Endpoints
+          metadata:
+            name: postgresql
+            namespace: database
+            labels:
+              app: postgresql
+              managed-by: ansible
+          subsets:
+            - addresses:
+                - ip: "{{ hostvars['tower-pc']['ansible_host'] }}"
+              ports:
+                - name: postgresql
+                  port: 5432
+                  protocol: TCP
+
+    - name: Fetch CA certificate from tower-pc
+      become: yes
+      ansible.builtin.slurp:
+        src: "{{ postgresql_tls_dir }}/ca.crt"
+      register: ca_cert
+      delegate_to: tower-pc
+      become: yes
+      when: postgresql_tls_enabled
+
+    - name: Create TLS CA secret
+      become: no
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: postgresql-tls-ca
+            namespace: database
+            labels:
+              managed-by: ansible
+          type: Opaque
+          data:
+            ca.crt: "{{ ca_cert.content }}"
+      when: postgresql_tls_enabled
+
+    - name: Display K8s configuration summary
+      become: no
+      ansible.builtin.debug:
+        msg:
+          - "=== Kubernetes Configuration Complete ==="
+          - "Namespace: database"
+          - "Service: postgresql.database.svc.cluster.local:5432"
+          - "TLS CA Secret: postgresql-tls-ca (in database namespace)"
+          - ""
+          - "To create application database credentials:"
+          - "  kubectl create secret generic my-app-db -n my-namespace \\"
+          - "    --from-literal=POSTGRES_HOST=postgresql.database.svc.cluster.local \\"
+          - "    --from-literal=POSTGRES_PORT=5432 \\"
+          - "    --from-literal=POSTGRES_USER=myuser \\"
+          - "    --from-literal=POSTGRES_PASSWORD=mypassword \\"
+          - "    --from-literal=POSTGRES_DB=mydb \\"
+          - "    --from-literal=DATABASE_URL='postgresql://user:pass@postgresql.database.svc.cluster.local:5432/db?sslmode=require'"

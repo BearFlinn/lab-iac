@@ -1,0 +1,57 @@
+# PostgreSQL Configuration - Managed by Ansible
+# tower-pc (24GB RAM, i7-4790, bcache-accelerated HDD storage)
+
+# Connection Settings
+listen_addresses = '*'
+port = {{ postgresql_port }}
+max_connections = 100
+
+# TLS Configuration
+{% if postgresql_tls_enabled %}
+ssl = on
+ssl_cert_file = '/etc/postgresql/tls/server.crt'
+ssl_key_file = '/etc/postgresql/tls/server.key'
+ssl_ca_file = '/etc/postgresql/tls/ca.crt'
+ssl_min_protocol_version = 'TLSv1.2'
+{% else %}
+ssl = off
+{% endif %}
+
+# Memory Settings (tuned for {{ postgresql_memory_limit }} container limit)
+shared_buffers = 1GB
+effective_cache_size = 3GB
+maintenance_work_mem = 256MB
+work_mem = 16MB
+
+# WAL Settings
+wal_buffers = 64MB
+min_wal_size = 1GB
+max_wal_size = 4GB
+checkpoint_completion_target = 0.9
+
+# Query Planning
+random_page_cost = 1.1  # SSD/bcache storage
+effective_io_concurrency = 200
+
+# Logging
+logging_collector = on
+log_directory = 'log'
+log_filename = 'postgresql-%Y-%m-%d.log'
+log_rotation_age = 1d
+log_rotation_size = 100MB
+log_min_duration_statement = 1000  # Log queries >1s
+log_connections = on
+log_disconnections = on
+log_line_prefix = '%t [%p]: [%l-1] user=%u,db=%d,app=%a,client=%h '
+
+# Performance
+default_statistics_target = 100
+
+# Locale and Formatting
+datestyle = 'iso, mdy'
+timezone = 'UTC'
+lc_messages = 'en_US.utf8'
+lc_monetary = 'en_US.utf8'
+lc_numeric = 'en_US.utf8'
+lc_time = 'en_US.utf8'
+default_text_search_config = 'pg_catalog.english'

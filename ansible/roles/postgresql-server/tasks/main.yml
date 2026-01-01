@@ -1,0 +1,303 @@
+---
+# PostgreSQL Server Role - Main Tasks
+# Deploys PostgreSQL as a Docker container with TLS and resource isolation
+
+- name: Install required packages
+  ansible.builtin.apt:
+    name:
+      - docker.io
+      - docker-compose
+      - python3-docker
+      - python3-openssl
+      - python3-psycopg2
+    state: present
+    update_cache: yes
+
+- name: Ensure Docker service is running
+  ansible.builtin.systemd:
+    name: docker
+    enabled: yes
+    state: started
+
+- name: Create PostgreSQL data directory
+  ansible.builtin.file:
+    path: "{{ postgresql_data_dir }}"
+    state: directory
+    mode: '0700'
+    owner: '70'  # postgres user in Alpine container
+    group: '70'
+
+- name: Create PostgreSQL config directory
+  ansible.builtin.file:
+    path: "{{ postgresql_config_dir }}"
+    state: directory
+    mode: '0755'
+
+- name: Create TLS directory
+  ansible.builtin.file:
+    path: "{{ postgresql_tls_dir }}"
+    state: directory
+    mode: '0755'
+    owner: '70'  # postgres user in Alpine container
+    group: '0'  # root group to avoid user/group mapping issues
+  when: postgresql_tls_enabled
+
+- name: Generate TLS certificates
+  when: postgresql_tls_enabled
+  block:
+    - name: Generate CA private key
+      community.crypto.openssl_privatekey:
+        path: "{{ postgresql_tls_dir }}/ca.key"
+        size: 4096
+        mode: '0600'
+
+    - name: Generate CA certificate
+      community.crypto.x509_certificate:
+        path: "{{ postgresql_tls_dir }}/ca.crt"
+        privatekey_path: "{{ postgresql_tls_dir }}/ca.key"
+        provider: selfsigned
+        selfsigned_not_after: "+3650d"
+        selfsigned_digest: sha256
+        mode: '0644'
+
+    - name: Generate server private key
+      community.crypto.openssl_privatekey:
+        path: "{{ postgresql_tls_dir }}/server.key"
+        size: 2048
+        mode: '0600'
+        owner: '70'
+        group: '0'
+
+    - name: Generate server CSR
+      community.crypto.openssl_csr:
+        path: "{{ postgresql_tls_dir }}/server.csr"
+        privatekey_path: "{{ postgresql_tls_dir }}/server.key"
+        common_name: "{{ ansible_host }}"
+        subject_alt_name:
+          - "DNS:{{ inventory_hostname }}"
+          - "DNS:postgresql.database.svc.cluster.local"
+          - "DNS:postgresql"
+          - "IP:{{ ansible_host }}"
+          - "IP:127.0.0.1"
+
+    - name: Sign server certificate with CA
+      community.crypto.x509_certificate:
+        path: "{{ postgresql_tls_dir }}/server.crt"
+        csr_path: "{{ postgresql_tls_dir }}/server.csr"
+        ownca_path: "{{ postgresql_tls_dir }}/ca.crt"
+        ownca_privatekey_path: "{{ postgresql_tls_dir }}/ca.key"
+        provider: ownca
+        ownca_not_after: "+365d"
+        mode: '0644'
+        owner: '70'
+        group: '0'
+
+- name: Deploy PostgreSQL configuration
+  ansible.builtin.template:
+    src: postgresql.conf.j2
+    dest: "{{ postgresql_config_dir }}/postgresql.conf"
+    mode: '0644'
+  notify: reload postgresql
+
+- name: Deploy pg_hba.conf
+  ansible.builtin.template:
+    src: pg_hba.conf.j2
+    dest: "{{ postgresql_config_dir }}/pg_hba.conf"
+    mode: '0644'
+  notify: reload postgresql
+
+- name: Deploy docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ postgresql_config_dir }}/docker-compose.yml"
+    mode: '0644'
+  notify: restart postgresql
+
+- name: Create systemd slice for resource isolation
+  ansible.builtin.copy:
+    content: |
+      [Unit]
+      Description=PostgreSQL Database Resource Slice
+      Documentation=man:systemd.slice(5)
+      Before=slices.target
+
+      [Slice]
+      MemoryHigh={{ postgresql_memory_limit }}
+      MemoryMax={{ postgresql_memory_limit | regex_replace('G$', '') | int + 1 }}G
+      CPUQuota={{ postgresql_cpu_limit | int * 100 }}%
+      IOWeight=500
+    dest: /etc/systemd/system/postgresql.slice
+    mode: '0644'
+  notify: restart postgresql
+
+- name: Deploy PostgreSQL systemd service
+  ansible.builtin.copy:
+    content: |
+      [Unit]
+      Description=PostgreSQL Database Server (Docker Compose)
+      Documentation=https://www.postgresql.org/docs/
+      After=docker.service network-online.target
+      Requires=docker.service
+      Wants=network-online.target
+
+      [Service]
+      Type=simple
+      WorkingDirectory={{ postgresql_config_dir }}
+      Slice=postgresql.slice
+
+      ExecStartPre=/usr/bin/docker compose pull
+      ExecStart=/usr/bin/docker compose up --remove-orphans
+      ExecStop=/usr/bin/docker compose down
+      ExecReload=/usr/bin/docker compose restart
+
+      Restart=always
+      RestartSec=10
+
+      Environment=COMPOSE_PROJECT_NAME=postgresql
+
+      [Install]
+      WantedBy=multi-user.target
+    dest: /etc/systemd/system/postgresql.service
+    mode: '0644'
+  notify: restart postgresql
+
+- name: Enable and start PostgreSQL service
+  ansible.builtin.systemd:
+    name: postgresql
+    enabled: yes
+    state: started
+    daemon_reload: yes
+
+- name: Configure firewall for PostgreSQL
+  when: postgresql_configure_firewall
+  block:
+    - name: Check if ufw is active
+      ansible.builtin.command: ufw status
+      register: ufw_status
+      changed_when: false
+      failed_when: false
+
+    - name: Allow PostgreSQL from host network
+      community.general.ufw:
+        rule: allow
+        port: "{{ postgresql_port }}"
+        proto: tcp
+        from_ip: "10.0.0.0/24"
+        comment: "PostgreSQL - Host network"
+      when: "'active' in ufw_status.stdout or 'Active' in ufw_status.stdout"
+
+    - name: Allow PostgreSQL from pod network
+      community.general.ufw:
+        rule: allow
+        port: "{{ postgresql_port }}"
+        proto: tcp
+        from_ip: "10.244.0.0/16"
+        comment: "PostgreSQL - K8s pod network"
+      when: "'active' in ufw_status.stdout or 'Active' in ufw_status.stdout"
+
+    - name: Allow PostgreSQL from service network
+      community.general.ufw:
+        rule: allow
+        port: "{{ postgresql_port }}"
+        proto: tcp
+        from_ip: "10.96.0.0/12"
+        comment: "PostgreSQL - K8s service network"
+      when: "'active' in ufw_status.stdout or 'Active' in ufw_status.stdout"
+
+- name: Create ZFS dataset for backups
+  when: postgresql_backup_enabled
+  block:
+    - name: Check if ZFS dataset exists
+      ansible.builtin.command: zfs list {{ postgresql_backup_dir }}
+      register: zfs_dataset_exists
+      changed_when: false
+      failed_when: false
+
+    - name: Create ZFS dataset for PostgreSQL backups
+      ansible.builtin.command: zfs create {{ postgresql_backup_dir }}
+      when: zfs_dataset_exists.rc != 0
+
+    - name: Set ZFS dataset properties
+      ansible.builtin.command: "zfs set {{ item.prop }}={{ item.value }} {{ postgresql_backup_dir }}"
+      loop:
+        - { prop: "compression", value: "lz4" }
+        - { prop: "atime", value: "off" }
+      when: zfs_dataset_exists.rc != 0
+
+- name: Deploy backup script
+  when: postgresql_backup_enabled
+  block:
+    - name: Create backup script
+      ansible.builtin.template:
+        src: backup-postgresql.sh.j2
+        dest: /usr/local/bin/backup-postgresql.sh
+        mode: '0755'
+
+    - name: Schedule daily backups
+      ansible.builtin.cron:
+        name: "PostgreSQL daily backup"
+        hour: "{{ postgresql_backup_hour }}"
+        minute: "{{ postgresql_backup_minute }}"
+        job: "/usr/local/bin/backup-postgresql.sh"
+        user: root
+
+- name: Wait for PostgreSQL to be ready
+  ansible.builtin.command:
+    cmd: docker exec postgresql pg_isready -U postgres
+  register: pg_ready
+  retries: 10
+  delay: 3
+  until: pg_ready.rc == 0
+  changed_when: false
+
+- name: Create additional databases
+  community.postgresql.postgresql_db:
+    name: "{{ item.name }}"
+    state: present
+    login_host: localhost
+    login_user: postgres
+    login_password: "{{ postgresql_root_password }}"
+  loop: "{{ postgresql_databases }}"
+  when: postgresql_databases | length > 0
+
+- name: Create additional users
+  community.postgresql.postgresql_user:
+    name: "{{ item.name }}"
+    password: "{{ item.password }}"
+    state: present
+    login_host: localhost
+    login_user: postgres
+    login_password: "{{ postgresql_root_password }}"
+  loop: "{{ postgresql_users }}"
+  when: postgresql_users | length > 0
+  no_log: true
+
+- name: Grant database privileges to users
+  community.postgresql.postgresql_privs:
+    database: "{{ item.0.name }}"
+    roles: "{{ item.1.name }}"
+    privs: ALL
+    type: database
+    login_host: localhost
+    login_user: postgres
+    login_password: "{{ postgresql_root_password }}"
+  loop: "{{ postgresql_databases | product(postgresql_users) | list }}"
+  when:
+    - postgresql_databases | length > 0
+    - postgresql_users | length > 0
+    - item.0.owner is defined
+    - item.0.owner == item.1.name
+
+- name: Display PostgreSQL deployment summary
+  ansible.builtin.debug:
+    msg:
+      - "=== PostgreSQL Deployment Complete ==="
+      - "Host: {{ ansible_host }}:{{ postgresql_port }}"
+      - "Data Directory: {{ postgresql_data_dir }}"
+      - "TLS: {{ 'Enabled' if postgresql_tls_enabled else 'Disabled' }}"
+      - "Backups: {{ 'Enabled' if postgresql_backup_enabled else 'Disabled' }}"
+      - ""
+      - "From K8s pods:"
+      - "  Host: postgresql.database.svc.cluster.local"
+      - "  Port: 5432"
+      - "  SSL Mode: {{ 'require' if postgresql_tls_enabled else 'prefer' }}"

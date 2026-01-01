@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# PostgreSQL Backup Script - Managed by Ansible
+# Performs daily backups of all databases to ZFS storage
+
+set -euo pipefail
+
+BACKUP_DIR="/{{ postgresql_backup_dir }}"
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+LOG_FILE="/var/log/postgresql-backup.log"
+
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG_FILE"
+}
+
+log "Starting PostgreSQL backup"
+
+# Ensure backup directory exists
+if [ ! -d "$BACKUP_DIR" ]; then
+    log "ERROR: Backup directory $BACKUP_DIR does not exist"
+    exit 1
+fi
+
+# Get list of databases
+DATABASES=$(docker exec postgresql psql -U postgres -t -c "SELECT datname FROM pg_database WHERE datistemplate = false AND datname != 'postgres';")
+
+# Backup globals (roles, tablespaces, etc.)
+log "Backing up global objects"
+docker exec postgresql pg_dumpall -U postgres --globals-only > "$BACKUP_DIR/globals_$TIMESTAMP.sql"
+
+# Backup each database
+for DB in $DATABASES; do
+    DB_TRIMMED=$(echo "$DB" | xargs)  # Trim whitespace
+    if [ -n "$DB_TRIMMED" ]; then
+        log "Backing up database: $DB_TRIMMED"
+        docker exec postgresql pg_dump -U postgres -Fc "$DB_TRIMMED" > "$BACKUP_DIR/${DB_TRIMMED}_$TIMESTAMP.dump"
+    fi
+done
+
+# Compress old backups (older than 1 day)
+log "Compressing old backups"
+find "$BACKUP_DIR" -name "*.sql" -o -name "*.dump" -mtime +1 ! -name "*.gz" -exec gzip {} \;
+
+# Remove backups older than 30 days
+log "Removing backups older than 30 days"
+find "$BACKUP_DIR" -name "*.gz" -mtime +30 -delete
+
+# Create ZFS snapshot
+if command -v zfs >/dev/null 2>&1; then
+    POOL_NAME=$(echo "{{ postgresql_backup_dir }}" | cut -d'/' -f1)
+    DATASET_NAME=$(echo "{{ postgresql_backup_dir }}" | cut -d'/' -f2-)
+    SNAPSHOT_NAME="${POOL_NAME}/${DATASET_NAME}@backup_${TIMESTAMP}"
+
+    log "Creating ZFS snapshot: $SNAPSHOT_NAME"
+    zfs snapshot "$SNAPSHOT_NAME" || log "WARNING: Failed to create ZFS snapshot"
+
+    # Keep only last 7 daily snapshots
+    zfs list -t snapshot -o name -s creation | grep "${POOL_NAME}/${DATASET_NAME}@backup_" | head -n -7 | xargs -r -n1 zfs destroy || true
+fi
+
+log "Backup completed successfully"

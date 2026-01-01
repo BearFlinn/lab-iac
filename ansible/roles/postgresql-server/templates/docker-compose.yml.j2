@@ -1,0 +1,45 @@
+---
+version: "3.8"
+
+services:
+  postgresql:
+    image: {{ postgresql_image }}
+    container_name: postgresql
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: {{ postgresql_root_password }}
+      POSTGRES_USER: postgres
+    ports:
+      - "{{ postgresql_listen_address }}:{{ postgresql_port }}:5432"
+    volumes:
+      - {{ postgresql_data_dir }}:/var/lib/postgresql/data
+      - {{ postgresql_config_dir }}/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+      - {{ postgresql_config_dir }}/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+{% if postgresql_tls_enabled %}
+      - {{ postgresql_tls_dir }}:/etc/postgresql/tls:ro
+{% endif %}
+    command:
+      - "postgres"
+      - "-c"
+      - "config_file=/etc/postgresql/postgresql.conf"
+      - "-c"
+      - "hba_file=/etc/postgresql/pg_hba.conf"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: {{ postgresql_memory_limit }}
+          cpus: "{{ postgresql_cpu_limit }}"
+        reservations:
+          memory: {{ postgresql_memory_reserve }}
+
+networks:
+  default:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/24

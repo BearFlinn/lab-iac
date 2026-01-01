@@ -1,0 +1,23 @@
+# PostgreSQL Host-Based Authentication - Managed by Ansible
+# TYPE  DATABASE  USER  ADDRESS        METHOD
+
+# Local connections (within container)
+local   all       all                  trust
+host    all       all   127.0.0.1/32   scram-sha-256
+host    all       all   ::1/128        scram-sha-256
+
+{% if postgresql_tls_enabled %}
+# TLS required for all remote connections
+{% for network in postgresql_allowed_networks %}
+hostssl all       all   {{ network }}  scram-sha-256
+{% endfor %}
+{% else %}
+# Remote connections without TLS (insecure - for development only)
+{% for network in postgresql_allowed_networks %}
+host    all       all   {{ network }}  scram-sha-256
+{% endfor %}
+{% endif %}
+
+# Reject all other connections
+host    all       all   0.0.0.0/0      reject
+host    all       all   ::/0           reject

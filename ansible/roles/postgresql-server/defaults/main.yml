@@ -1,0 +1,46 @@
+---
+# PostgreSQL Server Role - Default Configuration
+# These can be overridden in group_vars, host_vars, or playbook vars
+
+# PostgreSQL version
+postgresql_version: "16"
+postgresql_image: "postgres:16-alpine"
+
+# Network configuration
+postgresql_listen_address: "0.0.0.0"  # Listen on all interfaces
+postgresql_port: 5432
+
+# Data directory (on bcache-accelerated HDD for performance)
+postgresql_data_dir: "/mnt/nfs-storage/postgresql"
+postgresql_config_dir: "/etc/postgresql"
+
+# TLS configuration
+postgresql_tls_enabled: true
+postgresql_tls_dir: "/etc/postgresql/tls"
+
+# Resource limits (protect from k8s resource pressure)
+postgresql_memory_limit: "4G"
+postgresql_memory_reserve: "2G"
+postgresql_cpu_limit: "2"
+
+# Allowed networks for connections
+postgresql_allowed_networks:
+  - "10.0.0.0/24"       # Host network
+  - "10.244.0.0/16"     # Pod network
+  - "10.96.0.0/12"      # Service network
+  - "172.20.0.0/24"     # Docker bridge network
+
+# Initial databases (override in host_vars)
+postgresql_databases: []
+
+# Users (passwords should be in vault)
+postgresql_users: []
+
+# Backup configuration
+postgresql_backup_enabled: true
+postgresql_backup_dir: "storage/postgresql-backups"
+postgresql_backup_hour: "3"
+postgresql_backup_minute: "0"
+
+# Firewall configuration
+postgresql_configure_firewall: true
