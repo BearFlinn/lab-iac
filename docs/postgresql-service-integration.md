@@ -1,15 +1,15 @@
 # PostgreSQL Service Integration Guide
 
-This guide covers integrating your Kubernetes applications with the PostgreSQL database server running on tower-pc.
+This guide covers integrating your Helm-deployed applications with the PostgreSQL database server running on tower-pc, using GitHub Actions secrets and Infisical for secret management.
 
 ## Table of Contents
 
 1. [Overview](#overview)
 2. [Prerequisites](#prerequisites)
-3. [Quick Start](#quick-start)
-4. [Database Access Patterns](#database-access-patterns)
-5. [Creating Application Secrets](#creating-application-secrets)
-6. [Example Integrations](#example-integrations)
+3. [Helm Chart Integration](#helm-chart-integration)
+4. [Secret Management](#secret-management)
+5. [GitHub Actions Deployment](#github-actions-deployment)
+6. [Example Applications](#example-applications)
 7. [Migration from Existing Databases](#migration-from-existing-databases)
 8. [Troubleshooting](#troubleshooting)
 9. [Security Best Practices](#security-best-practices)
@@ -21,15 +21,29 @@ This guide covers integrating your Kubernetes applications with the PostgreSQL d
 ### Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│ Kubernetes Cluster (10.244.0.0/16 pod network)             │
-│                                                              │
-│  ┌──────────────┐         ┌──────────────────────────┐     │
-│  │ Application  │────────▶│ Service: postgresql      │     │
-│  │ Pod          │         │ (database namespace)     │     │
-│  └──────────────┘         └──────────────────────────┘     │
-│                                      │                       │
-└──────────────────────────────────────┼───────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│ GitHub Actions CI/CD                                            │
+│                                                                  │
+│  ┌──────────────┐         ┌────────────────┐                   │
+│  │ GitHub       │────────▶│ Infisical      │                   │
+│  │ Secrets      │         │ Secrets        │                   │
+│  └──────────────┘         └────────────────┘                   │
+│         │                          │                             │
+│         │    Helm Deploy           │                             │
+│         ▼                          ▼                             │
+└─────────┼──────────────────────────┼─────────────────────────────┘
+          │                          │
+          │                          │
+┌─────────┼──────────────────────────┼─────────────────────────────┐
+│         │  Kubernetes Cluster      │                             │
+│         │                          │                             │
+│         ▼                          ▼                             │
+│  ┌──────────────┐         ┌──────────────────────────┐         │
+│  │ Application  │────────▶│ Service: postgresql      │         │
+│  │ Pod (Helm)   │         │ (database namespace)     │         │
+│  └──────────────┘         └──────────────────────────┘         │
+│                                      │                           │
+└──────────────────────────────────────┼───────────────────────────┘
                                        │
                                        │ TLS Connection
                                        │ (port 5432)
@@ -64,10 +78,11 @@ This guide covers integrating your Kubernetes applications with the PostgreSQL d
 
 Before integrating your application:
 
-1. **Kubernetes Cluster**: Applications must be running in the Kubernetes cluster
-2. **Database Namespace**: The `database` namespace must exist (created during PostgreSQL setup)
+1. **Kubernetes Cluster**: Applications deployed via Helm
+2. **Database Namespace**: The `database` namespace exists
 3. **TLS Certificate**: The `postgresql-tls-ca` secret exists in the `database` namespace
-4. **Database Credentials**: Contact the infrastructure admin to get your database credentials
+4. **Database Credentials**: Stored in GitHub Actions secrets or Infisical
+5. **Helm Chart**: Your application uses Helm for deployment
 
 ### Verify Prerequisites
 
@@ -75,8 +90,8 @@ Before integrating your application:
 # Check namespace
 kubectl get namespace database
 
-# Check service
-kubectl get service -n database postgresql
+# Check service and endpoints
+kubectl get service,endpoints -n database postgresql
 
 # Check TLS secret
 kubectl get secret -n database postgresql-tls-ca
@@ -90,353 +105,645 @@ kubectl run pg-test --rm -it --restart=Never \
 
 ---
 
-## Quick Start
+## Helm Chart Integration
 
-### 1. Create Application Secret
+### Chart Structure
 
-Create a Kubernetes secret containing your database credentials:
+Your Helm chart should follow this structure:
 
-```bash
-kubectl create secret generic my-app-postgres \
-  --namespace=my-namespace \
-  --from-literal=POSTGRES_HOST=postgresql.database.svc.cluster.local \
-  --from-literal=POSTGRES_PORT=5432 \
-  --from-literal=POSTGRES_DB=my_database \
-  --from-literal=POSTGRES_USER=my_user \
-  --from-literal=POSTGRES_PASSWORD='my_secure_password' \
-  --from-literal=DATABASE_URL='postgresql://my_user:my_secure_password@postgresql.database.svc.cluster.local:5432/my_database?sslmode=require'
+```
+my-app/
+├── Chart.yaml
+├── values.yaml
+├── values-production.yaml
+├── templates/
+│   ├── deployment.yaml
+│   ├── service.yaml
+│   ├── secret.yaml          # Database credentials
+│   └── configmap.yaml       # Non-sensitive config
 ```
 
-### 2. Mount Secret in Deployment
+### values.yaml
 
-Add the secret to your deployment YAML:
+Define default database configuration:
 
 ```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: my-app
-  namespace: my-namespace
-spec:
-  template:
-    spec:
-      containers:
-      - name: my-app
-        image: my-app:latest
-        envFrom:
-        - secretRef:
-            name: my-app-postgres
-        # OR mount individual values:
-        env:
-        - name: POSTGRES_HOST
-          valueFrom:
-            secretKeyRef:
-              name: my-app-postgres
-              key: POSTGRES_HOST
-        - name: POSTGRES_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: my-app-postgres
-              key: POSTGRES_PASSWORD
+# PostgreSQL Configuration
+postgresql:
+  # Connection details (non-sensitive)
+  host: postgresql.database.svc.cluster.local
+  port: 5432
+  database: ""  # Override in values-{env}.yaml
+  sslmode: require
+
+  # Credentials (will be overridden by CI/CD)
+  username: ""
+  password: ""
+
+  # TLS Configuration
+  tls:
+    enabled: true
+    caSecretName: postgresql-tls-ca
+    caSecretNamespace: database
+    mountPath: /etc/postgresql/ssl
+
+# Application configuration
+replicaCount: 2
+
+image:
+  repository: ghcr.io/myorg/my-app
+  tag: latest
+  pullPolicy: IfNotPresent
+
+resources:
+  limits:
+    memory: "512Mi"
+    cpu: "500m"
+  requests:
+    memory: "256Mi"
+    cpu: "250m"
 ```
 
-### 3. Configure TLS (Optional but Recommended)
+### values-production.yaml
 
-To use the CA certificate for TLS verification:
+Environment-specific overrides:
 
 ```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: my-app
-spec:
-  template:
-    spec:
-      containers:
-      - name: my-app
-        image: my-app:latest
-        env:
-        - name: PGSSLROOTCERT
-          value: /etc/postgresql/ca.crt
-        volumeMounts:
-        - name: postgres-ca
-          mountPath: /etc/postgresql
-          readOnly: true
-      volumes:
-      - name: postgres-ca
-        secret:
-          secretName: postgresql-tls-ca
+# Production-specific values
+replicaCount: 3
+
+postgresql:
+  database: coaching  # Specific database name
+  # username and password injected via CI/CD
+
+image:
+  tag: v1.2.3  # Specific version tag
+
+resources:
+  limits:
+    memory: "1Gi"
+    cpu: "1000m"
+  requests:
+    memory: "512Mi"
+    cpu: "500m"
 ```
 
----
+### templates/secret.yaml
 
-## Database Access Patterns
-
-### Pattern 1: Environment Variables
-
-Most applications support PostgreSQL connection via environment variables:
+Create secret from Helm values:
 
 ```yaml
-env:
-- name: POSTGRES_HOST
-  value: postgresql.database.svc.cluster.local
-- name: POSTGRES_PORT
-  value: "5432"
-- name: POSTGRES_DB
-  value: my_database
-- name: POSTGRES_USER
-  valueFrom:
-    secretKeyRef:
-      name: my-app-postgres
-      key: POSTGRES_USER
-- name: POSTGRES_PASSWORD
-  valueFrom:
-    secretKeyRef:
-      name: my-app-postgres
-      key: POSTGRES_PASSWORD
-```
-
-### Pattern 2: Connection String / DATABASE_URL
-
-For applications using connection strings (Rails, Django, etc.):
-
-```yaml
-env:
-- name: DATABASE_URL
-  valueFrom:
-    secretKeyRef:
-      name: my-app-postgres
-      key: DATABASE_URL
-```
-
-The connection string format:
-```
-postgresql://username:password@postgresql.database.svc.cluster.local:5432/database_name?sslmode=require
-```
-
-### Pattern 3: ConfigMap + Secret
-
-Separate non-sensitive config from credentials:
-
-```yaml
-# ConfigMap for non-sensitive values
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: my-app-postgres-config
-data:
-  POSTGRES_HOST: postgresql.database.svc.cluster.local
-  POSTGRES_PORT: "5432"
-  POSTGRES_DB: my_database
-
----
-# Secret for sensitive values
 apiVersion: v1
 kind: Secret
 metadata:
-  name: my-app-postgres-secret
+  name: {{ include "my-app.fullname" . }}-postgres
+  labels:
+    {{- include "my-app.labels" . | nindent 4 }}
 type: Opaque
 stringData:
-  POSTGRES_USER: my_user
-  POSTGRES_PASSWORD: my_secure_password
+  POSTGRES_HOST: {{ .Values.postgresql.host | quote }}
+  POSTGRES_PORT: {{ .Values.postgresql.port | quote }}
+  POSTGRES_DB: {{ .Values.postgresql.database | quote }}
+  POSTGRES_USER: {{ .Values.postgresql.username | quote }}
+  POSTGRES_PASSWORD: {{ .Values.postgresql.password | quote }}
+  POSTGRES_SSLMODE: {{ .Values.postgresql.sslmode | quote }}
+  {{- if .Values.postgresql.tls.enabled }}
+  PGSSLROOTCERT: {{ .Values.postgresql.tls.mountPath }}/ca.crt
+  {{- end }}
+  # Construct full connection string
+  DATABASE_URL: "postgresql://{{ .Values.postgresql.username }}:{{ .Values.postgresql.password }}@{{ .Values.postgresql.host }}:{{ .Values.postgresql.port }}/{{ .Values.postgresql.database }}?sslmode={{ .Values.postgresql.sslmode }}"
+```
 
----
-# Deployment using both
+### templates/deployment.yaml
+
+Reference the secret in your deployment:
+
+```yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: my-app
+  name: {{ include "my-app.fullname" . }}
+  labels:
+    {{- include "my-app.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "my-app.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "my-app.selectorLabels" . | nindent 8 }}
+    spec:
+      containers:
+      - name: {{ .Chart.Name }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+
+        # Load database credentials from secret
+        envFrom:
+        - secretRef:
+            name: {{ include "my-app.fullname" . }}-postgres
+
+        # Or load individual env vars:
+        # env:
+        # - name: POSTGRES_PASSWORD
+        #   valueFrom:
+        #     secretKeyRef:
+        #       name: {{ include "my-app.fullname" . }}-postgres
+        #       key: POSTGRES_PASSWORD
+
+        {{- if .Values.postgresql.tls.enabled }}
+        # Mount TLS CA certificate
+        volumeMounts:
+        - name: postgres-ca
+          mountPath: {{ .Values.postgresql.tls.mountPath }}
+          readOnly: true
+        {{- end }}
+
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 5
+
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+
+      {{- if .Values.postgresql.tls.enabled }}
+      # Volume for TLS CA certificate
+      volumes:
+      - name: postgres-ca
+        secret:
+          secretName: {{ .Values.postgresql.tls.caSecretName }}
+          items:
+          - key: ca.crt
+            path: ca.crt
+      {{- end }}
+```
+
+---
+
+## Secret Management
+
+### Option 1: GitHub Actions Secrets
+
+Store database credentials in GitHub repository secrets.
+
+#### 1. Add Secrets to GitHub
+
+Navigate to: `Settings → Secrets and variables → Actions → New repository secret`
+
+Add the following secrets:
+
+```
+POSTGRES_USERNAME_COACHING = coaching_user
+POSTGRES_PASSWORD_COACHING = <generated-password>
+POSTGRES_USERNAME_RESUME = resume_user
+POSTGRES_PASSWORD_RESUME = <generated-password>
+POSTGRES_USERNAME_DASHBOARD = dashboard_user
+POSTGRES_PASSWORD_DASHBOARD = <generated-password>
+```
+
+#### 2. Reference in GitHub Actions Workflow
+
+```yaml
+name: Deploy to Production
+
+on:
+  push:
+    branches: [main]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: '3.13.0'
+
+      - name: Configure kubectl
+        uses: azure/k8s-set-context@v3
+        with:
+          method: kubeconfig
+          kubeconfig: ${{ secrets.KUBECONFIG }}
+
+      - name: Deploy Coaching App
+        run: |
+          helm upgrade --install coaching-app ./helm/my-app \
+            --namespace coaching \
+            --create-namespace \
+            --values ./helm/my-app/values-production.yaml \
+            --set postgresql.username="${{ secrets.POSTGRES_USERNAME_COACHING }}" \
+            --set postgresql.password="${{ secrets.POSTGRES_PASSWORD_COACHING }}" \
+            --set postgresql.database="coaching" \
+            --set image.tag="${{ github.sha }}" \
+            --wait \
+            --timeout 5m
+
+      - name: Deploy Resume App
+        run: |
+          helm upgrade --install resume-app ./helm/my-app \
+            --namespace resume \
+            --create-namespace \
+            --values ./helm/my-app/values-production.yaml \
+            --set postgresql.username="${{ secrets.POSTGRES_USERNAME_RESUME }}" \
+            --set postgresql.password="${{ secrets.POSTGRES_PASSWORD_RESUME }}" \
+            --set postgresql.database="resume" \
+            --set image.tag="${{ github.sha }}" \
+            --wait \
+            --timeout 5m
+```
+
+#### 3. Alternative: Using Helm Values File Override
+
+Create a temporary values file during deployment:
+
+```yaml
+- name: Create secrets values file
+  run: |
+    cat > secrets.yaml <<EOF
+    postgresql:
+      username: ${{ secrets.POSTGRES_USERNAME_COACHING }}
+      password: ${{ secrets.POSTGRES_PASSWORD_COACHING }}
+      database: coaching
+    EOF
+
+- name: Deploy with secrets
+  run: |
+    helm upgrade --install coaching-app ./helm/my-app \
+      --namespace coaching \
+      --values ./helm/my-app/values-production.yaml \
+      --values secrets.yaml \
+      --set image.tag="${{ github.sha }}" \
+      --wait
+
+- name: Cleanup secrets file
+  if: always()
+  run: rm -f secrets.yaml
+```
+
+### Option 2: Infisical Integration
+
+Use Infisical for centralized secret management with automatic sync to Kubernetes.
+
+#### 1. Install Infisical Operator
+
+```bash
+# Add Infisical Helm repo
+helm repo add infisical https://dl.infisical.com/helm
+helm repo update
+
+# Install Infisical operator
+helm install infisical-operator infisical/infisical-operator \
+  --namespace infisical-operator-system \
+  --create-namespace
+```
+
+#### 2. Create Infisical Secret Store
+
+```yaml
+# infisical-secret-store.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: infisical-auth
+  namespace: coaching
+type: Opaque
+stringData:
+  clientId: ${{ secrets.INFISICAL_CLIENT_ID }}
+  clientSecret: ${{ secrets.INFISICAL_CLIENT_SECRET }}
+
+---
+apiVersion: secrets.infisical.com/v1alpha1
+kind: InfisicalSecret
+metadata:
+  name: coaching-postgres-sync
+  namespace: coaching
+spec:
+  # Authentication
+  authentication:
+    universalAuth:
+      credentialsRef:
+        secretName: infisical-auth
+        secretNamespace: coaching
+
+  # Infisical project settings
+  projectSlug: lab-infrastructure
+  environment: production
+  secretPath: /postgresql/coaching
+
+  # Managed Kubernetes secret
+  managedSecretReference:
+    secretName: coaching-app-postgres
+    secretNamespace: coaching
+    creationPolicy: Orphan
+
+  # Sync behavior
+  resyncInterval: 300  # 5 minutes
+```
+
+#### 3. Deploy with Infisical in GitHub Actions
+
+```yaml
+- name: Deploy Infisical Secret Sync
+  run: |
+    # Create Infisical auth secret
+    kubectl create secret generic infisical-auth \
+      --namespace coaching \
+      --from-literal=clientId="${{ secrets.INFISICAL_CLIENT_ID }}" \
+      --from-literal=clientSecret="${{ secrets.INFISICAL_CLIENT_SECRET }}" \
+      --dry-run=client -o yaml | kubectl apply -f -
+
+    # Deploy InfisicalSecret CRD
+    kubectl apply -f k8s/infisical-secret-store.yaml
+
+- name: Wait for secret sync
+  run: |
+    kubectl wait --for=condition=ready infisicalsecret/coaching-postgres-sync \
+      --namespace coaching \
+      --timeout=60s
+
+- name: Deploy Application
+  run: |
+    helm upgrade --install coaching-app ./helm/my-app \
+      --namespace coaching \
+      --values ./helm/my-app/values-production.yaml \
+      --set image.tag="${{ github.sha }}" \
+      --wait
+```
+
+#### 4. Infisical Secrets Structure
+
+In your Infisical project, create secrets with these keys:
+
+**Project**: `lab-infrastructure`
+**Environment**: `production`
+**Path**: `/postgresql/coaching`
+
+```
+POSTGRES_HOST = postgresql.database.svc.cluster.local
+POSTGRES_PORT = 5432
+POSTGRES_DB = coaching
+POSTGRES_USER = coaching_user
+POSTGRES_PASSWORD = <secure-generated-password>
+POSTGRES_SSLMODE = require
+DATABASE_URL = postgresql://coaching_user:<password>@postgresql.database.svc.cluster.local:5432/coaching?sslmode=require
+```
+
+#### 5. Update Helm Chart to Use Infisical Secret
+
+Modify `templates/deployment.yaml` to reference the Infisical-managed secret:
+
+```yaml
 spec:
   template:
     spec:
       containers:
-      - name: my-app
+      - name: {{ .Chart.Name }}
         envFrom:
-        - configMapRef:
-            name: my-app-postgres-config
+        # Use Infisical-managed secret instead of Helm-generated one
         - secretRef:
-            name: my-app-postgres-secret
+            name: coaching-app-postgres  # Managed by InfisicalSecret
 ```
+
+Remove or comment out `templates/secret.yaml` when using Infisical.
 
 ---
 
-## Creating Application Secrets
+## GitHub Actions Deployment
 
-### Method 1: Using kubectl (Quick)
-
-```bash
-# Set your credentials
-DB_NAME="coaching"
-DB_USER="coaching_user"
-DB_PASSWORD="$(ansible-vault view ansible/group_vars/all/vault.yml | grep coaching_user_password | cut -d'"' -f2)"
-
-# Create the secret
-kubectl create secret generic coaching-app-postgres \
-  --namespace=coaching \
-  --from-literal=POSTGRES_HOST=postgresql.database.svc.cluster.local \
-  --from-literal=POSTGRES_PORT=5432 \
-  --from-literal=POSTGRES_DB="${DB_NAME}" \
-  --from-literal=POSTGRES_USER="${DB_USER}" \
-  --from-literal=POSTGRES_PASSWORD="${DB_PASSWORD}" \
-  --from-literal=DATABASE_URL="postgresql://${DB_USER}:${DB_PASSWORD}@postgresql.database.svc.cluster.local:5432/${DB_NAME}?sslmode=require"
-```
-
-### Method 2: Using YAML with Infisical/External Secrets
-
-For production, use a secrets management solution:
+### Complete Workflow Example
 
 ```yaml
-apiVersion: external-secrets.io/v1beta1
-kind: ExternalSecret
-metadata:
-  name: my-app-postgres
-  namespace: my-namespace
-spec:
-  refreshInterval: 1h
-  secretStoreRef:
-    name: infisical-secret-store
-    kind: SecretStore
-  target:
-    name: my-app-postgres
-  data:
-  - secretKey: POSTGRES_HOST
-    remoteRef:
-      key: postgres/my-app/host
-  - secretKey: POSTGRES_PORT
-    remoteRef:
-      key: postgres/my-app/port
-  - secretKey: POSTGRES_DB
-    remoteRef:
-      key: postgres/my-app/database
-  - secretKey: POSTGRES_USER
-    remoteRef:
-      key: postgres/my-app/username
-  - secretKey: POSTGRES_PASSWORD
-    remoteRef:
-      key: postgres/my-app/password
+name: Deploy Applications
+
+on:
+  push:
+    branches: [main, develop]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    outputs:
+      image-tag: ${{ steps.meta.outputs.tags }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=sha,prefix={{branch}}-
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    strategy:
+      matrix:
+        app:
+          - name: coaching
+            namespace: coaching
+            database: coaching
+            username_secret: POSTGRES_USERNAME_COACHING
+            password_secret: POSTGRES_PASSWORD_COACHING
+          - name: resume
+            namespace: resume
+            database: resume
+            username_secret: POSTGRES_USERNAME_RESUME
+            password_secret: POSTGRES_PASSWORD_RESUME
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: '3.13.0'
+
+      - name: Configure kubectl
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBECONFIG }}" | base64 -d > $HOME/.kube/config
+          chmod 600 $HOME/.kube/config
+
+      - name: Deploy ${{ matrix.app.name }}
+        run: |
+          helm upgrade --install ${{ matrix.app.name }}-app ./helm/app \
+            --namespace ${{ matrix.app.namespace }} \
+            --create-namespace \
+            --values ./helm/app/values-production.yaml \
+            --set postgresql.username="${{ secrets[matrix.app.username_secret] }}" \
+            --set postgresql.password="${{ secrets[matrix.app.password_secret] }}" \
+            --set postgresql.database="${{ matrix.app.database }}" \
+            --set image.repository="${{ env.REGISTRY }}/${{ github.repository }}" \
+            --set image.tag="${{ needs.build.outputs.image-tag }}" \
+            --wait \
+            --timeout 10m
+
+      - name: Verify deployment
+        run: |
+          kubectl rollout status deployment/${{ matrix.app.name }}-app \
+            --namespace ${{ matrix.app.namespace }} \
+            --timeout=5m
+
+      - name: Run database migrations
+        if: matrix.app.migrations == true
+        run: |
+          kubectl create job ${{ matrix.app.name }}-migrate-$(date +%s) \
+            --from=cronjob/${{ matrix.app.name }}-migrations \
+            --namespace ${{ matrix.app.namespace }}
 ```
 
-### Method 3: Using Sealed Secrets (Git-safe)
+### Environment-Based Deployments
 
-```bash
-# Install kubeseal if not already installed
-# brew install kubeseal  # macOS
-# or download from: https://github.com/bitnami-labs/sealed-secrets/releases
+For staging vs production:
 
-# Create a temporary secret
-kubectl create secret generic my-app-postgres \
-  --namespace=my-namespace \
-  --from-literal=POSTGRES_PASSWORD="${DB_PASSWORD}" \
-  --dry-run=client -o yaml > temp-secret.yaml
+```yaml
+jobs:
+  deploy-staging:
+    if: github.ref == 'refs/heads/develop'
+    steps:
+      - name: Deploy to Staging
+        run: |
+          helm upgrade --install coaching-app ./helm/app \
+            --namespace coaching-staging \
+            --values ./helm/app/values-staging.yaml \
+            --set postgresql.username="${{ secrets.POSTGRES_USERNAME_COACHING_STAGING }}" \
+            --set postgresql.password="${{ secrets.POSTGRES_PASSWORD_COACHING_STAGING }}" \
+            --set postgresql.database="coaching_staging"
 
-# Seal it
-kubeseal < temp-secret.yaml > sealed-secret.yaml
-
-# Clean up
-rm temp-secret.yaml
-
-# Commit sealed-secret.yaml to git
-git add sealed-secret.yaml
-git commit -m "Add sealed database secret"
+  deploy-production:
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Deploy to Production
+        run: |
+          helm upgrade --install coaching-app ./helm/app \
+            --namespace coaching \
+            --values ./helm/app/values-production.yaml \
+            --set postgresql.username="${{ secrets.POSTGRES_USERNAME_COACHING }}" \
+            --set postgresql.password="${{ secrets.POSTGRES_PASSWORD_COACHING }}" \
+            --set postgresql.database="coaching"
 ```
 
 ---
 
-## Example Integrations
+## Example Applications
 
-### Node.js / Express Application
+### Node.js Application
 
-**Dockerfile:**
-```dockerfile
-FROM node:18-alpine
+**Helm values:**
+```yaml
+# values.yaml
+postgresql:
+  host: postgresql.database.svc.cluster.local
+  port: 5432
+  database: coaching
+  sslmode: require
 
-# Install PostgreSQL client for health checks
-RUN apk add --no-cache postgresql-client
-
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci --production
-COPY . .
-
-EXPOSE 3000
-CMD ["node", "server.js"]
+  pool:
+    min: 2
+    max: 10
 ```
 
-**Application Code (server.js):**
+**Application code:**
 ```javascript
+// config/database.js
 const { Pool } = require('pg');
 
 const pool = new Pool({
   host: process.env.POSTGRES_HOST,
-  port: process.env.POSTGRES_PORT,
+  port: parseInt(process.env.POSTGRES_PORT),
   database: process.env.POSTGRES_DB,
   user: process.env.POSTGRES_USER,
   password: process.env.POSTGRES_PASSWORD,
-  ssl: {
+  ssl: process.env.PGSSLROOTCERT ? {
     rejectUnauthorized: true,
-    ca: process.env.PGSSLROOTCERT
-      ? require('fs').readFileSync(process.env.PGSSLROOTCERT)
-      : undefined
-  }
+    ca: require('fs').readFileSync(process.env.PGSSLROOTCERT)
+  } : false,
+  min: 2,
+  max: 10,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000,
 });
 
-// Test connection
-pool.query('SELECT NOW()', (err, res) => {
-  if (err) {
-    console.error('Database connection error:', err);
-  } else {
-    console.log('Database connected:', res.rows[0]);
-  }
-});
+module.exports = pool;
 ```
 
-**Kubernetes Deployment:**
+### Python/Django Application
+
+**Helm values:**
 ```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: nodejs-app
-  namespace: coaching
-spec:
-  replicas: 2
-  selector:
-    matchLabels:
-      app: nodejs-app
-  template:
-    metadata:
-      labels:
-        app: nodejs-app
-    spec:
-      containers:
-      - name: app
-        image: my-registry/nodejs-app:latest
-        ports:
-        - containerPort: 3000
-        envFrom:
-        - secretRef:
-            name: coaching-app-postgres
-        env:
-        - name: PGSSLROOTCERT
-          value: /etc/postgresql/ca.crt
-        volumeMounts:
-        - name: postgres-ca
-          mountPath: /etc/postgresql
-          readOnly: true
-        livenessProbe:
-          exec:
-            command:
-            - /bin/sh
-            - -c
-            - pg_isready -h $POSTGRES_HOST -U $POSTGRES_USER
-          initialDelaySeconds: 10
-          periodSeconds: 30
-      volumes:
-      - name: postgres-ca
-        secret:
-          secretName: postgresql-tls-ca
-```
+# values.yaml
+postgresql:
+  host: postgresql.database.svc.cluster.local
+  port: 5432
+  database: resume
+  sslmode: require
 
-### Python / Django Application
+django:
+  migrateOnDeploy: true
+  collectStaticOnDeploy: true
+```
 
 **settings.py:**
 ```python
@@ -445,165 +752,123 @@ import os
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'HOST': os.environ.get('POSTGRES_HOST'),
-        'PORT': os.environ.get('POSTGRES_PORT', '5432'),
-        'NAME': os.environ.get('POSTGRES_DB'),
-        'USER': os.environ.get('POSTGRES_USER'),
-        'PASSWORD': os.environ.get('POSTGRES_PASSWORD'),
+        'HOST': os.environ['POSTGRES_HOST'],
+        'PORT': os.environ['POSTGRES_PORT'],
+        'NAME': os.environ['POSTGRES_DB'],
+        'USER': os.environ['POSTGRES_USER'],
+        'PASSWORD': os.environ['POSTGRES_PASSWORD'],
         'OPTIONS': {
-            'sslmode': 'require',
+            'sslmode': os.environ.get('POSTGRES_SSLMODE', 'require'),
             'sslrootcert': os.environ.get('PGSSLROOTCERT', ''),
+            'connect_timeout': 5,
         },
+        'CONN_MAX_AGE': 600,
     }
 }
 ```
 
-**Deployment:**
+**Helm deployment with migrations:**
 ```yaml
-apiVersion: apps/v1
-kind: Deployment
+# templates/job-migrate.yaml
+{{- if .Values.django.migrateOnDeploy }}
+apiVersion: batch/v1
+kind: Job
 metadata:
-  name: django-app
-  namespace: resume
+  name: {{ include "app.fullname" . }}-migrate-{{ .Release.Revision }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "1"
+    "helm.sh/hook-delete-policy": before-hook-creation
 spec:
-  replicas: 3
-  selector:
-    matchLabels:
-      app: django-app
   template:
-    metadata:
-      labels:
-        app: django-app
     spec:
-      initContainers:
-      - name: migrate
-        image: my-registry/django-app:latest
-        command: ['python', 'manage.py', 'migrate']
-        envFrom:
-        - secretRef:
-            name: resume-app-postgres
-        env:
-        - name: PGSSLROOTCERT
-          value: /etc/postgresql/ca.crt
-        volumeMounts:
-        - name: postgres-ca
-          mountPath: /etc/postgresql
-          readOnly: true
+      restartPolicy: Never
       containers:
-      - name: app
-        image: my-registry/django-app:latest
-        ports:
-        - containerPort: 8000
+      - name: migrate
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        command: ["python", "manage.py", "migrate"]
         envFrom:
         - secretRef:
-            name: resume-app-postgres
-        env:
-        - name: PGSSLROOTCERT
-          value: /etc/postgresql/ca.crt
-        volumeMounts:
-        - name: postgres-ca
-          mountPath: /etc/postgresql
-          readOnly: true
-      volumes:
-      - name: postgres-ca
-        secret:
-          secretName: postgresql-tls-ca
-```
-
-### Go Application
-
-**main.go:**
-```go
-package main
-
-import (
-    "database/sql"
-    "fmt"
-    "log"
-    "os"
-
-    _ "github.com/lib/pq"
-)
-
-func main() {
-    connStr := fmt.Sprintf(
-        "host=%s port=%s user=%s password=%s dbname=%s sslmode=require sslrootcert=%s",
-        os.Getenv("POSTGRES_HOST"),
-        os.Getenv("POSTGRES_PORT"),
-        os.Getenv("POSTGRES_USER"),
-        os.Getenv("POSTGRES_PASSWORD"),
-        os.Getenv("POSTGRES_DB"),
-        os.Getenv("PGSSLROOTCERT"),
-    )
-
-    db, err := sql.Open("postgres", connStr)
-    if err != nil {
-        log.Fatal(err)
-    }
-    defer db.Close()
-
-    err = db.Ping()
-    if err != nil {
-        log.Fatal(err)
-    }
-
-    log.Println("Successfully connected to database!")
-}
+            name: {{ include "app.fullname" . }}-postgres
+{{- end }}
 ```
 
 ---
 
 ## Migration from Existing Databases
 
-### Option 1: pg_dump / pg_restore
+### 1. Backup Existing Database
 
-**Export from old database:**
 ```bash
-# From the old database server
-pg_dump -h old-host -U old-user -d old_database -F c -f backup.dump
+# From old database
+pg_dump -h old-database-host -U old-user -d old_database -F c -f backup.dump
+
+# Or use DATABASE_URL
+pg_dump $OLD_DATABASE_URL -F c -f backup.dump
 ```
 
-**Import to new database:**
+### 2. Restore to New Database
+
 ```bash
 # Copy to tower-pc
 scp backup.dump bearf@10.0.0.249:/tmp/
 
-# Import on tower-pc
+# Restore on tower-pc
 ssh bearf@10.0.0.249
 sudo docker exec -i postgresql pg_restore \
   -U coaching_user \
   -d coaching \
   --no-owner \
   --no-acl \
+  --clean \
+  --if-exists \
   < /tmp/backup.dump
+
+# Cleanup
+rm /tmp/backup.dump
 ```
 
-### Option 2: Direct Database Copy
+### 3. Update Application Configuration
 
-```bash
-# Using psql piping
-pg_dump -h old-host -U old-user old_database | \
-  kubectl run pg-restore --rm -i --restart=Never \
-    --image=postgres:16-alpine \
-    --namespace=database \
-    -- psql -h postgresql.database.svc.cluster.local \
-         -U coaching_user \
-         -d coaching
+**Before (old database):**
+```yaml
+# GitHub Actions secrets
+DATABASE_URL: postgresql://user:pass@old-host.com:5432/mydb
 ```
 
-### Option 3: SQL File Migration
+**After (new database):**
+```yaml
+# GitHub Actions secrets
+POSTGRES_USERNAME_COACHING: coaching_user
+POSTGRES_PASSWORD_COACHING: <new-password>
+
+# Helm values
+postgresql:
+  host: postgresql.database.svc.cluster.local
+  database: coaching
+```
+
+### 4. Deploy Updated Configuration
 
 ```bash
-# Export as SQL
-pg_dump -h old-host -U old-user -d old_database > export.sql
+# Deploy with new database settings
+helm upgrade --install coaching-app ./helm/app \
+  --namespace coaching \
+  --values values-production.yaml \
+  --set postgresql.username="${POSTGRES_USERNAME}" \
+  --set postgresql.password="${POSTGRES_PASSWORD}" \
+  --set postgresql.database="coaching"
+```
 
-# Import via kubectl
-kubectl run psql-import --rm -i --restart=Never \
-  --image=postgres:16-alpine \
-  --namespace=database \
-  -- psql -h postgresql.database.svc.cluster.local \
-       -U coaching_user \
-       -d coaching < export.sql
+### 5. Verify Migration
+
+```bash
+# Check application logs
+kubectl logs -n coaching deployment/coaching-app --tail=100
+
+# Test database connectivity from pod
+kubectl exec -n coaching deployment/coaching-app -- \
+  psql -h postgresql.database.svc.cluster.local -U coaching_user -d coaching -c "SELECT COUNT(*) FROM your_table;"
 ```
 
 ---
@@ -612,228 +877,283 @@ kubectl run psql-import --rm -i --restart=Never \
 
 ### Connection Refused
 
-**Symptom:** `connection refused` or `could not connect to server`
+**Symptom:** Application can't connect to database
 
-**Checks:**
+**Debug steps:**
 ```bash
-# 1. Verify service exists
-kubectl get service -n database postgresql
+# 1. Check service and endpoints
+kubectl get service,endpoints -n database postgresql
 
-# 2. Verify endpoints are configured
-kubectl get endpoints -n database postgresql
-
-# 3. Test from a pod
-kubectl run debug --rm -it --restart=Never \
+# 2. Test from application namespace
+kubectl run debug -n coaching --rm -it --restart=Never \
   --image=postgres:16-alpine \
-  --namespace=database \
-  -- psql -h postgresql.database.svc.cluster.local -U postgres -l
+  -- pg_isready -h postgresql.database.svc.cluster.local
+
+# 3. Check application logs
+kubectl logs -n coaching deployment/coaching-app --tail=50
+
+# 4. Verify DNS resolution
+kubectl run debug -n coaching --rm -it --restart=Never \
+  --image=busybox \
+  -- nslookup postgresql.database.svc.cluster.local
 ```
 
 ### Authentication Failed
 
-**Symptom:** `authentication failed for user`
+**Symptom:** `FATAL: password authentication failed for user`
 
-**Checks:**
+**Debug steps:**
 ```bash
-# 1. Verify credentials in secret
-kubectl get secret my-app-postgres -n my-namespace -o yaml | \
-  yq '.data.POSTGRES_PASSWORD' | base64 -d
+# 1. Verify secret exists and has correct values
+kubectl get secret -n coaching coaching-app-postgres -o yaml
 
-# 2. Test credentials directly
-kubectl run psql-test --rm -it --restart=Never \
+# 2. Decode and check username
+kubectl get secret -n coaching coaching-app-postgres \
+  -o jsonpath='{.data.POSTGRES_USER}' | base64 -d
+
+# 3. Test credentials manually
+kubectl run psql-test -n coaching --rm -it --restart=Never \
   --image=postgres:16-alpine \
-  --namespace=database \
-  -- psql "postgresql://coaching_user:PASSWORD@postgresql.database.svc.cluster.local:5432/coaching?sslmode=require"
+  -- psql "postgresql://coaching_user:PASSWORD@postgresql.database.svc.cluster.local/coaching"
+
+# 4. Check GitHub Actions logs for secret injection
+# Ensure secrets are correctly passed to helm
 ```
 
 ### SSL/TLS Errors
 
-**Symptom:** `SSL error` or `certificate verify failed`
+**Symptom:** `SSL error` or certificate verification failed
 
-**Checks:**
+**Debug steps:**
 ```bash
-# 1. Verify CA secret exists
+# 1. Check TLS secret in database namespace
 kubectl get secret -n database postgresql-tls-ca
 
-# 2. Check certificate in application pod
-kubectl exec -it my-app-pod -- cat /etc/postgresql/ca.crt
+# 2. Verify CA cert is mounted in pod
+kubectl exec -n coaching deployment/coaching-app -- \
+  cat /etc/postgresql/ssl/ca.crt
 
 # 3. Test with sslmode=require
-kubectl run ssl-test --rm -it --restart=Never \
+kubectl run psql-test -n coaching --rm -it --restart=Never \
   --image=postgres:16-alpine \
-  --namespace=database \
-  -- psql "postgresql://user:pass@postgresql.database.svc.cluster.local:5432/db?sslmode=require"
+  -- psql "postgresql://user:pass@postgresql.database.svc.cluster.local/coaching?sslmode=require"
 ```
 
-### Slow Queries
+### Helm Deployment Issues
 
-**Check connection pooling:**
-```sql
--- Connect to database
-SELECT count(*), state FROM pg_stat_activity GROUP BY state;
+**Symptom:** Helm upgrade fails or secrets not updating
 
--- Check slow queries
-SELECT pid, now() - query_start as duration, query
-FROM pg_stat_activity
-WHERE state = 'active'
-ORDER BY duration DESC;
-```
-
-### Database Doesn't Exist
-
-**Create new database (requires admin access):**
 ```bash
-# SSH to tower-pc
-ssh bearf@10.0.0.249
+# 1. Check Helm release status
+helm list -n coaching
 
-# Create database
-sudo docker exec -it postgresql psql -U postgres -c "CREATE DATABASE my_new_db;"
+# 2. Get Helm release history
+helm history coaching-app -n coaching
 
-# Create user
-sudo docker exec -it postgresql psql -U postgres -c "CREATE USER my_user WITH PASSWORD 'secure_password';"
+# 3. View generated manifests
+helm get manifest coaching-app -n coaching
 
-# Grant privileges
-sudo docker exec -it postgresql psql -U postgres -c "GRANT ALL PRIVILEGES ON DATABASE my_new_db TO my_user;"
+# 4. Debug Helm values
+helm get values coaching-app -n coaching
+
+# 5. Dry-run to see what would be deployed
+helm upgrade --install coaching-app ./helm/app \
+  --namespace coaching \
+  --values values-production.yaml \
+  --set postgresql.password="test" \
+  --dry-run --debug
+```
+
+### Pod Not Starting After Database Update
+
+```bash
+# 1. Check pod status
+kubectl get pods -n coaching
+
+# 2. Describe pod for events
+kubectl describe pod -n coaching <pod-name>
+
+# 3. Check logs
+kubectl logs -n coaching <pod-name> --previous
+
+# 4. Force restart deployment
+kubectl rollout restart deployment/coaching-app -n coaching
+
+# 5. Delete and recreate pods
+kubectl delete pod -n coaching -l app=coaching-app
 ```
 
 ---
 
 ## Security Best Practices
 
-### 1. Use Kubernetes Secrets
+### 1. Use Different Credentials Per Environment
 
-✅ **DO:**
+**Staging:**
 ```yaml
-env:
-- name: POSTGRES_PASSWORD
-  valueFrom:
-    secretKeyRef:
-      name: my-app-postgres
-      key: POSTGRES_PASSWORD
+# GitHub Secrets
+POSTGRES_USERNAME_COACHING_STAGING: coaching_user_staging
+POSTGRES_PASSWORD_COACHING_STAGING: <different-password>
 ```
 
-❌ **DON'T:**
+**Production:**
 ```yaml
-env:
-- name: POSTGRES_PASSWORD
-  value: "plaintext_password"  # Never do this!
+# GitHub Secrets
+POSTGRES_USERNAME_COACHING: coaching_user
+POSTGRES_PASSWORD_COACHING: <different-password>
 ```
 
-### 2. Enable TLS Verification
+### 2. Rotate Passwords Regularly
 
-✅ **DO:**
+**Using GitHub Actions scheduled workflow:**
+
+```yaml
+name: Rotate Database Passwords
+
+on:
+  schedule:
+    - cron: '0 0 1 * *'  # Monthly on the 1st
+  workflow_dispatch:
+
+jobs:
+  rotate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate new password
+        id: gen-password
+        run: |
+          NEW_PASS=$(openssl rand -base64 32)
+          echo "::add-mask::$NEW_PASS"
+          echo "new_password=$NEW_PASS" >> $GITHUB_OUTPUT
+
+      - name: Update database password
+        run: |
+          ssh bearf@10.0.0.249 << 'EOF'
+          sudo docker exec postgresql psql -U postgres -c \
+            "ALTER USER coaching_user WITH PASSWORD '${{ steps.gen-password.outputs.new_password }}';"
+          EOF
+
+      - name: Update GitHub secret
+        uses: hmanzur/actions-set-secret@v2.0.0
+        with:
+          name: POSTGRES_PASSWORD_COACHING
+          value: ${{ steps.gen-password.outputs.new_password }}
+          repository: ${{ github.repository }}
+          token: ${{ secrets.REPO_ADMIN_TOKEN }}
+
+      - name: Redeploy application with new secret
+        run: |
+          # Trigger deployment workflow
+          gh workflow run deploy.yml
 ```
-postgresql://user:pass@host:5432/db?sslmode=require
-```
 
-❌ **DON'T:**
-```
-postgresql://user:pass@host:5432/db?sslmode=disable
-```
+### 3. Principle of Least Privilege
 
-### 3. Use Connection Pooling
-
-Limit database connections from your application:
-
-**Node.js:**
-```javascript
-const pool = new Pool({
-  max: 20,  // Maximum connections
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
-});
-```
-
-**Python (SQLAlchemy):**
-```python
-engine = create_engine(
-    DATABASE_URL,
-    pool_size=10,
-    max_overflow=20,
-    pool_pre_ping=True
-)
-```
-
-### 4. Principle of Least Privilege
-
-Each application should have its own database user with minimal permissions:
+Create read-only users for analytics/reporting:
 
 ```sql
 -- Create read-only user
-CREATE USER readonly_user WITH PASSWORD 'secure_password';
-GRANT CONNECT ON DATABASE my_database TO readonly_user;
-GRANT USAGE ON SCHEMA public TO readonly_user;
-GRANT SELECT ON ALL TABLES IN SCHEMA public TO readonly_user;
+CREATE USER analytics_user WITH PASSWORD 'secure_password';
+GRANT CONNECT ON DATABASE coaching TO analytics_user;
+GRANT USAGE ON SCHEMA public TO analytics_user;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO analytics_user;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO analytics_user;
 ```
 
-### 5. Regular Password Rotation
+### 4. Connection Pooling
 
-Update passwords periodically:
+Configure appropriate pool sizes based on application load:
 
-```bash
-# Generate new password
-NEW_PASSWORD=$(openssl rand -base64 32)
-
-# Update in database
-ssh bearf@10.0.0.249
-sudo docker exec -it postgresql psql -U postgres -c \
-  "ALTER USER coaching_user WITH PASSWORD '${NEW_PASSWORD}';"
-
-# Update Kubernetes secret
-kubectl create secret generic coaching-app-postgres \
-  --from-literal=POSTGRES_PASSWORD="${NEW_PASSWORD}" \
-  --dry-run=client -o yaml | kubectl apply -f -
-
-# Restart pods to pick up new secret
-kubectl rollout restart deployment/coaching-app -n coaching
-```
-
-### 6. Network Policies (Optional)
-
-Restrict database access to specific namespaces:
-
+**Low traffic (< 100 req/min):**
 ```yaml
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: postgres-access
-  namespace: database
-spec:
-  podSelector:
-    matchLabels:
-      app: postgresql-endpoint
-  policyTypes:
-  - Ingress
-  ingress:
-  - from:
-    - namespaceSelector:
-        matchLabels:
-          database-access: "true"
-    ports:
-    - protocol: TCP
-      port: 5432
+postgresql:
+  pool:
+    min: 2
+    max: 10
+```
+
+**Medium traffic (100-1000 req/min):**
+```yaml
+postgresql:
+  pool:
+    min: 5
+    max: 20
+```
+
+**High traffic (> 1000 req/min):**
+```yaml
+postgresql:
+  pool:
+    min: 10
+    max: 50
+```
+
+### 5. Secure Secret Storage
+
+**Never commit secrets to git:**
+```bash
+# .gitignore
+secrets.yaml
+*.secret
+*-secrets.yaml
+values-secrets.yaml
+```
+
+**Use encrypted secrets for GitOps:**
+- Sealed Secrets
+- SOPS (with Age or PGP)
+- Infisical
+- External Secrets Operator
+
+### 6. Audit Access
+
+Monitor database connections:
+
+```sql
+-- View active connections
+SELECT
+  datname,
+  usename,
+  application_name,
+  client_addr,
+  state,
+  query_start
+FROM pg_stat_activity
+WHERE datname = 'coaching'
+ORDER BY query_start DESC;
+
+-- Check failed login attempts (enable log_connections in postgresql.conf)
+-- View logs: ssh bearf@10.0.0.249 "sudo docker logs postgresql | grep FATAL"
 ```
 
 ---
 
 ## Additional Resources
 
-- **PostgreSQL Documentation**: https://www.postgresql.org/docs/16/
-- **Kubernetes Secrets**: https://kubernetes.io/docs/concepts/configuration/secret/
-- **Connection Pooling Best Practices**: https://www.postgresql.org/docs/16/runtime-config-connection.html
-- **TLS Configuration**: https://www.postgresql.org/docs/16/ssl-tcp.html
+- **Helm Documentation**: https://helm.sh/docs/
+- **PostgreSQL Connection Strings**: https://www.postgresql.org/docs/16/libpq-connect.html
+- **GitHub Actions Secrets**: https://docs.github.com/en/actions/security-guides/encrypted-secrets
+- **Infisical Documentation**: https://infisical.com/docs
+- **External Secrets Operator**: https://external-secrets.io/
 
 ---
 
-## Support
+## Getting Started Checklist
 
-For issues or questions:
-1. Check the [Troubleshooting](#troubleshooting) section
-2. Review PostgreSQL logs: `ssh bearf@10.0.0.249 "sudo docker logs postgresql"`
-3. Contact the infrastructure team
+- [ ] Database credentials added to GitHub Actions secrets or Infisical
+- [ ] Helm chart created with PostgreSQL configuration
+- [ ] `values-production.yaml` configured with correct database name
+- [ ] GitHub Actions workflow updated to pass secrets to Helm
+- [ ] TLS CA certificate volume mounted in deployment (if using TLS verification)
+- [ ] Application code configured to use environment variables
+- [ ] Database migration strategy planned (if migrating from existing DB)
+- [ ] Connection pooling configured appropriately
+- [ ] Monitoring and logging configured
+- [ ] Deployment tested in staging environment
 
 ---
 
 **Last Updated**: 2026-01-01
 **PostgreSQL Version**: 16.11
 **Kubernetes Version**: 1.28
+**Helm Version**: 3.13+
