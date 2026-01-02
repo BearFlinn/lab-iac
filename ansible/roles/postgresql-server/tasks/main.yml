@@ -51,10 +51,24 @@
         size: 4096
         mode: '0600'
 
+    - name: Generate CA CSR
+      community.crypto.openssl_csr:
+        path: "{{ postgresql_tls_dir }}/ca.csr"
+        privatekey_path: "{{ postgresql_tls_dir }}/ca.key"
+        common_name: "PostgreSQL CA"
+        basic_constraints:
+          - CA:TRUE
+        basic_constraints_critical: true
+        key_usage:
+          - keyCertSign
+          - cRLSign
+        key_usage_critical: true
+
     - name: Generate CA certificate
       community.crypto.x509_certificate:
         path: "{{ postgresql_tls_dir }}/ca.crt"
         privatekey_path: "{{ postgresql_tls_dir }}/ca.key"
+        csr_path: "{{ postgresql_tls_dir }}/ca.csr"
         provider: selfsigned
         selfsigned_not_after: "+3650d"
         selfsigned_digest: sha256
@@ -79,6 +93,14 @@
           - "DNS:postgresql"
           - "IP:{{ ansible_host }}"
           - "IP:127.0.0.1"
+        basic_constraints:
+          - CA:FALSE
+        key_usage:
+          - digitalSignature
+          - keyEncipherment
+        key_usage_critical: true
+        extended_key_usage:
+          - serverAuth
 
     - name: Sign server certificate with CA
       community.crypto.x509_certificate:
