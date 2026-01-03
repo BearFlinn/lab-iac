@@ -41,6 +41,9 @@ postgresql_config:
     - name: family_dashboard
       owner: dashboard_user
       description: "Family dashboard database"
+    - name: game_servers
+      owner: game_servers_user
+      description: "Game server platform database"
 
 # PostgreSQL users (passwords in vault)
 postgresql_users:
@@ -50,6 +53,8 @@ postgresql_users:
     password: "{{ vault_postgresql_resume_user_password }}"
   - name: dashboard_user
     password: "{{ vault_postgresql_dashboard_user_password }}"
+  - name: game_servers_user
+    password: "{{ vault_postgresql_game_servers_user_password }}"
 
 # Use values from postgresql_config
 postgresql_databases: "{{ postgresql_config.databases }}"

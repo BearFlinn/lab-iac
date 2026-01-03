@@ -1,12 +1,12 @@
-## Repository Overview
+# Repository Overview
 
 Bare-metal Kubernetes portfolio project on repurposed hardware. Four physical machines connected via NetBird VPN to a Hetzner VPS proxy.
 
 **Traffic flow:** Internet → Hetzner VPS (Caddy) → NetBird VPN → Home cluster
 
-## Common Commands
+# Common Commands
 
-### Ansible Playbooks
+## Ansible Playbooks
 
 ```bash
 # All playbooks use vault - .vault_pass must exist in repo root (git-ignored)
@@ -23,7 +23,7 @@ Key playbooks in execution order for new cluster:
 4. `k8s-verify.yml` - health validation
 5. `setup-proxy-vps.yml` - configure VPS proxy
 
-### Kubernetes Operations
+## Kubernetes Operations
 
 ```bash
 # Set kubeconfig for local kubectl
@@ -38,9 +38,9 @@ kubectl apply -k kubernetes/base
 ./scripts/install-nfs-provisioner.sh
 ```
 
-## Architecture
+# Architecture
 
-### Cluster Nodes
+## Cluster Nodes
 
 | Node | IP | Role | Notable |
 |------|----|------|---------|
@@ -49,7 +49,7 @@ kubectl apply -k kubernetes/base
 | msi-laptop | Worker | Monitoring workloads | GTX 1060 GPU |
 | dell-optiplex-9020 | Worker | General compute | |
 
-### Key Network Details
+## Key Network Details
 
 - Pod CIDR: `10.244.0.0/16`
 - Service CIDR: `10.96.0.0/12`
@@ -57,7 +57,7 @@ kubectl apply -k kubernetes/base
 - Container registry: `10.0.0.226:32346` (insecure)
 - NFS export: `10.0.0.249:/mnt/nfs-storage`
 
-### Technology Stack
+## Technology Stack
 
 - **Orchestration:** Kubernetes 1.31 via kubeadm, Calico CNI
 - **Config management:** Ansible with vault-encrypted secrets
@@ -66,7 +66,7 @@ kubectl apply -k kubernetes/base
 - **Ingress:** NGINX Ingress Controller
 - **External proxy:** Caddy on Hetzner VPS
 
-## Repository Structure
+# Repository Structure
 
 ```
 ansible/
@@ -85,12 +85,17 @@ scripts/                         # Shell scripts (set -euo pipefail, idempotent)
 docs/                            # ARCHITECTURE.md, DEPLOYMENT.md, RUNBOOKS.md
 ```
 
-## Secrets Management
+# Secrets Management
 
 - **Ansible Vault:** `group_vars/all/vault.yml` encrypted, decrypted via `.vault_pass` file
 - **Vault password file:** Must exist at repo root, git-ignored
 - **K8s secrets:** Managed via CI/CD pipelines in application repos
 
-## Deployment Pattern
+# Deployment Pattern
 
 Applications use GitOps: push to main → GitHub Actions builds image → pushes to registry (10.0.0.226:32346) → deploys via Helm. Self-hosted runners in cluster handle CI/CD.
+
+# Important Instructions
+
+- Any and all configuration or infrastructures MUST be conducted with IaC.
+- If any changes cannot be conducted via IaC, they must be clearly documented.
