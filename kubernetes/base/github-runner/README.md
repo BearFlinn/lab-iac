@@ -5,6 +5,7 @@
 ### 1. Create values.yaml from template
 
 ```bash
+cd kubernetes/github-runner
 cp values.yaml.example values.yaml
 ```
 
@@ -41,8 +42,14 @@ cd ~/Projects/lab-iac
 ### 5. Deploy runners and autoscaler
 
 ```bash
-kubectl apply -f runner-deployment.yaml
-kubectl apply -f autoscaler.yaml
+# Using Kustomize (recommended)
+kubectl apply -k kubernetes/base/github-runner
+
+# Or apply individual files
+kubectl apply -f kubernetes/base/github-runner/rbac.yaml
+kubectl apply -f kubernetes/base/github-runner/docker-daemon-config.yaml
+kubectl apply -f kubernetes/base/github-runner/runner-deployment.yaml
+kubectl apply -f kubernetes/base/github-runner/autoscaler.yaml
 ```
 
 ### 6. Verify
@@ -58,13 +65,17 @@ kubectl get pods -n actions-runner-system
 
 ## Files
 
-- `values.yaml.example` - Template Helm values (copy to `values.yaml`)
-- `values.yaml` - Your actual values (git-ignored, contains secrets)
+**Kustomize manifests (kubernetes/base/github-runner/):**
+- `kustomization.yaml` - Kustomize configuration
 - `runner-deployment.yaml` - RunnerDeployment manifest
 - `autoscaler.yaml` - HorizontalRunnerAutoscaler for auto-scaling
 - `rbac.yaml` - RBAC configuration for runner service account
 - `docker-daemon-config.yaml` - Docker daemon configuration
 - `README.md` - This file
+
+**Helm values (kubernetes/github-runner/):**
+- `values.yaml.example` - Template Helm values (copy to `values.yaml`)
+- `values.yaml` - Your actual values (git-ignored, contains secrets)
 
 ## Usage in GitHub Actions Workflows
 
@@ -117,5 +128,5 @@ kubectl scale runnerdeployment lab-runners -n actions-runner-system --replicas=2
 To re-enable autoscaling:
 ```bash
 # Re-apply autoscaler
-kubectl apply -f autoscaler.yaml
+kubectl apply -k kubernetes/base/github-runner
 ```

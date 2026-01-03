@@ -14,7 +14,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MANIFESTS_DIR="$SCRIPT_DIR/../k8s-manifests/github-runner"
+MANIFESTS_DIR="$SCRIPT_DIR/../kubernetes/github-runner"
 
 echo "==> GitHub Actions Runner Controller Installation"
 echo ""
@@ -69,8 +69,7 @@ echo "==> ✓ Installation complete!"
 echo ""
 echo "Next steps:"
 echo "  1. Verify controller: kubectl get pods -n actions-runner-system"
-echo "  2. Deploy runners: kubectl apply -f $MANIFESTS_DIR/runner-deployment.yaml"
-echo "  3. Deploy autoscaler: kubectl apply -f $MANIFESTS_DIR/autoscaler.yaml"
-echo "  4. Check autoscaler: kubectl get hra -n actions-runner-system"
-echo "  5. Check runners: kubectl get runners -n actions-runner-system"
-echo "  6. Verify in GitHub: https://github.com/organizations/YOUR_ORG/settings/actions/runners"
+echo "  2. Deploy runners: kubectl apply -k kubernetes/base/github-runner"
+echo "  3. Check autoscaler: kubectl get hra -n actions-runner-system"
+echo "  4. Check runners: kubectl get runners -n actions-runner-system"
+echo "  5. Verify in GitHub: https://github.com/organizations/YOUR_ORG/settings/actions/runners"

@@ -1,0 +1,23 @@
+---
+# Role defaults for k8s-control-plane
+#
+# This role initializes the Kubernetes control plane with dual-stack networking
+# and installs Calico CNI.
+
+# Pod network CIDR (IPv4)
+# This is the range used for pod IP addresses
+pod_network_cidr: "10.244.0.0/16"
+
+# Pod network CIDR (IPv6) for dual-stack
+pod_network_cidr_ipv6: "fd00:10:244::/48"
+
+# Service CIDR (IPv4)
+# This is the range used for ClusterIP services
+service_cidr: "10.96.0.0/12"
+
+# Service CIDR (IPv6) for dual-stack
+service_cidr_ipv6: "fd00:10:96::/112"
+
+# Calico CNI version
+# Check releases at: https://github.com/projectcalico/calico/releases
+calico_version: "v3.27.0"

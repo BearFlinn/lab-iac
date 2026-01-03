@@ -1,0 +1,19 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+# Production-specific configurations can be added here
+# Example patches:
+# patches:
+#   - path: registry-patch.yaml
+#     target:
+#       kind: Deployment
+#       name: docker-registry
+
+# Example configMapGenerators:
+# configMapGenerator:
+#   - name: production-config
+#     literals:
+#       - ENVIRONMENT=production

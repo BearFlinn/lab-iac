@@ -23,8 +23,12 @@ ansible-playbook playbooks/setup-postgresql.yml --ask-vault-pass
 ### Apply Kubernetes manifests
 
 ```bash
-kubectl apply -f k8s-manifests/postgresql/namespace.yaml
-kubectl apply -f k8s-manifests/postgresql/service.yaml
+# Using Kustomize (recommended)
+kubectl apply -k kubernetes/base/postgresql
+
+# Or apply individual files
+kubectl apply -f kubernetes/base/postgresql/namespace.yaml
+kubectl apply -f kubernetes/base/postgresql/service.yaml
 ```
 
 ### Create application secrets
@@ -142,7 +146,7 @@ LIMIT 5;
 If tower-pc network changes (e.g., second NIC added):
 
 1. Update IP in `service.yaml` Endpoints section
-2. Apply: `kubectl apply -f k8s-manifests/postgresql/service.yaml`
+2. Apply: `kubectl apply -k kubernetes/base/postgresql`
 
 ## Backup and Recovery
 

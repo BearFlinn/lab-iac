@@ -1,0 +1,9 @@
+---
+# Role defaults for k8s-packages
+#
+# This role installs Kubernetes packages (kubeadm, kubelet, kubectl)
+# from the official Kubernetes apt repository.
+
+# Kubernetes version (major.minor only, e.g., "1.29")
+# The latest patch version will be installed
+kubernetes_version: "1.29"

@@ -14,7 +14,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MANIFESTS_DIR="$SCRIPT_DIR/../k8s-manifests/nfs-provisioner"
+MANIFESTS_DIR="$SCRIPT_DIR/../kubernetes/nfs-provisioner"
 NFS_SERVER="10.0.0.249"
 NFS_PATH="/mnt/nfs-storage"
 

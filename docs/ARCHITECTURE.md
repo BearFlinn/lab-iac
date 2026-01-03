@@ -1,207 +1,324 @@
-# Infrastructure Architecture Plan
+# Infrastructure Architecture
+
+This document describes the bare-metal Kubernetes cluster architecture, design decisions, and implementation status.
 
 ## Overview
-Development/testing Kubernetes cluster optimized for resource efficiency and specialized workloads.
 
-## Cluster Architecture
+A development/testing Kubernetes cluster built on repurposed hardware, optimized for resource efficiency and real-world learning. The architecture prioritizes practical experience over high availability, making it ideal for portfolio demonstration and personal projects.
+
+## Cluster Topology
+
+```
+                            Internet
+                               |
+                               v
+                    +--------------------+
+                    |    Hetzner VPS     |
+                    |    (proxy-vps)     |
+                    | Caddy + Cloudflare |
+                    |  DNS-01 for TLS    |
+                    +--------------------+
+                               |
+                         NetBird VPN
+                               |
+            +------------------+------------------+
+            |                  |                  |
+            v                  v                  v
++-------------------+ +-------------------+ +-------------------+
+| dell-inspiron-15  | |    msi-laptop     | |     tower-pc      |
+|  Control Plane    | |      Worker       | |      Worker       |
+|   10.0.0.226      | |    10.0.0.XXX     | |    10.0.0.XXX     |
++-------------------+ +-------------------+ +-------------------+
+                               |
+                               v
+                    +-------------------+
+                    | dell-optiplex-9020|
+                    |      Worker       |
+                    |    10.0.0.XXX     |
+                    +-------------------+
+```
+
+## Node Specifications
 
 ### Control Plane Node
+
 **Dell Inspiron 15**
-- **Hostname:** dell-inspiron-15
 - **Role:** Kubernetes control plane (single-node)
-- **Resources:** i3-7100U (2c/4t), 8GB RAM, 256GB SSD
-- **Rationale:** Adequate resources for control plane components, low power consumption for always-on operation
-- **Estimated Usage:** 2-4GB RAM, <1 CPU core for control plane
-- **Available for Workloads:** Minimal - reserve for system components only
+- **CPU:** Intel i3-7100U (2 cores / 4 threads)
+- **RAM:** 8GB
+- **Storage:** 256GB SSD
+- **IP Address:** 10.0.0.226
+- **Resource Usage:** 2-4GB RAM, <1 CPU core for control plane components
+
+**Control Plane Components:**
+- etcd (single-node)
+- kube-apiserver
+- kube-controller-manager
+- kube-scheduler
+- CoreDNS
 
 ### Worker Nodes
 
-#### Node 1: Monitoring & AI Analytics
+#### Node 1: Monitoring & Analytics
 **MSI Laptop**
-- **Hostname:** msi-laptop
-- **Primary Roles:** Observability stack, log aggregation, AI-based analytics
-- **Resources:** i7-6700HQ (4c/8t), 32GB RAM, 2TB storage, NVIDIA GTX 1060 (3GB)
-- **Kubernetes Labels:**
-  - `node-role.kubernetes.io/monitoring=true`
-  - `workload=observability`
-  - `gpu=nvidia-gtx-1060`
-  - `storage-class=metrics`
-- **Planned Workloads:**
-  - Prometheus + Grafana (metrics)
-  - Loki or Elasticsearch (logs)
-  - Jaeger/Tempo (traces)
-  - GPU-accelerated log analysis (anomaly detection, pattern recognition)
-  - Vector embeddings for log similarity
-- **Storage Strategy:**
-  - 1TB SSD for hot metrics/logs (recent 30 days)
-  - 1TB HDD for warm storage (31-90 days)
+- **Role:** Observability workloads
+- **CPU:** Intel i7-6700HQ (4 cores / 8 threads)
+- **RAM:** 32GB
+- **Storage:** 2TB (SSD + HDD)
+- **GPU:** NVIDIA GTX 1060 (3GB)
 
-#### Node 2: Storage & Persistent Volumes
+**Kubernetes Labels:**
+```yaml
+node-role.kubernetes.io/monitoring: "true"
+workload: observability
+gpu: nvidia-gtx-1060
+storage-class: metrics
+```
+
+**Planned Workloads:**
+- Prometheus + Grafana (metrics)
+- Loki (log aggregation)
+- Jaeger/Tempo (distributed tracing)
+
+#### Node 2: Storage Services
 **Tower PC**
-- **Hostname:** tower-pc
-- **Primary Roles:** Block storage (NFS), S3-compatible object storage, persistent volumes
-- **Resources:** i7-4790 (4c/8t), 32GB RAM, 9.3TB storage (NVMe + SSDs + HDDs), NVIDIA GTX 1060 (3GB)
-- **Kubernetes Labels:**
-  - `node-role.kubernetes.io/storage=true`
-  - `workload=storage`
-  - `gpu=nvidia-gtx-1060`
-- **Planned Workloads:**
-  - NFS provisioner (bcache-optimized striped SSD tier)
-  - Garage (S3-compatible object storage on ZFS)
-  - Velero (backup/restore)
-- **Storage Architecture:**
-  - **Block Storage (NFS):** M.2 NVMe (128GB) as bcache + 1TB SATA HDD (striped/RAID0)
-    - Performance: High-speed tier for hot data
-    - Use case: Kubernetes PVCs, databases, ephemeral storage
-  - **Object Storage (Garage/S3):** 3x2TB HDD in ZFS RAID-Z1
-    - Capacity: ~4TB usable (after RAID-Z1 overhead)
-    - Use case: Backups, archives, long-term storage, Velero targets
+- **Role:** Persistent storage and backups
+- **CPU:** Intel i7-4790 (4 cores / 8 threads)
+- **RAM:** 32GB
+- **Storage:** 9.3TB total (NVMe + SSDs + HDDs)
+- **GPU:** NVIDIA GTX 1060 (3GB)
+
+**Kubernetes Labels:**
+```yaml
+node-role.kubernetes.io/storage: "true"
+workload: storage
+gpu: nvidia-gtx-1060
+```
+
+**Storage Architecture:**
+- **Block Storage (NFS):** M.2 NVMe (128GB) as bcache + 1TB SATA SSD
+- **Object Storage:** 3x2TB HDD in ZFS RAID-Z1 (~4TB usable)
 
 #### Node 3: General Compute
 **Dell Optiplex 9020**
-- **Hostname:** dell-optiplex-9020
-- **Primary Roles:** Application workloads, databases, CI/CD
-- **Resources:** i7-4790 (4c/8t), 32GB RAM, 512GB SSD
-- **Kubernetes Labels:**
-  - `node-role.kubernetes.io/compute=true`
-  - `workload=general`
-- **Planned Workloads:**
-  - Application deployments (microservices, APIs)
-  - Databases (PostgreSQL, Redis, etc.)
-  - CI/CD runners (GitLab Runner, Jenkins agents)
-  - Development/testing workloads
-  - Web services
-- **Storage Strategy:**
-  - Fast SSD for application ephemeral storage and caching
+- **Role:** Application workloads
+- **CPU:** Intel i7-4790 (4 cores / 8 threads)
+- **RAM:** 32GB
+- **Storage:** 512GB SSD
 
-## Cluster Specifications
+**Kubernetes Labels:**
+```yaml
+node-role.kubernetes.io/compute: "true"
+workload: general
+```
 
-**Total Resources:**
-- Control Plane: 1 node (8GB RAM, 2c/4t)
-- Workers: 3 nodes (96GB RAM, 12c/24t)
-- GPU Nodes: 2 (MSI, Tower)
-- Total Storage: 11.5TB+
+**Workloads:**
+- Application deployments
+- PostgreSQL databases
+- CI/CD runners
+- Web services
 
-## Implementation Phases
+## Total Cluster Resources
 
-### Phase 1: Base Cluster Setup
-- [x] Deploy K8s control plane on Dell Inspiron 15
-  - Run: `ansible-playbook -i ansible/inventory/control-plane.yml ansible/playbooks/setup-control-plane.yml`
-- [x] Join worker nodes to cluster
-  - Run: `ansible-playbook -i ansible/inventory/all-nodes.yml ansible/playbooks/setup-workers.yml`
-- [x] Configure node labels and taints
-  - Automatically applied by setup-workers.yml
-- [x] Verify cluster connectivity and health
-  - Verified: 3 nodes (control-plane + 2 workers) all Ready
-  - All system pods running (etcd, api-server, kube-controller, kube-scheduler, CoreDNS, Calico CNI)
+| Resource | Capacity |
+|----------|----------|
+| Control Plane Nodes | 1 |
+| Worker Nodes | 3 |
+| Total CPU | 14 cores / 28 threads |
+| Total RAM | 104GB |
+| GPU Nodes | 2 (MSI, Tower) |
+| Total Storage | 11.5TB+ |
 
-### Phase 2: Storage Configuration
-- [ ] Set up bcache on Tower PC (M.2 backing 2x1TB SSD stripe)
-- [ ] Configure NFS exports for Kubernetes PVCs
-- [ ] Create storage classes (fast-ssd for NFS, archival-s3 for Garage)
-- [ ] Deploy Garage and configure S3 endpoint
-- [ ] Test persistence across node restarts
-- [ ] Configure etcd backup to NFS
+## Network Architecture
 
-### Phase 3: Observability Stack
-- [ ] Deploy Prometheus on MSI Laptop
-- [ ] Deploy Grafana dashboards
-- [ ] Set up log aggregation (Loki/Elasticsearch)
-- [ ] Configure retention policies (hot/warm/cold storage)
-- [ ] Optional: GPU-based log analytics
+### IP Addressing
+```
+10.0.0.0/24 Network (Home LAN)
++-- 10.0.0.1       Gateway/Router
++-- 10.0.0.226     dell-inspiron-15 (Control Plane)
++-- 10.0.0.XXX     tower-pc (Storage Worker)
++-- 10.0.0.XXX     msi-laptop (Monitoring Worker)
++-- 10.0.0.XXX     dell-optiplex-9020 (Compute Worker)
+```
 
-### Phase 4: GPU Support
-- [ ] Install NVIDIA drivers on MSI and Tower
-- [ ] Deploy NVIDIA device plugin
-- [ ] Test GPU scheduling and allocation
-- [ ] Deploy example GPU workload
+### Kubernetes Networking
 
-### Phase 3b: Networking & Ingress (Critical Path for CI/CD)
-- [ ] Deploy nginx Ingress Controller
-- [ ] Configure ingress for CI/CD pipeline access
-- [ ] Verify HTTP routing works end-to-end
+**CNI Plugin:** Calico
+- Pod network CIDR: 10.244.0.0/16
+- BGP mesh networking between nodes
+- Network policies supported
 
-### Phase 4: Backup & Disaster Recovery
-- [ ] Configure etcd automated backups to NFS
-- [ ] Deploy Velero for application backups
-- [ ] Test restore procedures
+**Service Network:** 10.96.0.0/12
 
-### Phase 5: Additional Services (Future Iterations)
-- [ ] MetalLB load balancer deployment
-- [ ] Cert-manager for TLS (if needed for ingress)
-- [ ] External DNS (optional)
-- [ ] Service mesh evaluation (Istio/Linkerd if use case arises)
+### External Access
 
-## Decisions Made
+**VPS Proxy (Hetzner)**
+- Caddy reverse proxy with automatic TLS
+- Wildcard certificates via Cloudflare DNS-01
+- NetBird VPN tunnel to home network
+
+**Ingress (NGINX Ingress Controller)**
+- HTTP NodePort: 30487
+- HTTPS NodePort: 30356
+
+## Technology Decisions
 
 ### Kubernetes Distribution
-✅ **kubeadm** - Standard, maximum control, good for learning
+**Decision:** kubeadm
+
+**Rationale:**
+- Standard, widely-used approach
+- Maximum control over cluster configuration
+- Best for learning Kubernetes internals
+- No vendor lock-in
+
+### Container Runtime
+**Decision:** containerd
+
+**Rationale:**
+- Kubernetes-native runtime
+- Lower resource overhead than Docker
+- Industry standard for production
 
 ### CNI Plugin
-✅ **Calico** - Well-established, good performance, network policies
+**Decision:** Calico
 
-### Block Storage Backend
-✅ **NFS provisioner** on Tower PC
+**Rationale:**
+- Well-established and battle-tested
+- Excellent performance
+- Built-in network policy support
+- Good documentation
+
+### Storage Strategy
+
+**Block Storage (NFS Provisioner)**
 - Simple and flexible for dev/test
-- High-performance tier: M.2 NVMe + bcache + 2x1TB SSD stripe
-- Kubernetes storage class: "fast-ssd"
+- High-performance tier with bcache
+- Kubernetes storage class: `local-path`
 
-### Object Storage
-✅ **Garage** on Tower PC
-- S3-compatible API for applications
-- Backend: 3x2TB HDD in ZFS RAID-Z1 (~4TB usable)
-- Kubernetes storage class: "archival-s3"
-- Primary use: Velero backups, long-term archives
+**Object Storage (Garage - Planned)**
+- S3-compatible API
+- Backup target for Velero
+- Long-term archive storage
 
-### Monitoring Stack
-✅ **Prometheus + Grafana + Loki** - Full observability with metrics and logs
+### Node Scheduling
 
-## Open Questions & Decisions Remaining
+**Strategy:** Flexible preferences, not hard constraints
 
-### Networking (Still TBD)
-- [ ] Service mesh? (Istio, Linkerd, none for now)
-- [ ] Load balancer? (MetalLB for bare-metal)
-- [ ] Ingress controller? (nginx, traefik, none)
+Nodes have workload preferences (monitoring, storage, compute) but allow scheduling of any workload if resources permit. This maximizes cluster utilization while respecting workload affinity when possible.
 
-### Node Taints/Tolerations
-✅ **Flexible with priority preferences**
-- MSI Laptop: Prefer monitoring workloads, but allow general workloads if needed
-- Tower PC: Prefer storage workloads, but allow general workloads if needed
-- Implementation: Use node affinity/preferences rather than hard taints for flexibility
-- Optiplex: No preferences, general purpose compute
-
-### Networking
-✅ **Phased approach, start simple**
-- **Phase 1 (MVP):** nginx Ingress Controller
-  - Handles CI/CD pipeline and HTTP routing
-  - Easy to deploy, widely used, minimal overhead
-- **Phase 2 (Future):** MetalLB load balancer
-  - Provides external IP assignment for services
-  - Needed for proper ingress load balancing in bare-metal
-- **Phase 3 (Optional):** Service mesh (Istio/Linkerd)
-  - Advanced traffic management, observability
-  - Deploy only if specific use cases warrant it
-
-### Backup Strategy
-✅ **Direct NFS backups (no HA needed)**
-- Control plane etcd backups: Direct to high-speed NFS ("fast-ssd" storage class)
-- Application backups: Velero targets Garage S3 for cost-effective retention
-- Simple approach suitable for dev/test environment
-
-## Network Topology
-```
-10.0.0.0/24 Network
-├── 10.0.0.XXX - tower-pc (Storage Worker)
-├── 10.0.0.XXX - msi-laptop (Monitoring Worker)
-├── 10.0.0.XXX - dell-optiplex-9020 (Compute Worker)
-└── 10.0.0.226 - dell-inspiron-15 (Control Plane)
-
-Note: Machines will use their current DHCP-assigned IPs, which will be
-configured as static during baseline setup.
+```yaml
+# Example: Prefer monitoring node but allow others
+affinity:
+  nodeAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+    - weight: 100
+      preference:
+        matchExpressions:
+        - key: workload
+          operator: In
+          values: ["observability"]
 ```
 
-## Next Steps
-1. Review and refine this architecture plan
-2. Make decisions on open questions
-3. Update Terraform/Ansible configurations to match
-4. Begin Phase 1 implementation
+## Implementation Status
+
+### Phase 1: Base Cluster Setup [COMPLETED]
+- [x] Deploy K8s control plane on Dell Inspiron 15
+- [x] Join worker nodes to cluster
+- [x] Configure node labels and taints
+- [x] Verify cluster connectivity and health
+- [x] Deploy Calico CNI with correct IP autodetection
+
+### Phase 2: Core Infrastructure [COMPLETED]
+- [x] Deploy NGINX Ingress Controller
+- [x] Deploy container registry
+- [x] Configure insecure registry on all nodes
+- [x] Deploy GitHub Actions runners
+
+### Phase 3: Networking & Proxy [COMPLETED]
+- [x] Configure VPS proxy with Caddy
+- [x] Set up NetBird VPN connectivity
+- [x] Configure wildcard TLS certificates
+- [x] Fix nftables rules for K8s forwarding
+
+### Phase 4: Storage Configuration [IN PROGRESS]
+- [x] Deploy local-path-provisioner
+- [ ] Set up bcache on Tower PC
+- [ ] Configure NFS exports for Kubernetes PVCs
+- [ ] Deploy Garage for S3-compatible storage
+- [ ] Configure etcd backup to NFS
+
+### Phase 5: Observability Stack [PLANNED]
+- [ ] Deploy Prometheus on MSI Laptop
+- [ ] Deploy Grafana dashboards
+- [ ] Set up Loki for log aggregation
+- [ ] Configure retention policies
+
+### Phase 6: GPU Support [PLANNED]
+- [ ] Install NVIDIA drivers on MSI and Tower
+- [ ] Deploy NVIDIA device plugin
+- [ ] Test GPU scheduling
+
+### Phase 7: Backup & Disaster Recovery [PLANNED]
+- [ ] Configure etcd automated backups
+- [ ] Deploy Velero for application backups
+- [ ] Document and test restore procedures
+
+## Security Considerations
+
+### Access Control
+- SSH key-based authentication only
+- Kubernetes RBAC for service accounts
+- GitHub runner has scoped permissions
+
+### Network Security
+- NetBird VPN for external access (zero-trust)
+- UFW firewall on all nodes
+- Calico network policies available
+
+### Secrets Management
+- Ansible Vault for infrastructure secrets
+- Kubernetes Secrets for application credentials
+- Infisical for family-dashboard (centralized secrets)
+
+## Operational Notes
+
+### Cluster Management
+
+Access the cluster:
+```bash
+# From local machine with kubeconfig
+export KUBECONFIG=~/.kube/lab-k8s-config
+kubectl get nodes
+
+# Direct SSH to control plane
+ssh bearf@10.0.0.226
+kubectl get nodes
+```
+
+### Backup Considerations
+
+Currently no automated backups. Priority backups needed:
+1. etcd data (cluster state)
+2. PostgreSQL databases
+3. Persistent volume data
+
+### Known Limitations
+
+1. **Single Control Plane:** No HA for control plane components
+2. **Home Network:** Dependent on residential internet reliability
+3. **Power:** No UPS protection documented
+4. **Storage:** Local storage only, no distributed storage yet
+
+## Future Enhancements
+
+Short-term:
+- [ ] Automated database backups
+- [ ] Prometheus/Grafana monitoring
+- [ ] GPU workload support
+
+Long-term:
+- [ ] HA control plane (3 nodes)
+- [ ] Distributed storage (Rook/Ceph or Longhorn)
+- [ ] Service mesh evaluation
+- [ ] Multi-cluster federation

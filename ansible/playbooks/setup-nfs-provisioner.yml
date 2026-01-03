@@ -18,7 +18,7 @@
     helm_chart: "nfs-subdir-external-provisioner/nfs-subdir-external-provisioner"
     helm_release: "nfs-subdir-external-provisioner"
     helm_namespace: "nfs-provisioner"
-    values_file: "{{ playbook_dir }}/../k8s-manifests/nfs-provisioner/values.yaml"
+    values_file: "{{ playbook_dir }}/../kubernetes/nfs-provisioner/values.yaml"
 
   tasks:
     - name: Verify NFS server connectivity

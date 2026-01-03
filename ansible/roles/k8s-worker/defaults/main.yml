@@ -1,0 +1,9 @@
+---
+# Role defaults for k8s-worker
+#
+# This role joins worker nodes to an existing Kubernetes cluster.
+# The join command is obtained from the control plane node during playbook execution.
+#
+# No configurable defaults - the role uses:
+# - k8s_join_command: Retrieved from control plane node (required)
+# - ansible_user: From inventory (for kubeconfig path on control plane)

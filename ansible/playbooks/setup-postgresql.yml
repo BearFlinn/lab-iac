@@ -55,7 +55,7 @@
           - "  SSL Mode: require"
           - ""
           - "Next steps:"
-          - "  1. Apply K8s manifests: kubectl apply -f k8s-manifests/postgresql/"
+          - "  1. Apply K8s manifests: kubectl apply -k kubernetes/base/postgresql"
           - "  2. Create application secrets with database credentials"
           - "  3. Configure applications to use postgresql.database.svc.cluster.local"
 

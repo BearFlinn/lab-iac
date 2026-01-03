@@ -1,203 +1,165 @@
-# Infrastructure as Code Lab
+# Infrastructure as Code Portfolio
 
-This repository contains Infrastructure as Code (IaC) configurations for learning and experimenting with automated infrastructure deployment on Proxmox VE.
+A DevOps portfolio demonstrating infrastructure automation, Kubernetes orchestration, and GitOps practices through a production-ready bare-metal home lab environment.
 
-## What's Inside
+## Current Architecture
 
-This lab includes fully automated deployments using:
-- **Packer**: Building Debian VM templates
-- **Terraform**: Provisioning VMs on Proxmox
-- **Ansible**: Configuration management and application deployment
+This repository manages a **bare-metal Kubernetes cluster** built on repurposed hardware, showcasing real-world infrastructure automation skills applicable to cloud and on-premises environments.
 
-## Projects
+```
+Internet Traffic
+      |
+      v
++------------------+
+|   Hetzner VPS    |  Caddy reverse proxy with auto TLS
+|   (proxy-vps)    |  Wildcard certificates via Cloudflare DNS-01
++--------+---------+
+         |
+    NetBird VPN
+         |
+         v
++------------------+     +------------------+     +------------------+
+| Dell Inspiron 15 |     |    MSI Laptop    |     |     Tower PC     |
+| (Control Plane)  |     |     (Worker)     |     |     (Worker)     |
+| i3-7100U, 8GB    |     | i7-6700HQ, 32GB  |     | i7-4790, 32GB    |
+|                  |     | GTX 1060 GPU     |     | GTX 1060 GPU     |
++--------+---------+     +--------+---------+     +--------+---------+
+         |                        |                        |
+         +------------------------+------------------------+
+                                  |
+                     +------------+------------+
+                     |   Dell Optiplex 9020   |
+                     |       (Worker)         |
+                     |    i7-4790, 32GB       |
+                     +------------------------+
+```
 
-### 1. Kubernetes 4-Node Cluster
-
-A production-ready, fully automated Kubernetes cluster deployment with:
+**Cluster Specifications:**
 - 1 control plane + 3 worker nodes
-- kubeadm-based cluster with Calico CNI
-- 2 CPU cores, 4GB RAM per node
-- Completely automated from VM creation to cluster ready
+- 104GB total RAM, 14 cores / 28 threads
+- 2 NVIDIA GPUs available for compute workloads
+- Local NFS storage provisioner
+- Self-hosted container registry
 
-**Quick Start:**
-```bash
-./deploy-k8s-cluster.sh
-```
+## Technologies Demonstrated
 
-**Documentation:** [docs/K8S_CLUSTER_SETUP.md](docs/K8S_CLUSTER_SETUP.md)
-
-### 2. Basic Web Servers (Dev Environment)
-
-Simple 2-node web server setup for learning Terraform basics.
-
-**Deploy:**
-```bash
-cd terraform/environments/dev
-terraform init
-terraform apply
-```
+| Category | Technologies |
+|----------|-------------|
+| **Container Orchestration** | Kubernetes (kubeadm), Helm, Kustomize |
+| **Configuration Management** | Ansible (roles, playbooks, vault) |
+| **Infrastructure Provisioning** | Terraform, Packer (archived) |
+| **CI/CD** | GitHub Actions, self-hosted runners |
+| **Networking** | Calico CNI, NGINX Ingress, NetBird VPN |
+| **Security** | cert-manager, Let's Encrypt, Ansible Vault |
+| **Observability** | Prometheus, Grafana (planned) |
+| **Container Runtime** | containerd, Docker |
 
 ## Repository Structure
 
 ```
 lab-iac/
-├── packer/                      # VM image building
-│   ├── debian-proxmox.pkr.hcl  # Debian base template builder
-│   └── http/                    # Preseed configs
-│
-├── terraform/
-│   ├── modules/                 # Reusable Terraform modules
-│   │   ├── compute/            # VM provisioning module
-│   │   ├── storage/            # (Future) Storage module
-│   │   └── networking/         # (Future) Networking module
-│   └── environments/           # Environment-specific configs
-│       ├── dev/                # Development environment
-│       ├── k8s-cluster/        # Kubernetes cluster
-│       ├── staging/            # (Future) Staging environment
-│       └── prod/               # (Future) Production environment
-│
-├── ansible/
-│   ├── inventory/              # Ansible inventories
-│   │   └── terraform-inventory.sh  # Dynamic inventory from Terraform
-│   ├── roles/                  # Ansible roles
-│   │   ├── k8s-prerequisites/  # Kubernetes node preparation
-│   │   ├── k8s-packages/       # Install kubeadm, kubelet, kubectl
-│   │   ├── k8s-control-plane/  # Initialize control plane
-│   │   └── k8s-worker/         # Join worker nodes
-│   └── playbooks/              # Ansible playbooks
-│       ├── k8s-cluster-setup.yml  # Kubernetes deployment
-│       └── k8s-verify.yml         # Cluster verification
-│
-├── docs/                       # Documentation
-│   ├── K8S_CLUSTER_SETUP.md   # Kubernetes cluster guide
-│   ├── PROXMOX_SETUP.md       # Proxmox API setup
-│   └── DEPLOYMENT_WORKFLOW.md # General workflow
-│
-├── deploy-k8s-cluster.sh      # One-command K8s deployment
-└── destroy-k8s-cluster.sh     # One-command K8s cleanup
+|-- ansible/                    # Configuration management
+|   |-- inventory/              # Host definitions (control-plane, workers, VPS)
+|   |-- group_vars/             # Variables and encrypted secrets
+|   |-- playbooks/              # Automation playbooks
+|   |-- roles/                  # Reusable Ansible roles
+|   `-- templates/              # Jinja2 templates for configs
+|
+|-- kubernetes/                 # Kubernetes manifests (Kustomize-ready)
+|   |-- github-runner/          # Self-hosted Actions runner
+|   |-- ingress-nginx/          # Ingress controller config
+|   |-- nfs-provisioner/        # Local storage provisioner
+|   |-- postgresql/             # Database deployments
+|   `-- registry/               # Private container registry
+|
+|-- docs/                       # Documentation
+|   |-- README.md               # Documentation index
+|   |-- ARCHITECTURE.md         # System design and decisions
+|   |-- DEPLOYMENT.md           # Deployment procedures
+|   `-- RUNBOOKS.md             # Operational procedures
+|
+|-- scripts/                    # Automation scripts
+|-- docker/                     # Container build contexts
+|-- packer/                     # VM image building (archived)
+`-- terraform/                  # Cloud provisioning (archived)
 ```
 
-## Prerequisites
+## What This Demonstrates
 
-### Required Tools
-- **Terraform** >= 0.13
-- **Ansible** >= 2.9
-- **Packer** >= 1.8
-- **jq** (for dynamic inventory)
-- SSH key pair at `~/.ssh/id_ed25519`
+### Infrastructure Automation
+- **Idempotent configuration**: Ansible playbooks safely re-runnable
+- **Secret management**: Ansible Vault for sensitive data
+- **Dynamic inventory**: Automatic host discovery
 
-### Proxmox Setup
-- Proxmox VE 7.x or 8.x
-- API token configured (see [docs/PROXMOX_SETUP.md](docs/PROXMOX_SETUP.md))
-- Network bridge `vmbr0` configured
-- Storage pool `local-lvm` available
+### Kubernetes Operations
+- **Cluster lifecycle**: Automated cluster provisioning with kubeadm
+- **GitOps patterns**: Application repos contain their own Helm charts
+- **Storage management**: NFS provisioner for persistent volumes
+- **Ingress routing**: Domain-based routing with TLS termination
 
-## Getting Started
+### CI/CD Pipeline
+- **Self-hosted runners**: GitHub Actions runners in Kubernetes
+- **Private registry**: Push/pull images without external dependencies
+- **Automated deployments**: Push to deploy via Helm
 
-### 1. Build Base Debian Template
+### Networking & Security
+- **Zero-trust networking**: NetBird VPN for secure connectivity
+- **Automatic TLS**: Let's Encrypt with DNS-01 challenges
+- **Firewall automation**: nftables rules for K8s traffic
 
+## Quick Start
+
+### Prerequisites
+- Ansible 2.9+
+- kubectl configured for cluster access
+- SSH access to cluster nodes
+
+### Deploy to Existing Cluster
 ```bash
-cd packer
-packer build debian-proxmox.pkr.hcl
+# Configure an application
+cd /path/to/your-app
+helm upgrade --install app-name ./helm --wait
+
+# View deployed services
+kubectl get ingress -A
 ```
 
-This creates VM template ID 9000 in Proxmox.
-
-### 2. Deploy Kubernetes Cluster
-
+### Provision New Node
 ```bash
-# Automated deployment
-./deploy-k8s-cluster.sh
-
-# Or manual steps:
-cd terraform/environments/k8s-cluster
-terraform init && terraform apply
-
-cd ../../ansible
-ansible-playbook -i inventory/terraform-inventory.sh playbooks/k8s-cluster-setup.yml
+# Run baseline setup on a new machine
+ansible-playbook -i ansible/inventory/all-nodes.yml \
+  ansible/playbooks/baseline-setup.yml --limit new-node -v
 ```
-
-### 3. Access Your Cluster
-
-```bash
-# SSH to control plane
-ssh debian@<control-plane-ip>
-kubectl get nodes
-
-# Or copy kubeconfig locally
-scp debian@<control-plane-ip>:~/.kube/config ~/.kube/k8s-cluster-config
-export KUBECONFIG=~/.kube/k8s-cluster-config
-kubectl get nodes
-```
-
-## Key Features
-
-### Fully Automated Deployment
-- Zero manual steps from VM creation to working cluster
-- Dynamic inventory automatically pulls VM IPs from Terraform
-- Idempotent Ansible roles can be re-run safely
-
-### Production Best Practices
-- Modular Terraform code with reusable modules
-- Environment separation (dev, k8s-cluster, staging, prod)
-- Infrastructure as Code with version control
-- Automated testing with verification playbooks
-
-### Flexible Architecture
-- Easy to add more worker nodes
-- Simple to create new environments
-- Extensible module system
-- Well-documented and commented
-
-## Learning Path
-
-1. **Start with Dev Environment**: Deploy simple web servers to learn Terraform basics
-2. **Build Templates with Packer**: Understand image building and automation
-3. **Deploy Kubernetes**: See the full power of IaC with complex multi-node deployment
-4. **Experiment**: Add monitoring, storage, ingress, etc.
 
 ## Documentation
 
-- [Kubernetes Cluster Setup](docs/K8S_CLUSTER_SETUP.md) - Complete K8s deployment guide
-- [Proxmox Setup](docs/PROXMOX_SETUP.md) - Proxmox API configuration
-- [Deployment Workflow](docs/DEPLOYMENT_WORKFLOW.md) - General Packer + Terraform workflow
+| Document | Description |
+|----------|-------------|
+| [docs/README.md](docs/README.md) | Documentation index and reading guide |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System architecture and design decisions |
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Deployment procedures and patterns |
+| [docs/RUNBOOKS.md](docs/RUNBOOKS.md) | Operational runbooks and troubleshooting |
+| [ansible/README.md](ansible/README.md) | Ansible configuration guide |
 
-## Common Commands
+## Archived Components
 
-```bash
-# Deploy Kubernetes cluster
-./deploy-k8s-cluster.sh
+The `packer/` and `terraform/` directories contain historical work from earlier phases when this lab ran on Proxmox VMs. These are preserved as learning artifacts demonstrating:
+- VM template building with Packer
+- Infrastructure provisioning with Terraform
+- Cloud-init automation
 
-# Destroy Kubernetes cluster
-./destroy-k8s-cluster.sh
+The current focus is bare-metal Kubernetes, which better reflects production environments while reducing resource overhead.
 
-# View Terraform outputs
-cd terraform/environments/k8s-cluster
-terraform output
+## Active Services
 
-# Run Ansible playbook
-cd ansible
-ansible-playbook -i inventory/terraform-inventory.sh playbooks/k8s-cluster-setup.yml
+Applications deployed to this cluster (managed in separate repositories):
+- **Landing Page**: Static portfolio site
+- **Resume Site**: Interactive resume with PostgreSQL backend
+- **Coaching Website**: Client-facing business application
+- **Family Dashboard**: Household management app
 
-# Verify cluster
-ansible-playbook -i inventory/terraform-inventory.sh playbooks/k8s-verify.yml
-```
-
-## Future Enhancements
-
-- [ ] HA control plane (3 control plane nodes)
-- [ ] MetalLB for LoadBalancer services
-- [ ] Persistent storage (Longhorn or Rook Ceph)
-- [ ] Ingress controller (nginx-ingress)
-- [ ] Monitoring stack (Prometheus + Grafana)
-- [ ] GitOps with ArgoCD or Flux
-- [ ] CI/CD pipeline integration
-- [ ] Multi-cluster federation
-
-## Contributing
-
-This is a personal learning lab. Feel free to fork and adapt for your own use!
+Each application repository contains its own Helm chart following the deployment pattern documented in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ## License
 
-MIT License - Free to use for learning and experimentation.
+MIT License - This is a personal learning and portfolio project. Feel free to reference or adapt for your own infrastructure projects.

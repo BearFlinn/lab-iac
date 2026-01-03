@@ -40,7 +40,7 @@ helm install nfs-subdir-external-provisioner \
   nfs-subdir-external-provisioner/nfs-subdir-external-provisioner \
   --namespace nfs-provisioner \
   --create-namespace \
-  --values k8s-manifests/nfs-provisioner/values.yaml
+  --values kubernetes/nfs-provisioner/values.yaml
 ```
 
 ## Verification

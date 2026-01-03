@@ -75,4 +75,16 @@ logs/
 .claude/
 packer/http/preseed.cfg
 ansible/group_vars/all/vault.yml
-k8s-manifests/github-runner/values.yaml
+kubernetes/github-runner/values.yaml
+
+# Kustomize
+kubernetes/overlays/*/secrets/
+
+# Terraform (in archive)
+archive/**/.terraform/
+archive/**/*.tfstate
+archive/**/*.tfstate.*
+archive/**/*.tfvars
+
+# Temporary files
+*.bak
