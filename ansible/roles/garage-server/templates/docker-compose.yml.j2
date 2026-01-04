@@ -1,0 +1,21 @@
+---
+services:
+  garage:
+    image: {{ garage_image }}
+    container_name: garage
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - {{ garage_config_dir }}/garage.toml:/etc/garage.toml:ro
+      - {{ garage_config_dir }}/rpc_secret:/etc/garage/rpc_secret:ro
+      - {{ garage_config_dir }}/admin_token:/etc/garage/admin_token:ro
+      - {{ garage_config_dir }}/metrics_token:/etc/garage/metrics_token:ro
+      - {{ garage_metadata_dir }}:/var/lib/garage/meta
+      - {{ garage_data_dir }}:/var/lib/garage/data
+    deploy:
+      resources:
+        limits:
+          memory: {{ garage_memory_limit }}
+          cpus: "{{ garage_cpu_limit }}"
+        reservations:
+          memory: {{ garage_memory_reserve }}

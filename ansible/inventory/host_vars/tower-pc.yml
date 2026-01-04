@@ -58,3 +58,14 @@ postgresql_users:
 
 # Use values from postgresql_config
 postgresql_databases: "{{ postgresql_config.databases }}"
+
+# Garage S3 Object Storage Configuration
+garage_config:
+  data_dir: "/storage/garage"
+  metadata_dir: "/var/lib/garage/meta"
+  data_capacity: "4T"
+  description: "S3-compatible object storage for backups and media"
+  use_cases:
+    - application_backups
+    - media_storage
+    - general_purpose_s3

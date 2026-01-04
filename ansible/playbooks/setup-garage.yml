@@ -1,0 +1,156 @@
+---
+# Deploy Garage S3 Object Storage on tower-pc
+# Usage: ansible-playbook -i inventory/all-nodes.yml playbooks/setup-garage.yml -v
+#
+# Prerequisites:
+# - ZFS pool storage/garage must exist (run tower-storage-setup.yml first)
+# - .vault_pass file in repo root
+#
+# This playbook:
+# 1. Deploys Garage as a Docker container on tower-pc
+# 2. Configures storage (SSD metadata, ZFS data)
+# 3. Sets up systemd service with resource isolation
+# 4. Creates Kubernetes Service/Endpoints for pod access
+
+- name: Deploy Garage S3 Object Storage
+  hosts: tower-pc
+  become: yes
+  gather_facts: yes
+
+  vars_files:
+    - ../group_vars/all/vault.yml
+
+  vars:
+    garage_rpc_secret: "{{ vault_garage_rpc_secret }}"
+    garage_admin_token: "{{ vault_garage_admin_token }}"
+    garage_metrics_token: "{{ vault_garage_metrics_token }}"
+    garage_data_capacity: "4T"
+
+  roles:
+    - garage-server
+
+  post_tasks:
+    - name: Verify Garage is healthy
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ garage_admin_port | default(3903) }}/health"
+        method: GET
+        status_code: 200
+      register: garage_healthy
+      retries: 5
+      delay: 5
+      until: garage_healthy.status == 200
+
+    - name: Get Garage status
+      ansible.builtin.command:
+        cmd: docker exec garage garage status
+      register: garage_status
+      changed_when: false
+
+    - name: Display Garage status
+      ansible.builtin.debug:
+        msg: "{{ garage_status.stdout_lines }}"
+
+    - name: Display connection information
+      ansible.builtin.debug:
+        msg:
+          - "=== Garage S3 Deployment Complete ==="
+          - "Host: {{ ansible_host }}"
+          - "S3 API: http://{{ ansible_host }}:{{ garage_s3_port | default(3900) }}"
+          - "S3 Region: {{ garage_s3_region | default('lab-garage') }}"
+          - ""
+          - "From K8s pods: garage.storage.svc.cluster.local:3900"
+          - ""
+          - "Next steps:"
+          - "  1. Apply K8s manifests: kubectl apply -k kubernetes/base/garage"
+          - "  2. Create bucket: docker exec garage garage bucket create <name>"
+          - "  3. Create key: docker exec garage garage key create <name>"
+          - "  4. Allow access: docker exec garage garage bucket allow <bucket> --read --write --key <key-id>"
+
+- name: Configure Kubernetes Garage Access
+  hosts: k8s_control_plane
+  become: yes
+  gather_facts: yes
+
+  vars:
+    garage_host: "{{ hostvars['tower-pc']['ansible_host'] }}"
+
+  tasks:
+    - name: Check if python3-kubernetes is available
+      ansible.builtin.apt:
+        name: python3-kubernetes
+        state: present
+        update_cache: yes
+      ignore_errors: yes
+      register: k8s_module_install
+
+    - name: Create storage namespace
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: storage
+            labels:
+              name: storage
+              managed-by: ansible
+      when: k8s_module_install is succeeded
+
+    - name: Deploy Garage service
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: garage
+            namespace: storage
+            labels:
+              app: garage
+              managed-by: ansible
+          spec:
+            type: ClusterIP
+            clusterIP: None
+            ports:
+              - name: s3
+                port: 3900
+                targetPort: 3900
+                protocol: TCP
+              - name: web
+                port: 3902
+                targetPort: 3902
+                protocol: TCP
+      when: k8s_module_install is succeeded
+
+    - name: Deploy Garage endpoints
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Endpoints
+          metadata:
+            name: garage
+            namespace: storage
+            labels:
+              app: garage
+              managed-by: ansible
+          subsets:
+            - addresses:
+                - ip: "{{ garage_host }}"
+              ports:
+                - name: s3
+                  port: 3900
+                  protocol: TCP
+                - name: web
+                  port: 3902
+                  protocol: TCP
+      when: k8s_module_install is succeeded
+
+    - name: Fallback - Apply K8s manifests with kubectl
+      when: k8s_module_install is failed
+      block:
+        - name: Display manual instruction
+          ansible.builtin.debug:
+            msg:
+              - "python3-kubernetes not available. Apply manifests manually:"
+              - "  kubectl apply -k kubernetes/base/garage"

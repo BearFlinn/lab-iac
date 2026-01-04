@@ -1,0 +1,44 @@
+---
+# Garage Server Role - Default Configuration
+
+# Garage version
+garage_version: "v2.1.0"
+garage_image: "dxflrs/garage:{{ garage_version }}"
+
+# Network configuration
+garage_listen_address: "0.0.0.0"
+garage_s3_port: 3900
+garage_rpc_port: 3901
+garage_web_port: 3902
+garage_admin_port: 3903
+
+# Storage directories
+garage_config_dir: "/etc/garage"
+garage_metadata_dir: "/var/lib/garage/meta"
+garage_data_dir: "/storage/garage"
+
+# Database engine (sqlite for single-node, lmdb for multi-node)
+garage_db_engine: "sqlite"
+
+# Replication (1 for single-node)
+garage_replication_factor: 1
+
+# Region for S3 API
+garage_s3_region: "lab-garage"
+
+# Resource limits
+garage_memory_limit: "2G"
+garage_memory_reserve: "512M"
+garage_cpu_limit: "2"
+
+# Compression (zstd level 1-22, or 0 for none)
+garage_compression_level: 3
+
+# Block size for object chunking
+garage_block_size: "1MiB"
+
+# Data capacity for layout assignment
+garage_data_capacity: "4T"
+
+# Firewall configuration
+garage_configure_firewall: true

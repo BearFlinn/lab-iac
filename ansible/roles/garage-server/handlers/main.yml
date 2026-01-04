@@ -1,0 +1,12 @@
+---
+# Garage Server Role - Handlers
+
+- name: restart garage
+  ansible.builtin.systemd:
+    name: garage
+    state: restarted
+    daemon_reload: yes
+
+- name: reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: yes

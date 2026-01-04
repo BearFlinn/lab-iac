@@ -1,0 +1,220 @@
+---
+# Garage Server Role - Main Tasks
+# Deploys Garage S3 as a Docker container
+
+- name: Install required packages
+  ansible.builtin.apt:
+    name:
+      - docker.io
+    state: present
+    update_cache: yes
+
+- name: Ensure Docker service is running
+  ansible.builtin.systemd:
+    name: docker
+    enabled: yes
+    state: started
+
+- name: Create Garage directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+  loop:
+    - "{{ garage_config_dir }}"
+    - "{{ garage_metadata_dir }}"
+
+- name: Verify ZFS data directory exists
+  ansible.builtin.command:
+    cmd: zfs list storage/garage
+  register: zfs_check
+  changed_when: false
+  failed_when: false
+
+- name: Fail if ZFS dataset does not exist
+  ansible.builtin.fail:
+    msg: "ZFS dataset storage/garage does not exist. Run tower-storage-setup.yml first."
+  when: zfs_check.rc != 0
+
+- name: Get ZFS mount point
+  ansible.builtin.command:
+    cmd: zfs get -H -o value mountpoint storage/garage
+  register: zfs_mountpoint
+  changed_when: false
+  when: zfs_check.rc == 0
+
+- name: Set garage data directory from ZFS mount
+  ansible.builtin.set_fact:
+    garage_data_dir: "{{ zfs_mountpoint.stdout | trim }}"
+  when: zfs_check.rc == 0 and zfs_mountpoint.stdout | trim != 'none'
+
+- name: Ensure ZFS mount point has correct permissions
+  ansible.builtin.file:
+    path: "{{ garage_data_dir }}"
+    state: directory
+    mode: '0755'
+
+- name: Deploy RPC secret file
+  ansible.builtin.copy:
+    content: "{{ garage_rpc_secret }}"
+    dest: "{{ garage_config_dir }}/rpc_secret"
+    mode: '0600'
+  no_log: true
+  notify: restart garage
+
+- name: Deploy admin token file
+  ansible.builtin.copy:
+    content: "{{ garage_admin_token }}"
+    dest: "{{ garage_config_dir }}/admin_token"
+    mode: '0600'
+  no_log: true
+  notify: restart garage
+
+- name: Deploy metrics token file
+  ansible.builtin.copy:
+    content: "{{ garage_metrics_token }}"
+    dest: "{{ garage_config_dir }}/metrics_token"
+    mode: '0600'
+  no_log: true
+  notify: restart garage
+
+- name: Deploy garage.toml configuration
+  ansible.builtin.template:
+    src: garage.toml.j2
+    dest: "{{ garage_config_dir }}/garage.toml"
+    mode: '0640'
+  notify: restart garage
+
+- name: Deploy docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ garage_config_dir }}/docker-compose.yml"
+    mode: '0644'
+  notify: restart garage
+
+- name: Create systemd slice for resource isolation
+  ansible.builtin.copy:
+    content: |
+      [Unit]
+      Description=Garage S3 Object Storage Resource Slice
+      Before=slices.target
+
+      [Slice]
+      MemoryHigh={{ garage_memory_limit }}
+      CPUQuota={{ garage_cpu_limit | int * 100 }}%
+    dest: /etc/systemd/system/garage.slice
+    mode: '0644'
+  notify: reload systemd
+
+- name: Deploy Garage systemd service
+  ansible.builtin.copy:
+    content: |
+      [Unit]
+      Description=Garage S3 Object Storage (Docker Compose)
+      After=docker.service network-online.target
+      Requires=docker.service
+      Wants=network-online.target
+
+      [Service]
+      Type=simple
+      WorkingDirectory={{ garage_config_dir }}
+      Slice=garage.slice
+
+      ExecStartPre=/usr/bin/docker compose pull
+      ExecStart=/usr/bin/docker compose up --remove-orphans
+      ExecStop=/usr/bin/docker compose down
+      ExecReload=/usr/bin/docker compose restart
+
+      Restart=always
+      RestartSec=10
+
+      [Install]
+      WantedBy=multi-user.target
+    dest: /etc/systemd/system/garage.service
+    mode: '0644'
+  notify: reload systemd
+
+- name: Flush handlers to reload systemd
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable and start Garage service
+  ansible.builtin.systemd:
+    name: garage
+    enabled: yes
+    state: started
+    daemon_reload: yes
+
+- name: Wait for Garage admin API to be reachable
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ garage_admin_port }}/health"
+    method: GET
+    status_code: [200, 503]
+  register: garage_reachable
+  retries: 30
+  delay: 2
+  until: garage_reachable.status in [200, 503]
+
+- name: Get Garage node ID
+  ansible.builtin.command:
+    cmd: docker exec garage /garage node id -q
+  register: garage_node_id
+  changed_when: false
+
+- name: Check current layout
+  ansible.builtin.command:
+    cmd: docker exec garage /garage layout show
+  register: garage_layout
+  changed_when: false
+  failed_when: false
+
+- name: Configure Garage layout (single-node)
+  ansible.builtin.shell: |
+    NODE_ID=$(docker exec garage /garage node id -q | cut -c1-16)
+    docker exec garage /garage layout assign -z dc1 -c {{ garage_data_capacity }} "$NODE_ID"
+  when: "'NO ROLE ASSIGNED' in garage_layout.stdout or 'No nodes' in garage_layout.stdout"
+  register: layout_assign
+
+- name: Apply Garage layout
+  ansible.builtin.shell: |
+    # Extract the expected version from the "garage layout apply --version N" hint
+    EXPECTED=$(docker exec garage /garage layout show 2>&1 | grep -o 'apply --version [0-9]*' | grep -o '[0-9]*' || echo "1")
+    docker exec garage /garage layout apply --version $EXPECTED
+  when: layout_assign is changed
+  register: layout_apply
+
+- name: Wait for Garage to be fully healthy
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ garage_admin_port }}/health"
+    method: GET
+    status_code: 200
+  register: garage_health
+  retries: 30
+  delay: 2
+  until: garage_health.status == 200
+
+- name: Configure firewall for Garage
+  when: garage_configure_firewall
+  block:
+    - name: Check if ufw is active
+      ansible.builtin.command: ufw status
+      register: ufw_status
+      changed_when: false
+      failed_when: false
+
+    - name: Allow Garage S3 API from host network
+      community.general.ufw:
+        rule: allow
+        port: "{{ garage_s3_port }}"
+        proto: tcp
+        from_ip: "10.0.0.0/24"
+        comment: "Garage S3 API - Host network"
+      when: "'active' in ufw_status.stdout | lower"
+
+    - name: Allow Garage S3 API from pod network
+      community.general.ufw:
+        rule: allow
+        port: "{{ garage_s3_port }}"
+        proto: tcp
+        from_ip: "10.244.0.0/16"
+        comment: "Garage S3 API - K8s pod network"
+      when: "'active' in ufw_status.stdout | lower"

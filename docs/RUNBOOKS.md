@@ -371,6 +371,103 @@ kubectl cp backup.sql app-name-db-0:/tmp/
 kubectl exec -it app-name-db-0 -- psql -U postgres -d database_name -f /tmp/backup.sql
 ```
 
+## Garage S3 Operations
+
+### Check Garage Status
+
+```bash
+# Health check
+ssh tower-pc 'curl -s http://127.0.0.1:3903/health'
+
+# Full status
+ssh tower-pc 'docker exec garage /garage status'
+
+# View layout
+ssh tower-pc 'docker exec garage /garage layout show'
+```
+
+### Bucket Management
+
+```bash
+# List buckets
+ssh tower-pc 'docker exec garage /garage bucket list'
+
+# Create bucket
+ssh tower-pc 'docker exec garage /garage bucket create my-bucket'
+
+# View bucket info
+ssh tower-pc 'docker exec garage /garage bucket info my-bucket'
+
+# Delete bucket (must be empty)
+ssh tower-pc 'docker exec garage /garage bucket delete my-bucket'
+```
+
+### Key Management
+
+```bash
+# List keys
+ssh tower-pc 'docker exec garage /garage key list'
+
+# Create key
+ssh tower-pc 'docker exec garage /garage key create my-key'
+# Save the output - contains key ID and secret
+
+# View key info
+ssh tower-pc 'docker exec garage /garage key info <KEY_ID>'
+
+# Grant bucket access
+ssh tower-pc 'docker exec garage /garage bucket allow my-bucket --read --write --key <KEY_ID>'
+
+# Revoke access
+ssh tower-pc 'docker exec garage /garage bucket deny my-bucket --read --write --key <KEY_ID>'
+
+# Delete key
+ssh tower-pc 'docker exec garage /garage key delete <KEY_ID>'
+```
+
+### Garage Service Management
+
+```bash
+# Restart service
+ssh tower-pc 'sudo systemctl restart garage'
+
+# View logs
+ssh tower-pc 'journalctl -u garage -f'
+
+# Check container logs
+ssh tower-pc 'docker logs garage --tail 100'
+```
+
+### Test S3 Connectivity
+
+```bash
+# From local machine with AWS CLI
+export AWS_ACCESS_KEY_ID=<key>
+export AWS_SECRET_ACCESS_KEY=<secret>
+export AWS_ENDPOINT_URL=http://10.0.0.249:3900
+export AWS_REGION=lab-garage
+
+aws s3 ls
+aws s3 ls s3://my-bucket/
+
+# From Kubernetes pod
+kubectl run s3-test --rm -it --restart=Never \
+  --image=amazon/aws-cli \
+  --env="AWS_ACCESS_KEY_ID=<key>" \
+  --env="AWS_SECRET_ACCESS_KEY=<secret>" \
+  --env="AWS_ENDPOINT_URL=http://garage.storage.svc.cluster.local:3900" \
+  -- s3 ls
+```
+
+### Garage Troubleshooting
+
+| Issue | Debug Command |
+|-------|--------------|
+| Service down | `ssh tower-pc 'systemctl status garage'` |
+| Container restarting | `ssh tower-pc 'docker logs garage'` |
+| S3 connection refused | `ssh tower-pc 'curl http://127.0.0.1:3900'` |
+| Access denied | `ssh tower-pc 'docker exec garage /garage key info <KEY_ID>'` |
+
 ## VPS Proxy Operations
 
 ### Check Caddy Status
@@ -464,6 +561,8 @@ kubectl get pvc -A
 | Ingress Controller | `kubectl get pods -n ingress-nginx` |
 | Container Registry | `curl http://10.0.0.226:32346/v2/_catalog` |
 | GitHub Runners | `kubectl get runners -n actions-runner-system` |
+| Garage S3 | `ssh tower-pc 'curl -s http://127.0.0.1:3903/health'` |
+| PostgreSQL | `ssh tower-pc 'docker exec postgresql pg_isready'` |
 
 ## Contacts and Escalation
 

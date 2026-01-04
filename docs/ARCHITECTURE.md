@@ -196,10 +196,11 @@ workload: general
 - High-performance tier with bcache
 - Kubernetes storage class: `local-path`
 
-**Object Storage (Garage - Planned)**
-- S3-compatible API
+**Object Storage (Garage)**
+- S3-compatible API on tower-pc (10.0.0.249:3900)
+- ~4TB usable (ZFS RAID-Z1 on 3x2TB HDDs)
 - Backup target for Velero
-- Long-term archive storage
+- Media storage and application assets
 
 ### Node Scheduling
 
@@ -243,9 +244,9 @@ affinity:
 
 ### Phase 4: Storage Configuration [IN PROGRESS]
 - [x] Deploy local-path-provisioner
+- [x] Configure NFS exports for Kubernetes PVCs
+- [x] Deploy Garage for S3-compatible storage
 - [ ] Set up bcache on Tower PC
-- [ ] Configure NFS exports for Kubernetes PVCs
-- [ ] Deploy Garage for S3-compatible storage
 - [ ] Configure etcd backup to NFS
 
 ### Phase 5: Observability Stack [PLANNED]
