@@ -23,19 +23,34 @@ rules:
     resources: ["deployments", "statefulsets", "replicasets"]
     verbs: ["get", "list", "create", "update", "patch", "delete"]
   
-  # Allow service operations
+  # Allow service operations (watch needed for Helm RBAC grants)
   - apiGroups: [""]
     resources: ["services", "configmaps", "secrets", "persistentvolumeclaims"]
-    verbs: ["get", "list", "create", "update", "patch", "delete"]
-  
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
   # Allow ingress operations
   - apiGroups: ["networking.k8s.io"]
     resources: ["ingresses"]
     verbs: ["get", "list", "create", "update", "patch", "delete"]
-  
-  # Allow pod operations for debugging
+
+  # Allow pod operations (full CRUD for apps that manage pods, exec for troubleshooting)
   - apiGroups: [""]
-    resources: ["pods", "pods/log"]
+    resources: ["pods", "pods/log", "pods/exec"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  # Allow serviceaccount management (for Helm charts that create service accounts)
+  - apiGroups: [""]
+    resources: ["serviceaccounts"]
+    verbs: ["get", "list", "create", "update", "patch", "delete"]
+
+  # Allow RBAC management (for Helm charts that create roles/rolebindings)
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["roles", "rolebindings"]
+    verbs: ["get", "list", "create", "update", "patch", "delete"]
+
+  # Allow event watching (for monitoring deployments)
+  - apiGroups: [""]
+    resources: ["events"]
     verbs: ["get", "list", "watch"]
 
 ---
