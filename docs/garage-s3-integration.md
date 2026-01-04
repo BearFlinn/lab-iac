@@ -441,6 +441,72 @@ kubectl exec -it deployment/my-app -- date
 ssh tower-pc date
 ```
 
+### Terraform S3 Backend Compatibility Issues
+
+**Symptom:** `AuthorizationHeaderMalformed: Authorization header malformed, unexpected scope: YYYYMMDD/region/s3/aws4_request`
+
+**Affected Versions:**
+- Garage v2.1.0
+- Terraform >= 1.6.0 with S3 backend
+
+**Root Cause:**
+Garage v2.1.0 has strict AWS Signature Version 4 scope validation that doesn't accept the scope format sent by Terraform's S3 backend. Terraform sends scope strings like `20260104/us-east-1/s3/aws4_request` which Garage rejects as malformed.
+
+**Known Issues:**
+- Terraform `backend "s3"` fails during `terraform init` with scope validation errors
+- Affects all Terraform configurations using S3 backend with Garage
+- Issue persists regardless of region configuration or endpoint settings
+- Using `skip_credentials_validation`, `use_path_style`, and other compatibility flags doesn't resolve the issue
+
+**Workarounds:**
+
+1. **Use PostgreSQL Backend (Recommended for Terraform state)**
+   ```hcl
+   terraform {
+     backend "pg" {
+       conn_str    = "postgres://user:pass@host:port/dbname"
+       schema_name = "terraform_remote_state"
+     }
+   }
+   ```
+
+   Benefits:
+   - Native state locking
+   - No signature compatibility issues
+   - Works with existing PostgreSQL infrastructure
+
+2. **Use HTTP Backend**
+   ```hcl
+   terraform {
+     backend "http" {
+       address = "https://your-state-server.example.com/terraform.tfstate"
+     }
+   }
+   ```
+
+   Note: Requires separate HTTP state storage service
+
+3. **Upgrade Garage (To Be Tested)**
+   - Garage versions >= 0.9.x may have improved AWS SDK compatibility
+   - Test with newer Garage versions when upgrading
+   - Check Garage changelog for AWS Signature V4 fixes
+
+**Application Code (boto3, AWS SDKs):**
+- Most AWS SDK libraries work fine with Garage v2.1.0
+- Only Terraform's S3 backend is affected
+- Standard S3 operations (GetObject, PutObject, ListBuckets) work normally
+
+**Future Investigation:**
+- [ ] Test Terraform S3 backend with Garage v0.9.x or later
+- [ ] Check if Garage configuration options can relax signature validation
+- [ ] Investigate if Terraform can use AWS Signature V2 instead of V4
+- [ ] Consider contributing fix to Garage or Terraform upstream
+
+**Reference:**
+- Issue discovered: 2026-01-04
+- Project: game-server-platform
+- Context: Attempting to use Terraform S3 backend for port-assignments state
+
 ---
 
 ## Security Best Practices
