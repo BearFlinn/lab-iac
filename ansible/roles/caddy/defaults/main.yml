@@ -4,9 +4,6 @@
 # Caddy version (leave empty for latest)
 caddy_version: ""
 
-# Caddy installation method: 'package' or 'binary'
-caddy_install_method: "package"
-
 # Caddy configuration directory
 caddy_config_dir: "/etc/caddy"
 caddy_data_dir: "/var/lib/caddy"
@@ -16,57 +13,57 @@ caddy_log_dir: "/var/log/caddy"
 caddy_user: "caddy"
 caddy_group: "caddy"
 
-# Domain for Caddy (override in inventory)
-caddy_domain: "localhost"
-
-# Wildcard domain support (requires DNS-01 challenge)
-caddy_wildcard_domain: ""
-caddy_use_wildcard: false
-
-# Email for Let's Encrypt (override in inventory)
+# Email for Let's Encrypt (required for production)
 caddy_email: ""
 
-# Enable automatic HTTPS
-caddy_auto_https: true
-
-# DNS provider for DNS-01 challenge (for wildcard certs)
+# DNS provider for DNS-01 challenge (required for wildcard certs or Cloudflare proxy)
 # Options: cloudflare, route53, digitalocean, etc.
 caddy_dns_provider: ""
-
-# Caddy configuration template
-caddy_config_template: "Caddyfile.j2"
-
-# Additional Caddy directives (can be overridden)
-caddy_additional_config: ""
 
 # Enable/disable Caddy service
 caddy_service_enabled: true
 caddy_service_state: "started"
 
-# xcaddy build settings (for custom builds with DNS plugins)
-caddy_build_with_xcaddy: false
-caddy_xcaddy_plugins: []
+# =============================================================================
+# Template Selection
+# =============================================================================
 
-# Kubernetes proxy configuration
+# Use K8s proxy template when true, otherwise use simple static template
 enable_k8s_proxy: false
 
-# K8s API server endpoint (e.g., "10.0.0.226:6443")
-k8s_api_server: ""
+# =============================================================================
+# K8s Proxy Configuration (when enable_k8s_proxy: true)
+# =============================================================================
 
-# K8s ingress service details
-k8s_ingress_service_name: "ingress-nginx-controller"
-k8s_ingress_namespace: "ingress-nginx"
+# K8s ingress endpoint - IP:port reachable from VPS (via VPN tunnel)
+# Example: "100.96.94.27:30487" (NetBird IP + NodePort)
+k8s_ingress_endpoint: ""
 
-# Proxy routing rules (list of dicts with domain, type, and backend info)
+# K8s services to route through ingress
 # Example:
-# k8s_proxy_routes:
-#   - domain: "api.example.com"
-#     type: "k8s_api"
-#     backend: "10.0.0.226:6443"
-#     skip_verify: true
+# k8s_services:
 #   - domain: "app.example.com"
-#     type: "k8s_ingress"
-#     backend_service: "app-service"
-#     backend_namespace: "default"
-#     backend_port: 80
-k8s_proxy_routes: []
+#     enabled: true
+#   - domain: "api.example.com"
+#     enabled: true
+k8s_services: []
+
+# Non-K8s services (static sites or other reverse proxies)
+# Example:
+# caddy_services:
+#   - domain: "static.example.com"
+#     type: "static"
+#     root: "/var/www/html"
+#     comment: "Static website"
+#   - domain: "ha.example.com"
+#     type: "proxy"
+#     backend: "192.168.1.100:8123"
+#     comment: "Home Assistant"
+caddy_services: []
+
+# Root domain redirect (e.g., example.com -> www.example.com)
+# caddy_root_domain: "example.com"
+# caddy_root_redirect_target: "www.example.com"
+
+# Wildcard catch-all for unconfigured subdomains (returns 404)
+# caddy_wildcard_catchall: "*.example.com"

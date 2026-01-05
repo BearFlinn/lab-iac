@@ -1,17 +1,14 @@
-# Caddyfile - K8s Proxy Configuration
-# Managed by Ansible - DO NOT EDIT MANUALLY
-# This template includes reverse proxy rules for Kubernetes cluster services
+# Caddyfile - Kubernetes Reverse Proxy Configuration
+# Managed by Ansible - ansible/roles/caddy
 
 # Global options
 {
     # Email for Let's Encrypt notifications
-{% if caddy_email %}
     email {{ caddy_email }}
-{% endif %}
 
-    # Automatic HTTPS
-{% if not caddy_auto_https %}
-    auto_https off
+{% if caddy_dns_provider | default('') == 'cloudflare' %}
+    # DNS-01 ACME challenge via Cloudflare
+    acme_dns cloudflare {env.CLOUDFLARE_API_TOKEN}
 {% endif %}
 
     # Admin endpoint (local only)
@@ -25,239 +22,125 @@
     }
 }
 
-# Wildcard certificate configuration with DNS-01 challenge
-{% if caddy_use_wildcard and caddy_wildcard_domain %}
-{{ caddy_domain }}{% if caddy_wildcard_domain %}, {{ caddy_wildcard_domain }}{% endif %} {
-    # TLS configuration for DNS-01 challenge
-    tls {
-{% if caddy_dns_provider %}
-        dns {{ caddy_dns_provider }} {env.{% if caddy_dns_provider == 'cloudflare' %}CLOUDFLARE_API_TOKEN{% elif caddy_dns_provider == 'route53' %}AWS_ACCESS_KEY_ID{% elif caddy_dns_provider == 'digitalocean' %}DO_AUTH_TOKEN{% endif %}}
-{% endif %}
-    }
+# =============================================================================
+# STATIC/PROXY SERVICES
+# =============================================================================
 
-    # Security headers (applied to all routes)
-    header {
-        # Enable HSTS
-        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
-        # Prevent clickjacking
-        X-Frame-Options "SAMEORIGIN"
-        # Prevent MIME sniffing
-        X-Content-Type-Options "nosniff"
-        # XSS protection
-        X-XSS-Protection "1; mode=block"
-        # Referrer policy
-        Referrer-Policy "strict-origin-when-cross-origin"
-        # Remove server header
-        -Server
-    }
-
-    # Kubernetes cluster proxy routes
-{% if k8s_proxy_routes is defined and k8s_proxy_routes | length > 0 %}
-{% for route in k8s_proxy_routes %}
-    # Route: {{ route.domain }}{% if route.type == 'k8s_api' %} (K8s API Server){% elif route.type == 'k8s_ingress' %} (K8s Ingress: {{ route.backend_service }}.{{ route.backend_namespace }}.svc.cluster.local){% endif %}
-    @route_{{ loop.index0 }} host {{ route.domain }}
-    handle @route_{{ loop.index0 }} {
-{% if route.type == 'k8s_api' %}
-        # Proxy to Kubernetes API Server
-        reverse_proxy {{ route.backend }} {
-            # For self-signed certificates on k8s API server
-{% if route.skip_verify | default(false) %}
-            transport http {
-                tls_insecure_skip_verify
-            }
-{% endif %}
-            # Preserve original headers
-            header_up X-Forwarded-For {http.request.remote.host}
-            header_up X-Forwarded-Proto {http.request.scheme}
-            header_up X-Forwarded-Host {http.request.host}
-            header_up Authorization "{http.request.header.Authorization}"
-
-            # Websocket support
-            websocket
-        }
-{% elif route.type == 'k8s_ingress' %}
-        # Proxy to Kubernetes Ingress Service
-        # Backend: {{ route.backend_service }}.{{ route.backend_namespace }}.svc.cluster.local:{{ route.backend_port }}
-        reverse_proxy {{ route.backend_service }}.{{ route.backend_namespace }}.svc.cluster.local:{{ route.backend_port }} {
-            # Preserve original headers for proper ingress routing
-            header_up X-Forwarded-For {http.request.remote.host}
-            header_up X-Forwarded-Proto {http.request.scheme}
-            header_up X-Forwarded-Host {http.request.host}
-            header_up X-Forwarded-Uri {http.request.uri}
-
-            # Websocket support for real-time applications
-            websocket
-
-            # Health check for backend availability
-            health_uri /healthz
-            health_status 200
-        }
-{% endif %}
-
-        # Access logging for this route
-        log {
-            output file {{ caddy_log_dir }}/access.log
-            format json
-        }
-    }
-{% endfor %}
-
-{% endif %}
-    # Root domain handler (static content)
-    @root host {{ caddy_domain }}
-    handle @root {
-        root * /var/www/html
-        file_server
-        encode gzip
-
-        log {
-            output file {{ caddy_log_dir }}/access.log
-            format json
-        }
-    }
-
-    # Catch-all for subdomains not matched by k8s routes (serves static content or error page)
-    handle {
-        root * /var/www/html
-        file_server
-        encode gzip
-
-        log {
-            output file {{ caddy_log_dir }}/access.log
-            format json
-        }
-    }
-
-{{ caddy_additional_config | indent(4, first=True) }}
-}
-
-{% elif caddy_domain and caddy_domain != 'localhost' %}
-# Standard configuration with HTTP-01 challenge and K8s proxy
-{{ caddy_domain }} {
-    # Security headers (applied to all routes)
-    header {
-        # Enable HSTS
-        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
-        # Prevent clickjacking
-        X-Frame-Options "SAMEORIGIN"
-        # Prevent MIME sniffing
-        X-Content-Type-Options "nosniff"
-        # XSS protection
-        X-XSS-Protection "1; mode=block"
-        # Referrer policy
-        Referrer-Policy "strict-origin-when-cross-origin"
-        # Remove server header
-        -Server
-    }
-
-    # Kubernetes cluster proxy routes
-{% if k8s_proxy_routes is defined and k8s_proxy_routes | length > 0 %}
-{% for route in k8s_proxy_routes %}
-    # Route: {{ route.domain }}{% if route.type == 'k8s_api' %} (K8s API Server){% elif route.type == 'k8s_ingress' %} (K8s Ingress: {{ route.backend_service }}.{{ route.backend_namespace }}){% endif %}
-    @route_{{ loop.index0 }} host {{ route.domain }}
-    handle @route_{{ loop.index0 }} {
-{% if route.type == 'k8s_api' %}
-        # Proxy to Kubernetes API Server
-        reverse_proxy {{ route.backend }} {
-            # For self-signed certificates on k8s API server
-{% if route.skip_verify | default(false) %}
-            transport http {
-                tls_insecure_skip_verify
-            }
-{% endif %}
-            # Preserve original headers
-            header_up X-Forwarded-For {http.request.remote.host}
-            header_up X-Forwarded-Proto {http.request.scheme}
-            header_up X-Forwarded-Host {http.request.host}
-            header_up Authorization "{http.request.header.Authorization}"
-
-            # Websocket support
-            websocket
-        }
-{% elif route.type == 'k8s_ingress' %}
-        # Proxy to Kubernetes Ingress Service
-        # Backend: {{ route.backend_service }}.{{ route.backend_namespace }}.svc.cluster.local:{{ route.backend_port }}
-        reverse_proxy {{ route.backend_service }}.{{ route.backend_namespace }}.svc.cluster.local:{{ route.backend_port }} {
-            # Preserve original headers for proper ingress routing
-            header_up X-Forwarded-For {http.request.remote.host}
-            header_up X-Forwarded-Proto {http.request.scheme}
-            header_up X-Forwarded-Host {http.request.host}
-            header_up X-Forwarded-Uri {http.request.uri}
-
-            # Websocket support for real-time applications
-            websocket
-
-            # Health check for backend availability
-            health_uri /healthz
-            health_status 200
-        }
-{% endif %}
-
-        # Access logging for this route
-        log {
-            output file {{ caddy_log_dir }}/access.log
-            format json
-        }
-    }
-{% endfor %}
-
-{% endif %}
-    # Root domain handler (static content)
-    root * /var/www/html
+{% for service in caddy_services | default([]) %}
+{% if service.type | default('proxy') == 'static' %}
+# {{ service.comment | default(service.domain) }}
+{{ service.domain }} {
+    root * {{ service.root | default('/var/www/html') }}
     file_server
     encode gzip
 
-    # Access logging
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Frame-Options "SAMEORIGIN"
+        X-Content-Type-Options "nosniff"
+        X-XSS-Protection "1; mode=block"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        -Server
+    }
+
     log {
         output file {{ caddy_log_dir }}/access.log
         format json
     }
-
-{{ caddy_additional_config | indent(4, first=True) }}
 }
 
 {% else %}
-# Development configuration - HTTP only with K8s proxy
-:80 {
-    # Kubernetes cluster proxy routes (if defined)
-{% if k8s_proxy_routes is defined and k8s_proxy_routes | length > 0 %}
-{% for route in k8s_proxy_routes %}
-    @route_{{ loop.index0 }} host {{ route.domain }}
-    handle @route_{{ loop.index0 }} {
-{% if route.type == 'k8s_api' %}
-        # Proxy to Kubernetes API Server
-        reverse_proxy {{ route.backend }} {
-            websocket
-        }
-{% elif route.type == 'k8s_ingress' %}
-        # Proxy to Kubernetes Ingress Service
-        reverse_proxy {{ route.backend_service }}.{{ route.backend_namespace }}.svc.cluster.local:{{ route.backend_port }} {
-            header_up X-Forwarded-For {http.request.remote.host}
-            header_up X-Forwarded-Proto {http.request.scheme}
-            header_up X-Forwarded-Host {http.request.host}
-            websocket
-        }
-{% endif %}
+# {{ service.comment | default(service.domain) }}
+{{ service.domain }} {
+    reverse_proxy {{ service.backend }}
 
-        log {
-            output file {{ caddy_log_dir }}/access.log
-            format json
-        }
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Frame-Options "SAMEORIGIN"
+        X-Content-Type-Options "nosniff"
+        X-XSS-Protection "1; mode=block"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        -Server
     }
-{% endfor %}
 
-{% endif %}
-    # Default handler (static content)
-    root * /var/www/html
-    file_server
-    encode gzip
-
-    # Access logging
     log {
         output file {{ caddy_log_dir }}/access.log
         format json
     }
+}
 
-{{ caddy_additional_config | indent(4, first=True) }}
+{% endif %}
+{% endfor %}
+# =============================================================================
+# KUBERNETES SERVICES - Routed via tunnel to K8s Ingress
+# Endpoint: {{ k8s_ingress_endpoint }}
+# =============================================================================
+
+{% for service in k8s_services | default([]) %}
+{% if service.enabled | default(true) %}
+# {{ service.domain }} - K8s service
+{{ service.domain }} {
+    reverse_proxy http://{{ k8s_ingress_endpoint }} {
+        header_up Host {host}
+        header_up X-Real-IP {remote}
+    }
+
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Frame-Options "SAMEORIGIN"
+        X-Content-Type-Options "nosniff"
+        X-XSS-Protection "1; mode=block"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        -Server
+    }
+
+    log {
+        output file {{ caddy_log_dir }}/k8s-access.log
+        format json
+    }
+}
+
+{% endif %}
+{% endfor %}
+# =============================================================================
+# ROOT DOMAIN REDIRECT
+# =============================================================================
+
+{% if caddy_root_domain is defined and caddy_root_redirect_target is defined %}
+# Redirect root domain to {{ caddy_root_redirect_target }}
+{{ caddy_root_domain }} {
+    redir https://{{ caddy_root_redirect_target }}{uri} permanent
+
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        -Server
+    }
+
+    log {
+        output file {{ caddy_log_dir }}/access.log
+        format json
+    }
+}
+
+{% endif %}
+# =============================================================================
+# WILDCARD CATCH-ALL - Returns 404 for unconfigured subdomains
+# =============================================================================
+
+{% if caddy_wildcard_catchall is defined %}
+# Catch-all for unconfigured subdomains
+{{ caddy_wildcard_catchall }} {
+    respond "404 Not Found" 404
+
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        Content-Type "text/plain; charset=utf-8"
+        -Server
+    }
+
+    log {
+        output file {{ caddy_log_dir }}/access.log
+        format json
+    }
 }
 {% endif %}

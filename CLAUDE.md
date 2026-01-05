@@ -26,8 +26,6 @@ Key playbooks in execution order for new cluster:
 ## Kubernetes Operations
 
 ```bash
-# Set kubeconfig for local kubectl
-export KUBECONFIG=~/.kube/lab-k8s-config
 
 # Deploy Kustomize manifests
 kubectl apply -k kubernetes/base

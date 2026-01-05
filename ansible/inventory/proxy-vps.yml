@@ -1,10 +1,12 @@
 ---
 # Proxy VPS Inventory
-# This server is configured with cloud-init (proxy-vps-1_cloud-init.yml)
-# - SSH on port 2222
-# - User: bearf
-# - SSH key authentication only
-# - UFW enabled with port 2222 allowed
+# Hetzner VPS running Caddy as reverse proxy to K8s cluster via NetBird tunnel
+#
+# SSH configured in ~/.ssh/config:
+#   Host proxy-vps
+#     HostName <vps-ip>
+#     User bearf
+#     Port 2222
 
 all:
   hosts:
@@ -13,51 +15,49 @@ all:
       ansible_user: bearf
       ansible_port: 2222
 
-      # Wildcard certificate configuration
-      caddy_domain: "bearflinn.com"              # Root domain
-      caddy_wildcard_domain: "*.bearflinn.com"   # Wildcard subdomain
-      caddy_email: "bearflinn@gmail.com"
+      # =======================================================================
+      # Caddy Configuration
+      # =======================================================================
       enable_caddy: true
-
-      # Enable DNS-01 challenge with Cloudflare
+      caddy_email: "bearflinn@gmail.com"
       caddy_dns_provider: "cloudflare"
-      caddy_use_wildcard: true
 
-      # Kubernetes cluster proxy configuration
+      # K8s proxy mode - routes traffic to K8s ingress via NetBird tunnel
       enable_k8s_proxy: true
 
-      # K8s cluster endpoints (internal network)
-      k8s_api_server: "10.0.0.226:6443"
-      k8s_ingress_service_name: "nginx-ingress-controller"
-      k8s_ingress_namespace: "ingress-nginx"
+      # K8s ingress endpoint (NetBird IP + NodePort)
+      k8s_ingress_endpoint: "100.96.94.27:30487"
 
-      # Proxy routing - Map external domains to internal k8s services
-      k8s_proxy_routes:
-        # Example: route api.bearflinn.com to k8s API server
-        - domain: "api.bearflinn.com"
-          type: "k8s_api"
-          backend: "{{ k8s_api_server }}"
-          skip_verify: true  # For self-signed certs, can be overridden
+      # K8s services routed through ingress
+      k8s_services:
+        - domain: "landing.bearflinn.com"
+          enabled: true
+        - domain: "zork.bearflinn.com"
+          enabled: true
+        - domain: "resume.bearflinn.com"
+          enabled: true
+        - domain: "coaching.bearflinn.com"
+          enabled: true
+        - domain: "family-dashboard.bearflinn.com"
+          enabled: true
 
-        # Route gin-house.bearflinn.com to Home Assistant via Tailscale
+      # Non-K8s services (static sites, other reverse proxies)
+      caddy_services:
         - domain: "gin-house.bearflinn.com"
-          type: "k8s_api"
+          type: "proxy"
           backend: "100.96.217.175:8123"
-          skip_verify: true
+          comment: "Home Assistant via Tailscale"
+        - domain: "test.bearflinn.com"
+          type: "static"
+          root: "/var/www/html"
+          comment: "Static test site"
 
-        # Example: route app subdomains to k8s ingress
-        - domain: "app.bearflinn.com"
-          type: "k8s_ingress"
-          backend_service: "app-service"
-          backend_namespace: "default"
-          backend_port: 80
+      # Root domain redirect
+      caddy_root_domain: "bearflinn.com"
+      caddy_root_redirect_target: "landing.bearflinn.com"
 
-        # Catch-all for other subdomains - proxy to ingress
-        - domain: "*.bearflinn.com"
-          type: "k8s_ingress"
-          backend_service: "ingress-nginx-controller"
-          backend_namespace: "ingress-nginx"
-          backend_port: 80
+      # Wildcard catch-all (returns 404 for unconfigured subdomains)
+      caddy_wildcard_catchall: "*.bearflinn.com"
 
   vars:
     # Timezone
@@ -66,8 +66,7 @@ all:
     # Firewall configuration
     enable_firewall: true
 
-    # Additional UFW rules for web services
+    # UFW rules
     ufw_web_rules:
       - { port: '80', proto: 'tcp', comment: 'HTTP' }
       - { port: '443', proto: 'tcp', comment: 'HTTPS' }
-      - { port: '6443', proto: 'tcp', comment: 'K8s API Server' }

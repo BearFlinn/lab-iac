@@ -35,8 +35,7 @@
 - name: Build Caddy with DNS provider support
   ansible.builtin.include_tasks: build-xcaddy.yml
   when:
-    - caddy_use_wildcard | bool
-    - caddy_dns_provider | length > 0
+    - caddy_dns_provider | default('') | length > 0
 
 - name: Create Caddy directories
   ansible.builtin.file:
@@ -62,6 +61,7 @@
   loop:
     - "{{ caddy_log_dir }}/caddy.log"
     - "{{ caddy_log_dir }}/access.log"
+    - "{{ caddy_log_dir }}/k8s-access.log"
 
 - name: Create web root directory
   ansible.builtin.file:
@@ -122,22 +122,20 @@
     state: directory
     mode: '0755'
   when:
-    - caddy_use_wildcard | bool
-    - caddy_dns_provider | length > 0
+    - caddy_dns_provider | default('') | length > 0
 
 - name: Deploy systemd override with Cloudflare API token
   ansible.builtin.template:
     src: caddy-override.conf.j2
     dest: /etc/systemd/system/caddy.service.d/override.conf
-    mode: '0644'
+    mode: '0600'
   when:
-    - caddy_use_wildcard | bool
-    - caddy_dns_provider | length > 0
+    - caddy_dns_provider | default('') | length > 0
   notify: restart caddy
 
 - name: Determine which Caddyfile template to use
   ansible.builtin.set_fact:
-    caddy_config_template_final: "{% if enable_k8s_proxy | bool %}Caddyfile-k8s.j2{% else %}{{ caddy_config_template }}{% endif %}"
+    caddy_config_template_final: "{% if enable_k8s_proxy | default(false) | bool %}Caddyfile-k8s.j2{% else %}Caddyfile.j2{% endif %}"
 
 - name: Deploy Caddyfile configuration
   ansible.builtin.template:
@@ -146,15 +144,16 @@
     owner: "{{ caddy_user }}"
     group: "{{ caddy_group }}"
     mode: '0644'
-    validate: 'caddy validate --adapter caddyfile --config %s'
-  notify: reload caddy
+    # Note: Skipping validate when using DNS provider - requires env var at runtime
+    validate: "{{ omit if (caddy_dns_provider | default('') | length > 0) else 'caddy validate --adapter caddyfile --config %s' }}"
+    backup: yes
+  notify: restart caddy
 
 - name: Reload systemd daemon
   ansible.builtin.systemd:
     daemon_reload: yes
   when:
-    - caddy_use_wildcard | bool
-    - caddy_dns_provider | length > 0
+    - caddy_dns_provider | default('') | length > 0
 
 - name: Enable and start Caddy service
   ansible.builtin.systemd:
@@ -174,7 +173,7 @@
     msg:
       - "Caddy has been installed and configured"
       - "Configuration file: {{ caddy_config_dir }}/Caddyfile"
-      - "Web root: /var/www/html"
-      - "Domain: {{ caddy_domain }}"
-      - "Auto HTTPS: {{ 'Enabled' if caddy_auto_https else 'Disabled' }}"
+      - "Template used: {{ caddy_config_template_final }}"
+      - "K8s proxy mode: {{ enable_k8s_proxy | default(false) }}"
+      - "DNS provider: {{ caddy_dns_provider | default('none') }}"
       - "Service status: {{ caddy_service_state }}"
