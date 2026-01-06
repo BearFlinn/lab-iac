@@ -1,0 +1,27 @@
+---
+# Role metadata for k8s-prerequisites
+
+galaxy_info:
+  author: bearf
+  description: Configure system prerequisites for Kubernetes nodes (kernel modules, sysctl, etc.)
+  license: MIT
+  min_ansible_version: "2.10"
+
+  platforms:
+    - name: Ubuntu
+      versions:
+        - focal
+        - jammy
+        - noble
+    - name: Debian
+      versions:
+        - bullseye
+        - bookworm
+
+  galaxy_tags:
+    - kubernetes
+    - k8s
+    - prerequisites
+    - system
+
+dependencies: []

@@ -1,0 +1,27 @@
+---
+# Role metadata for tower-storage-setup
+
+galaxy_info:
+  author: bearf
+  description: Configure NFS storage exports on tower-pc for Kubernetes persistent volumes
+  license: MIT
+  min_ansible_version: "2.10"
+
+  platforms:
+    - name: Ubuntu
+      versions:
+        - focal
+        - jammy
+        - noble
+    - name: Debian
+      versions:
+        - bullseye
+        - bookworm
+
+  galaxy_tags:
+    - storage
+    - nfs
+    - kubernetes
+    - persistentvolume
+
+dependencies: []

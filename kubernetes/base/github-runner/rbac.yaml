@@ -8,6 +8,19 @@ metadata:
 
 ---
 # ClusterRole for GitHub Actions runners
+#
+# SECURITY NOTE: This ClusterRole intentionally grants broad cluster-wide permissions.
+# Rationale:
+# - CI/CD pipelines deploy applications to multiple namespaces (not just one)
+# - Helm charts require the ability to create namespaces, services, ingresses, etc.
+# - Self-hosted runners need to deploy across the entire cluster
+# - This follows the pattern of other CI/CD systems (ArgoCD, Flux) which also require
+#   cluster-wide access for cross-namespace deployments
+#
+# Mitigation:
+# - The ServiceAccount is scoped to the actions-runner-system namespace
+# - Only runners authenticated with GitHub can use these permissions
+# - Consider namespace-scoped Roles if runners only deploy to specific namespaces
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:

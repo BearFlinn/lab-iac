@@ -27,12 +27,26 @@ DATABASES=$(docker exec postgresql psql -U postgres -t -c "SELECT datname FROM p
 log "Backing up global objects"
 docker exec postgresql pg_dumpall -U postgres --globals-only > "$BACKUP_DIR/globals_$TIMESTAMP.sql"
 
+# Verify globals backup
+if [ ! -f "$BACKUP_DIR/globals_$TIMESTAMP.sql" ] || [ ! -s "$BACKUP_DIR/globals_$TIMESTAMP.sql" ]; then
+    log "ERROR: Globals backup file is missing or empty: $BACKUP_DIR/globals_$TIMESTAMP.sql"
+    exit 1
+fi
+log "Globals backup verified: $BACKUP_DIR/globals_$TIMESTAMP.sql"
+
 # Backup each database
 for DB in $DATABASES; do
     DB_TRIMMED=$(echo "$DB" | xargs)  # Trim whitespace
     if [ -n "$DB_TRIMMED" ]; then
         log "Backing up database: $DB_TRIMMED"
         docker exec postgresql pg_dump -U postgres -Fc "$DB_TRIMMED" > "$BACKUP_DIR/${DB_TRIMMED}_$TIMESTAMP.dump"
+
+        # Verify database backup
+        if [ ! -f "$BACKUP_DIR/${DB_TRIMMED}_$TIMESTAMP.dump" ] || [ ! -s "$BACKUP_DIR/${DB_TRIMMED}_$TIMESTAMP.dump" ]; then
+            log "ERROR: Backup file is missing or empty for database $DB_TRIMMED: $BACKUP_DIR/${DB_TRIMMED}_$TIMESTAMP.dump"
+            exit 1
+        fi
+        log "Backup verified for database: $DB_TRIMMED"
     fi
 done
 

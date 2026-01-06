@@ -1,0 +1,36 @@
+# shellcheck configuration for lab-iac
+# Reference: https://github.com/koalaman/shellcheck/wiki/Directive
+
+# Shell dialect - scripts use bash
+shell=bash
+
+# Disable specific checks:
+
+# SC1091 - Not following sourced files (they may not exist at lint time)
+disable=SC1091
+
+# SC2034 - Variable appears unused (common for color variables, exported vars)
+# Uncomment if you have many exported variables:
+# disable=SC2034
+
+# Optional: Disable word splitting warnings if scripts intentionally use it
+# SC2086 - Double quote to prevent globbing and word splitting
+# Note: Keeping enabled since scripts in this repo properly quote variables
+# disable=SC2086
+
+# External sources - paths to search for sourced files
+# source-path=scripts
+
+# Severity level (error, warning, info, style)
+# Only show errors and warnings by default
+severity=warning
+
+# Enable additional checks that are disabled by default
+enable=add-default-case
+enable=avoid-nullary-conditions
+enable=check-extra-masked-returns
+enable=check-set-e-suppressed
+enable=deprecate-which
+enable=quote-safe-variables
+enable=require-double-brackets
+enable=require-variable-braces

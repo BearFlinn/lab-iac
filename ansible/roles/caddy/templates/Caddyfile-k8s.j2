@@ -1,6 +1,24 @@
 # Caddyfile - K8s Proxy Configuration
 # Managed by Ansible - DO NOT EDIT MANUALLY
 # This template includes reverse proxy rules for Kubernetes cluster services
+#
+# TEMPLATE SELECTION GUIDE:
+# -------------------------
+# Use this template (Caddyfile-k8s.j2) for:
+#   - Proxying traffic to a Kubernetes cluster via NetBird VPN
+#   - proxy-vps deployments routing to home cluster
+#   - Requires k8s_proxy_routes variable to define backend routes
+#
+# Use Caddyfile.j2 instead when:
+#   - Simple static file serving without Kubernetes
+#   - No reverse proxy requirements
+#   - Standalone web hosting (e.g., deb-web server)
+#
+# Required variables for k8s_proxy_routes entries:
+#   - domain: Hostname to match (e.g., app.example.com)
+#   - type: 'k8s_api' or 'k8s_ingress'
+#   - backend: For k8s_api type, the API server URL
+#   - backend_service, backend_namespace, backend_port: For k8s_ingress type
 
 # Global options
 {

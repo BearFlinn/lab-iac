@@ -89,6 +89,13 @@
   become: yes
   notify: restart containerd
 
+- name: Validate containerd configuration
+  ansible.builtin.command: containerd config dump
+  become: yes
+  register: containerd_config_validation
+  failed_when: containerd_config_validation.rc != 0
+  changed_when: false
+
 - name: Flush handlers to ensure containerd restarts before kubelet installation
   meta: flush_handlers
 

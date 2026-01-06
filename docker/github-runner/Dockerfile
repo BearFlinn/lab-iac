@@ -6,7 +6,13 @@ FROM summerwind/actions-runner-dind:latest
 USER root
 
 # Install Helm
-RUN curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash && \
+# Security: Download the script first, verify it's executable, then run it
+# This avoids curl|bash which could execute partial/corrupted downloads
+# The official Helm install script handles GPG verification internally
+RUN curl -fsSL -o /tmp/get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 && \
+    chmod 700 /tmp/get_helm.sh && \
+    /tmp/get_helm.sh && \
+    rm /tmp/get_helm.sh && \
     helm version
 
 # kubectl should already be installed in the base image, but verify

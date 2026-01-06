@@ -1,0 +1,80 @@
+# pre-commit configuration for lab-iac
+# Install: pip install pre-commit && pre-commit install
+# Run manually: pre-commit run --all-files
+# Reference: https://pre-commit.com/
+
+repos:
+  # General file fixers
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+      - id: end-of-file-fixer
+        exclude: ^archive/
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+        exclude: |
+          (?x)^(
+            archive/|
+            kubernetes/nfs-provisioner/|
+            kubernetes/ingress-nginx/
+          )
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+      - id: check-merge-conflict
+      - id: detect-private-key
+
+  # YAML linting
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.35.1
+    hooks:
+      - id: yamllint
+        args: [-c, .yamllint]
+        exclude: |
+          (?x)^(
+            archive/|
+            kubernetes/nfs-provisioner/|
+            kubernetes/ingress-nginx/
+          )
+
+  # Ansible linting
+  - repo: https://github.com/ansible/ansible-lint
+    rev: v24.10.0
+    hooks:
+      - id: ansible-lint
+        files: ^ansible/
+        exclude: ^archive/
+        additional_dependencies:
+          - ansible-core>=2.15
+
+  # Shell script linting
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.10.0.1
+    hooks:
+      - id: shellcheck
+        args: [--external-sources]
+        exclude: ^archive/
+
+  # Terraform formatting (if terraform files exist outside archive)
+  # Uncomment if you add active Terraform files
+  # - repo: https://github.com/antonbabenko/pre-commit-terraform
+  #   rev: v1.96.1
+  #   hooks:
+  #     - id: terraform_fmt
+  #       exclude: ^archive/
+  #     - id: terraform_validate
+  #       exclude: ^archive/
+
+# Configuration
+ci:
+  autofix_commit_msg: |
+    [pre-commit.ci] auto fixes from pre-commit hooks
+  autofix_prs: true
+  autoupdate_branch: ''
+  autoupdate_commit_msg: '[pre-commit.ci] pre-commit autoupdate'
+  autoupdate_schedule: monthly
+  skip: []
+  submodules: false
+
+default_install_hook_types: [pre-commit, commit-msg]

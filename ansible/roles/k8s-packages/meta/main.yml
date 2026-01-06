@@ -1,0 +1,28 @@
+---
+# Role metadata for k8s-packages
+
+galaxy_info:
+  author: bearf
+  description: Install Kubernetes packages (kubeadm, kubelet, kubectl) and container runtime
+  license: MIT
+  min_ansible_version: "2.10"
+
+  platforms:
+    - name: Ubuntu
+      versions:
+        - focal
+        - jammy
+        - noble
+    - name: Debian
+      versions:
+        - bullseye
+        - bookworm
+
+  galaxy_tags:
+    - kubernetes
+    - k8s
+    - kubeadm
+    - containerd
+
+dependencies:
+  - role: k8s-prerequisites

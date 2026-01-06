@@ -1,0 +1,61 @@
+# ansible-lint configuration for lab-iac
+# Reference: https://ansible.readthedocs.io/projects/lint/configuring/
+
+# Profile determines severity levels (min, basic, moderate, safety, shared, production)
+profile: moderate
+
+# Paths to exclude from linting
+exclude_paths:
+  - archive/
+  - .git/
+  - .cache/
+  - .venv/
+
+# Rules to skip entirely
+skip_list:
+  # Allow hyphenated role names (k8s-control-plane, k8s-worker, etc.)
+  - role-name[path]
+
+  # Allow handlers in playbooks (we define handlers inline in some playbooks)
+  - no-handler
+
+  # Allow shell modules where needed (some tasks require shell features)
+  # Note: Still prefer command module where possible
+  # - command-instead-of-shell
+
+# Rules to warn about (not fail)
+warn_list:
+  # Warn but don't fail on these
+  - name[missing]
+  - name[casing]
+  - yaml[line-length]
+  - command-instead-of-shell
+  - risky-shell-pipe
+
+# Enable optional rules
+enable_list:
+  - args
+  - empty-string-compare
+  - no-log-password
+  - no-same-owner
+
+# Ansible-lint should use the yamllint config
+use_default_rules: true
+
+# Mock modules that might not be installed
+mock_modules:
+  - community.general.timezone
+  - community.general.ufw
+  - ansible.utils.ipaddr
+
+# Mock roles that might not be available
+mock_roles: []
+
+# Offline mode - don't download dependencies
+offline: false
+
+# Configure rule-specific options
+rules:
+  # Configure specific rules if needed
+  yaml[line-length]:
+    max: 200

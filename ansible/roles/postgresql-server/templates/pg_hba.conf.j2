@@ -2,7 +2,8 @@
 # TYPE  DATABASE  USER  ADDRESS        METHOD
 
 # Local connections (within container)
-local   all       all                  trust
+# Using scram-sha-256 instead of trust for security - requires password auth even locally
+local   all       all                  scram-sha-256
 host    all       all   127.0.0.1/32   scram-sha-256
 host    all       all   ::1/128        scram-sha-256
 
