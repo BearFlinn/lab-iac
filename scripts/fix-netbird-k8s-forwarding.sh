@@ -83,7 +83,22 @@ nft list chain ip netbird netbird-rt-fwd
 # Save rules to make them persistent
 log_info "Saving rules to /etc/nftables.d/netbird-k8s.nft for persistence..."
 mkdir -p /etc/nftables.d
-nft list table ip netbird > /etc/nftables.d/netbird-k8s.nft
+
+# Save to temp file first, verify it's not empty, then move to final location
+TEMP_NFT_FILE=$(mktemp)
+if ! nft list table ip netbird > "$TEMP_NFT_FILE"; then
+    log_error "Failed to export nftables rules"
+    rm -f "$TEMP_NFT_FILE"
+    exit 1
+fi
+
+if [ ! -s "$TEMP_NFT_FILE" ]; then
+    log_error "Exported nftables rules file is empty, aborting"
+    rm -f "$TEMP_NFT_FILE"
+    exit 1
+fi
+
+mv "$TEMP_NFT_FILE" /etc/nftables.d/netbird-k8s.nft
 
 # Create systemd service to restore rules on boot
 log_info "Creating systemd service for rule persistence..."

@@ -146,6 +146,11 @@
                   protocol: TCP
       when: k8s_module_install is succeeded
 
+    - name: Warn if kubernetes module unavailable
+      ansible.builtin.debug:
+        msg: "WARNING: kubernetes module not available. K8s resources must be created manually."
+      when: k8s_module_install is failed or k8s_module_install is skipped
+
     - name: Fallback - Apply K8s manifests with kubectl
       when: k8s_module_install is failed
       block:

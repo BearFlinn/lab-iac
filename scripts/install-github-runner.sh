@@ -38,7 +38,9 @@ echo ""
 
 # Add Helm repository
 echo "==> Adding actions-runner-controller Helm repository..."
-helm repo add actions-runner-controller https://actions-runner-controller.github.io/actions-runner-controller 2>/dev/null || true
+if ! helm repo add actions-runner-controller https://actions-runner-controller.github.io/actions-runner-controller 2>/dev/null; then
+    echo "Note: Helm repo may already exist, continuing..."
+fi
 helm repo update
 
 # Check if values file exists

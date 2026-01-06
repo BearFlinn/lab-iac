@@ -2,7 +2,7 @@
 # Script to configure NFS mount for tower-pc storage on WSL2
 # This script adds an fstab entry and mounts the NFS share
 
-set -e
+set -euo pipefail
 
 # Configuration
 NFS_SERVER="10.0.0.249"

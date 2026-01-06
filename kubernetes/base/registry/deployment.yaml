@@ -18,6 +18,14 @@ spec:
         image: registry:2
         ports:
         - containerPort: 5000
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          readOnlyRootFilesystem: false  # Registry needs to write
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
         volumeMounts:
         - name: registry-data
           mountPath: /var/lib/registry

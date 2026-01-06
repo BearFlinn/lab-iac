@@ -28,12 +28,18 @@
       changed_when: false
 
     - name: Check for critical pod errors
-      ansible.builtin.assert:
-        that:
-          - "'Error' not in system_pods.stdout"
-        fail_msg: "Some critical pods are in Error state"
-        success_msg: "No critical pod errors detected"
-      ignore_errors: yes
+      ansible.builtin.set_fact:
+        pods_have_errors: "{{ 'Error' in system_pods.stdout }}"
+
+    - name: Report critical pod errors (non-blocking)
+      ansible.builtin.debug:
+        msg: "WARNING: Some critical pods are in Error state"
+      when: pods_have_errors | bool
+
+    - name: Report pods healthy
+      ansible.builtin.debug:
+        msg: "No critical pod errors detected"
+      when: not (pods_have_errors | bool)
 
     - name: Display system pods status
       ansible.builtin.debug:
@@ -45,8 +51,10 @@
       become: no
       environment:
         KUBECONFIG: /home/debian/.kube/config
-      ignore_errors: yes
       register: nginx_deploy
+      # Allow failure if deployment already exists (rc=1 with "already exists" message)
+      failed_when: nginx_deploy.rc != 0 and 'already exists' not in nginx_deploy.stderr
+      changed_when: nginx_deploy.rc == 0
 
     - name: Wait for nginx deployment to be ready
       ansible.builtin.command: kubectl wait --for=condition=Available deployment/nginx-test --timeout=120s
@@ -54,8 +62,15 @@
       environment:
         KUBECONFIG: /home/debian/.kube/config
       when: nginx_deploy.rc == 0
-      ignore_errors: yes
       register: nginx_wait
+      # Verification task - report but don't fail playbook
+      failed_when: false
+      changed_when: false
+
+    - name: Report nginx deployment wait status
+      ansible.builtin.debug:
+        msg: "{{ 'Nginx deployment ready' if nginx_wait.rc == 0 else 'WARNING: Nginx deployment not ready within timeout' }}"
+      when: nginx_deploy.rc == 0 and nginx_wait is defined
 
     - name: Get nginx pod distribution across nodes
       ansible.builtin.command: kubectl get pods -l app=nginx-test -o wide
@@ -65,7 +80,8 @@
       register: nginx_pods
       changed_when: false
       when: nginx_deploy.rc == 0
-      ignore_errors: yes
+      # Verification task - report but don't fail playbook
+      failed_when: false
 
     - name: Display nginx pod distribution
       ansible.builtin.debug:
@@ -77,8 +93,11 @@
       become: no
       environment:
         KUBECONFIG: /home/debian/.kube/config
-      ignore_errors: yes
       when: nginx_deploy.rc == 0
+      register: nginx_expose
+      # Allow failure if service already exists
+      failed_when: nginx_expose.rc != 0 and 'already exists' not in nginx_expose.stderr
+      changed_when: nginx_expose.rc == 0
 
     - name: Get nginx service details
       ansible.builtin.command: kubectl get svc nginx-test
@@ -88,7 +107,8 @@
       register: nginx_svc
       changed_when: false
       when: nginx_deploy.rc == 0
-      ignore_errors: yes
+      # Verification task - report but don't fail playbook
+      failed_when: false
 
     - name: Display nginx service details
       ansible.builtin.debug:

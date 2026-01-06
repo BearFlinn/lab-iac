@@ -185,7 +185,12 @@
         - unattended-upgrades
         - apt-daily.timer
         - apt-daily-upgrade.timer
-      ignore_errors: yes
+      register: disable_auto_updates
+      # Only fail on errors other than "service not found" - these services may not exist on all systems
+      failed_when: >-
+        disable_auto_updates is failed and
+        'Could not find the requested service' not in (disable_auto_updates.msg | default('')) and
+        'not found' not in (disable_auto_updates.msg | default('')) | lower
 
     - name: Configure timezone
       community.general.timezone:

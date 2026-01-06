@@ -22,7 +22,7 @@
 
     - name: Run registry configuration script
       become: true
-      shell: /tmp/configure-insecure-registry.sh {{ registry_endpoint }}
+      shell: /tmp/configure-insecure-registry.sh "{{ registry_endpoint | quote }}"
       register: script_output
 
     - name: Display script output

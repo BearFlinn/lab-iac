@@ -29,6 +29,8 @@
     cmd: zfs list storage/garage
   register: zfs_check
   changed_when: false
+  # failed_when: false - ZFS may not be installed or dataset may not exist.
+  # This is a prerequisite check; explicit failure handled in next task.
   failed_when: false
 
 - name: Fail if ZFS dataset does not exist
@@ -165,6 +167,7 @@
     cmd: docker exec garage /garage layout show
   register: garage_layout
   changed_when: false
+  # failed_when: false - Layout may be empty on fresh install; next tasks handle configuration
   failed_when: false
 
 - name: Configure Garage layout (single-node)
@@ -199,6 +202,7 @@
       ansible.builtin.command: ufw status
       register: ufw_status
       changed_when: false
+      # failed_when: false - ufw may not be installed; firewall rules are optional
       failed_when: false
 
     - name: Allow Garage S3 API from host network

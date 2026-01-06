@@ -1,4 +1,10 @@
 ---
+# SECURITY NOTE: Password handling
+# The PostgreSQL password is passed via environment variable rather than POSTGRES_PASSWORD_FILE
+# because Docker Compose interpolation happens at deploy time, and using a secrets file would
+# require additional volume mounts and file management on the host. The password value comes
+# from Ansible Vault, so it's encrypted at rest in the repository. For production environments
+# with stricter requirements, consider using Docker Swarm secrets or an external secrets manager.
 version: "3.8"
 
 services:

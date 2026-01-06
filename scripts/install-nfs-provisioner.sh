@@ -87,7 +87,9 @@ fi
 
 # Add Helm repository
 echo "==> Adding nfs-subdir-external-provisioner Helm repository..."
-helm repo add nfs-subdir-external-provisioner https://kubernetes-sigs.github.io/nfs-subdir-external-provisioner/ 2>/dev/null || true
+if ! helm repo add nfs-subdir-external-provisioner https://kubernetes-sigs.github.io/nfs-subdir-external-provisioner/ 2>/dev/null; then
+    echo "Note: Helm repo may already exist, continuing..."
+fi
 helm repo update
 
 # Install or upgrade

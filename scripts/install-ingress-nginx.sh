@@ -25,7 +25,9 @@ if kubectl get namespace "$NAMESPACE" >/dev/null 2>&1; then
         exit 0
     fi
     echo -e "${YELLOW}Removing existing installation...${NC}"
-    kubectl delete namespace "$NAMESPACE" --wait=true || true
+    if ! kubectl delete namespace "$NAMESPACE" --wait=true 2>/dev/null; then
+        echo -e "${YELLOW}Note: Namespace may not exist or already deleted${NC}"
+    fi
     sleep 5
 fi
 
