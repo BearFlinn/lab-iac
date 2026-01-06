@@ -50,7 +50,11 @@
       environment:
         KUBECONFIG: "/home/{{ ansible_user }}/.kube/config"
       when: "'msi-laptop' in groups['k8s_workers']"
-      ignore_errors: yes
+      register: label_msi_laptop
+      failed_when: >
+        label_msi_laptop.rc != 0 and
+        'already exists' not in label_msi_laptop.stderr and
+        'not found' not in label_msi_laptop.stderr
 
     - name: Label tower-pc for storage
       ansible.builtin.command: >
@@ -62,7 +66,11 @@
       environment:
         KUBECONFIG: "/home/{{ ansible_user }}/.kube/config"
       when: "'tower-pc' in groups['k8s_workers']"
-      ignore_errors: yes
+      register: label_tower_pc
+      failed_when: >
+        label_tower_pc.rc != 0 and
+        'already exists' not in label_tower_pc.stderr and
+        'not found' not in label_tower_pc.stderr
 
     - name: Label dell-optiplex-9020 for general compute
       ansible.builtin.command: >
@@ -74,7 +82,11 @@
       environment:
         KUBECONFIG: "/home/{{ ansible_user }}/.kube/config"
       when: "'dell-optiplex-9020' in groups['k8s_workers']"
-      ignore_errors: yes
+      register: label_dell_optiplex
+      failed_when: >
+        label_dell_optiplex.rc != 0 and
+        'already exists' not in label_dell_optiplex.stderr and
+        'not found' not in label_dell_optiplex.stderr
 
 - name: Display cluster status
   hosts: k8s_control_plane

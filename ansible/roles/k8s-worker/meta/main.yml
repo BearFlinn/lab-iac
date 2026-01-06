@@ -1,0 +1,28 @@
+---
+# Role metadata for k8s-worker
+
+galaxy_info:
+  author: bearf
+  description: Join worker nodes to Kubernetes cluster using kubeadm
+  license: MIT
+  min_ansible_version: "2.10"
+
+  platforms:
+    - name: Ubuntu
+      versions:
+        - focal
+        - jammy
+        - noble
+    - name: Debian
+      versions:
+        - bullseye
+        - bookworm
+
+  galaxy_tags:
+    - kubernetes
+    - k8s
+    - worker
+    - kubeadm
+
+dependencies:
+  - role: k8s-packages

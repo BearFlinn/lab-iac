@@ -1,0 +1,29 @@
+---
+# Role metadata for k8s-control-plane
+
+galaxy_info:
+  author: bearf
+  description: Initialize Kubernetes control plane using kubeadm and install Calico CNI
+  license: MIT
+  min_ansible_version: "2.10"
+
+  platforms:
+    - name: Ubuntu
+      versions:
+        - focal
+        - jammy
+        - noble
+    - name: Debian
+      versions:
+        - bullseye
+        - bookworm
+
+  galaxy_tags:
+    - kubernetes
+    - k8s
+    - controlplane
+    - kubeadm
+    - calico
+
+dependencies:
+  - role: k8s-packages

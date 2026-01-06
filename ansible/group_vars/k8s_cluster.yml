@@ -5,19 +5,28 @@
 # Kubernetes version (1.31 is latest stable)
 kubernetes_version: "1.31"
 
+# Calico version
+calico_version: "v3.28.0"
+
+# ============================================================================
+# Network CIDRs (used by firewall rules across roles)
+# ============================================================================
+
+# Host network CIDR - the physical network where cluster nodes reside
+k8s_host_network_cidr: "10.0.0.0/24"
+
 # Pod network CIDR for Calico
 # This is the internal IP range for pods in the cluster
-pod_network_cidr: "10.244.0.0/16"
+k8s_pod_network_cidr: "10.244.0.0/16"
+pod_network_cidr: "{{ k8s_pod_network_cidr }}"  # Alias for backward compatibility
 
 # IPv6 pod network CIDR (ULA - Unique Local Address)
 # fd00:10:244::/56 provides 256 /64 subnets for nodes
 pod_network_cidr_ipv6: "fd00:10:244::/56"
 
-# Calico version
-calico_version: "v3.28.0"
-
 # Service CIDR (default for kubeadm)
-service_cidr: "10.96.0.0/12"
+k8s_service_network_cidr: "10.96.0.0/12"
+service_cidr: "{{ k8s_service_network_cidr }}"  # Alias for backward compatibility
 
 # IPv6 service CIDR (ULA - Unique Local Address)
 # fd00:10:96::/108 provides space for ~1M services

@@ -38,7 +38,7 @@ echo -e "${GREEN}Waiting for ingress-nginx controller to be created...${NC}"
 kubectl wait --namespace "$NAMESPACE" \
     --for=condition=available \
     --timeout=300s \
-    deployment/ingress-nginx-controller || true
+    deployment/ingress-nginx-controller
 
 # Patch service to use specific NodePorts
 echo -e "${GREEN}Configuring NodePorts (HTTP: $HTTP_NODEPORT, HTTPS: $HTTPS_NODEPORT)...${NC}"

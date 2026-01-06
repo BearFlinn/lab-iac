@@ -1,0 +1,70 @@
+# yamllint configuration for lab-iac
+# Optimized for Ansible and Kubernetes YAML files
+
+extends: default
+
+rules:
+  # Allow long lines - common in Ansible tasks and K8s manifests
+  line-length:
+    max: 200
+    level: warning
+
+  # Allow truthy values (yes/no, on/off) - standard Ansible style
+  truthy:
+    allowed-values: ['true', 'false', 'yes', 'no', 'on', 'off']
+    check-keys: false
+
+  # Require consistent indentation
+  indentation:
+    spaces: 2
+    indent-sequences: true
+    check-multi-line-strings: false
+
+  # Don't require document start (---) in every file
+  document-start: disable
+
+  # Don't require document end (...) markers
+  document-end: disable
+
+  # Allow comments without space after # (common in shell scripts embedded in YAML)
+  comments:
+    require-starting-space: true
+    ignore-shebangs: true
+    min-spaces-from-content: 1
+
+  # Braces spacing
+  braces:
+    min-spaces-inside: 0
+    max-spaces-inside: 1
+
+  # Brackets spacing
+  brackets:
+    min-spaces-inside: 0
+    max-spaces-inside: 0
+
+  # Colons - no space before, one space after
+  colons:
+    max-spaces-before: 0
+    max-spaces-after: 1
+
+  # Allow empty lines at the start of a file
+  empty-lines:
+    max: 2
+    max-start: 1
+    max-end: 1
+
+  # Key duplicates
+  key-duplicates: enable
+
+  # New line at end of file
+  new-line-at-end-of-file: enable
+
+  # Trailing spaces
+  trailing-spaces: enable
+
+# Paths to ignore
+ignore: |
+  archive/
+  .git/
+  kubernetes/nfs-provisioner/
+  kubernetes/ingress-nginx/
