@@ -44,8 +44,8 @@ kubectl apply -k kubernetes/base
 |------|----|------|---------|
 | dell-inspiron-15 | 10.0.0.226 | Control plane | 8GB RAM (resource-constrained) |
 | tower-pc | 10.0.0.249 | Worker | NFS server, PostgreSQL, 9.3TB storage |
-| msi-laptop | Worker | Monitoring workloads | GTX 1060 GPU |
-| dell-optiplex-9020 | Worker | General compute | |
+| msi-laptop | 10.0.0.177 | Worker | Monitoring workloads, GTX 1060 GPU |
+| dell-optiplex-9020 | (disabled) | Worker | General compute - not yet in cluster |
 
 ## Key Network Details
 

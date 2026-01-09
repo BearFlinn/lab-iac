@@ -83,6 +83,11 @@
         path: /etc/NetworkManager
       register: networkmanager_dir
 
+    - name: Check if system uses ifupdown (/etc/network/interfaces)
+      ansible.builtin.stat:
+        path: /etc/network/interfaces
+      register: interfaces_file
+
     - name: Configure static IP with netplan
       when: netplan_dir.stat.exists
       block:
@@ -175,6 +180,104 @@
           ansible.builtin.wait_for_connection:
             timeout: 30
             delay: 5
+
+    - name: Configure static IP with ifupdown (/etc/network/interfaces)
+      when:
+        - interfaces_file.stat.exists
+        - not netplan_dir.stat.exists
+        - not networkmanager_dir.stat.exists
+      block:
+        - name: Backup existing interfaces config
+          ansible.builtin.copy:
+            src: /etc/network/interfaces
+            dest: /etc/network/interfaces.backup
+            remote_src: yes
+            backup: yes
+
+        - name: Configure static IP in /etc/network/interfaces
+          ansible.builtin.copy:
+            content: |
+              # This file describes the network interfaces available on your system
+              # and how to activate them. For more information, see interfaces(5).
+              # Managed by Ansible - baseline-setup.yml
+
+              source /etc/network/interfaces.d/*
+
+              # The loopback network interface
+              auto lo
+              iface lo inet loopback
+
+              # The primary network interface - static IP
+              auto {{ network_interface }}
+              iface {{ network_interface }} inet static
+                  address {{ current_static_ip }}
+                  netmask {{ current_netmask }}
+                  gateway {{ gateway }}
+                  dns-nameservers {{ dns_servers | join(' ') }}
+            dest: /etc/network/interfaces
+            mode: '0644'
+          register: interfaces_changed
+
+        - name: Stop and disable dhcpcd (prevents DHCP from overriding static config)
+          block:
+            # dhcpcd may run as a standalone daemon spawned by ifupdown when using 'inet dhcp'
+            # It continues running even after changing to static config, so we must kill it
+            - name: Kill any running dhcpcd processes
+              ansible.builtin.shell: pkill -9 dhcpcd || true
+              changed_when: false
+
+            - name: Disable dhcpcd service if it exists
+              ansible.builtin.systemd:
+                name: dhcpcd
+                state: stopped
+                enabled: no
+              failed_when: false
+              changed_when: false
+
+        - name: Apply network configuration (ifupdown)
+          ansible.builtin.shell: |
+            ip addr add {{ current_static_ip }}/{{ current_netmask | ansible.utils.ipaddr('prefix') }} dev {{ network_interface }} 2>/dev/null || true
+            ifdown {{ network_interface }} 2>/dev/null || true
+            ifup {{ network_interface }} 2>/dev/null || true
+          async: 45
+          poll: 0
+          when: interfaces_changed.changed
+
+        - name: Wait for network to stabilize after ifupdown change
+          ansible.builtin.wait_for:
+            timeout: 10
+          delegate_to: localhost
+          when: interfaces_changed.changed
+
+        - name: Verify connectivity after ifupdown change
+          ansible.builtin.wait_for_connection:
+            timeout: 30
+            delay: 5
+          when: interfaces_changed.changed
+
+    - name: Disable swap (required for Kubernetes)
+      block:
+        - name: Disable swap immediately
+          ansible.builtin.command: swapoff -a
+          changed_when: false
+          failed_when: false
+
+        - name: Comment out swap entries in /etc/fstab
+          ansible.builtin.replace:
+            path: /etc/fstab
+            regexp: '^([^#].*\s+swap\s+.*)$'
+            replace: '# \1'
+          register: fstab_swap
+
+        - name: Verify swap is disabled
+          ansible.builtin.shell: swapon --show
+          register: swap_status
+          changed_when: false
+          failed_when: false
+
+        - name: Report swap status
+          ansible.builtin.debug:
+            msg: "{{ 'Swap is disabled' if swap_status.stdout == '' else 'WARNING: Swap still active - ' + swap_status.stdout }}"
 
     - name: Disable automatic updates (prevent surprise reboots)
       ansible.builtin.systemd:

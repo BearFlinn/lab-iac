@@ -27,6 +27,7 @@ all:
           ansible_host: 10.0.0.226
           ansible_connection: ssh
           ansible_user: bearf
+          network_interface: enp2s0
           # Hardware specs
           cpu: "Intel i3-7100U (2 cores, 4 threads @ 2.7 GHz)"
           cpu_cores: 2
@@ -49,6 +50,7 @@ all:
           ansible_host: 10.0.0.249
           ansible_connection: ssh
           ansible_user: bearf
+          network_interface: eno1
           # Hardware specs
           cpu: "Intel i7-4790 (4 cores, 8 threads @ 3.6-4.0 GHz)"
           cpu_cores: 4
@@ -104,6 +106,7 @@ all:
           ansible_host: 10.0.0.177
           ansible_connection: ssh
           ansible_user: bearf
+          network_interface: enp61s0
           # Hardware specs
           cpu: "Intel i7-6700HQ (4 cores, 8 threads @ 2.6-3.5 GHz)"
           cpu_cores: 4
