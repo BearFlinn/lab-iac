@@ -35,6 +35,7 @@ spec:
         - kubernetes
         - linux
         - lab
+        - rust
 
       # Enable Docker-in-Docker for building images
       dockerdWithinRunnerContainer: true

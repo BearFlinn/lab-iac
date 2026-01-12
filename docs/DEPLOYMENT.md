@@ -271,6 +271,7 @@ jobs:
 - Docker-in-Docker enabled
 - Helm installed
 - kubectl configured with cluster access
+- Rust toolchain (with clippy and rustfmt)
 - Access to insecure registry (10.0.0.226:32346)
 
 ### Runner RBAC Permissions

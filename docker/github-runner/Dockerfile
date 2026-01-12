@@ -1,4 +1,4 @@
-# Custom GitHub Actions Runner with Helm and kubectl pre-installed
+# Custom GitHub Actions Runner with Helm, kubectl, and Rust pre-installed
 # Based on summerwind/actions-runner-dind for Docker-in-Docker support
 
 FROM summerwind/actions-runner-dind:latest
@@ -21,7 +21,20 @@ RUN kubectl version --client || \
      install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl && \
      rm kubectl)
 
+# Install Rust toolchain via rustup
+# Install as runner user so the toolchain is available during workflow execution
+# -y for non-interactive, --profile minimal for smaller image size
+USER runner
+ENV RUSTUP_HOME=/home/runner/.rustup \
+    CARGO_HOME=/home/runner/.cargo \
+    PATH=/home/runner/.cargo/bin:$PATH
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile default && \
+    rustup component add clippy rustfmt
+
+USER root
+
 # Verify installations
 RUN helm version && kubectl version --client
+RUN su - runner -c 'source $HOME/.cargo/env && rustc --version && cargo --version'
 
 USER runner
