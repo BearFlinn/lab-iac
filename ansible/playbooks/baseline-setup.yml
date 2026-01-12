@@ -208,7 +208,9 @@
               iface lo inet loopback
 
               # The primary network interface - static IP
+              # auto: bring up at boot, allow-hotplug: reconfigure on link up events
               auto {{ network_interface }}
+              allow-hotplug {{ network_interface }}
               iface {{ network_interface }} inet static
                   address {{ current_static_ip }}
                   netmask {{ current_netmask }}
