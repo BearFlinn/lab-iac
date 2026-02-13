@@ -71,6 +71,9 @@ build/
 logs/
 *.log
 
+# Infisical
+.infisical.json
+
 # Claude Code
 .claude/
 packer/http/preseed.cfg
