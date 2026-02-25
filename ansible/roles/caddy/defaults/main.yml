@@ -39,16 +39,8 @@ enable_k8s_proxy: false
 # Example: "100.96.94.27:30487" (NetBird IP + NodePort)
 k8s_ingress_endpoint: ""
 
-# K8s services to route through ingress
-# Example:
-# k8s_services:
-#   - domain: "app.example.com"
-#     enabled: true
-#   - domain: "api.example.com"
-#     enabled: true
-k8s_services: []
-
 # Non-K8s services (static sites or other reverse proxies)
+# All subdomains not matched here are proxied to k8s_ingress_endpoint
 # Example:
 # caddy_services:
 #   - domain: "static.example.com"
@@ -65,5 +57,3 @@ caddy_services: []
 # caddy_root_domain: "example.com"
 # caddy_root_redirect_target: "www.example.com"
 
-# Wildcard catch-all for unconfigured subdomains (returns 404)
-# caddy_wildcard_catchall: "*.example.com"

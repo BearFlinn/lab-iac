@@ -26,20 +26,9 @@ all:
       enable_k8s_proxy: true
 
       # K8s ingress endpoint (NetBird IP + NodePort)
+      # All *.bearflinn.com subdomains not matched by caddy_services
+      # are proxied here - K8s ingress handles routing and 404s
       k8s_ingress_endpoint: "100.96.94.27:30487"
-
-      # K8s services routed through ingress
-      k8s_services:
-        - domain: "landing.bearflinn.com"
-          enabled: true
-        - domain: "zork.bearflinn.com"
-          enabled: true
-        - domain: "resume.bearflinn.com"
-          enabled: true
-        - domain: "coaching.bearflinn.com"
-          enabled: true
-        - domain: "family-dashboard.bearflinn.com"
-          enabled: true
 
       # Non-K8s services (static sites, other reverse proxies)
       caddy_services:
@@ -55,9 +44,6 @@ all:
       # Root domain redirect
       caddy_root_domain: "bearflinn.com"
       caddy_root_redirect_target: "landing.bearflinn.com"
-
-      # Wildcard catch-all (returns 404 for unconfigured subdomains)
-      caddy_wildcard_catchall: "*.bearflinn.com"
 
   vars:
     # Timezone

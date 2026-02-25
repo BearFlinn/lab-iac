@@ -41,9 +41,7 @@ ansible/
 | `setup-control-plane.yml` | Deploy K8s control plane with kubeadm | Control plane |
 | `setup-workers.yml` | Join worker nodes to cluster | Worker nodes |
 | `k8s-verify.yml` | Verify cluster health | Control plane |
-| `setup-proxy-vps.yml` | Configure VPS with Caddy and TLS | Proxy VPS |
-| `setup-k8s-proxy.yml` | Configure K8s ingress routing on VPS | Proxy VPS |
-| `configure-vps-k8s-routes.yml` | Update VPS routes for K8s services | Proxy VPS |
+| `setup-proxy-vps.yml` | Configure VPS with Caddy, TLS, and K8s ingress proxy | Proxy VPS |
 | `configure-registry.yml` | Configure insecure registry on nodes | Cluster nodes |
 | `fix-netbird-k8s.yml` | Fix nftables rules for NetBird | Control plane |
 | `setup-cert-manager.yml` | Deploy cert-manager to cluster | Control plane |
@@ -133,10 +131,9 @@ all:
       ansible_user: bearf
       ansible_port: 2222
 
-      caddy_domain: "bearflinn.com"
-      caddy_wildcard_domain: "*.bearflinn.com"
-      caddy_use_wildcard: true
+      caddy_root_domain: "bearflinn.com"
       caddy_dns_provider: "cloudflare"
+      k8s_ingress_endpoint: "100.96.94.27:30487"
 ```
 
 ## Secrets Management with Ansible Vault
@@ -295,18 +292,11 @@ Internet -> VPS (Caddy) -> NetBird VPN -> K8s Ingress
 
 ### K8s Routes Configuration
 
-The VPS routes traffic to Kubernetes services via NetBird:
+The VPS routes all `*.bearflinn.com` traffic (not matched by a specific `caddy_services` entry) to the K8s ingress via NetBird. The ingress controller handles subdomain routing and returns 404 for unconfigured services.
 
 ```yaml
-k8s_netbird_ip: "100.96.94.27"
-k8s_ingress_nodeport: "30487"
-
-k8s_services:
-  - domain: "landing.bearflinn.com"
-  - domain: "zork.bearflinn.com"
-  - domain: "resume.bearflinn.com"
-  - domain: "coaching.bearflinn.com"
-  - domain: "family.bearflinn.com"
+k8s_ingress_endpoint: "100.96.94.27:30487"
+caddy_root_domain: "bearflinn.com"
 ```
 
 ## Cluster Setup Workflow

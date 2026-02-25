@@ -6,18 +6,17 @@
 # Use this template (Caddyfile-k8s.j2) for:
 #   - Proxying traffic to a Kubernetes cluster via NetBird VPN
 #   - proxy-vps deployments routing to home cluster
-#   - Requires k8s_proxy_routes variable to define backend routes
+#   - Wildcard *.domain routes all unmatched subdomains to K8s ingress
 #
 # Use Caddyfile.j2 instead when:
 #   - Simple static file serving without Kubernetes
 #   - No reverse proxy requirements
 #   - Standalone web hosting (e.g., deb-web server)
 #
-# Required variables for k8s_proxy_routes entries:
-#   - domain: Hostname to match (e.g., app.example.com)
-#   - type: 'k8s_api' or 'k8s_ingress'
-#   - backend: For k8s_api type, the API server URL
-#   - backend_service, backend_namespace, backend_port: For k8s_ingress type
+# Required variables:
+#   - caddy_root_domain: Base domain (e.g., bearflinn.com)
+#   - k8s_ingress_endpoint: K8s ingress host:port
+#   - caddy_services: List of non-K8s services (static sites, other proxies)
 
 # Global options
 {
@@ -90,37 +89,6 @@
 {% endif %}
 {% endfor %}
 # =============================================================================
-# KUBERNETES SERVICES - Routed via tunnel to K8s Ingress
-# Endpoint: {{ k8s_ingress_endpoint }}
-# =============================================================================
-
-{% for service in k8s_services | default([]) %}
-{% if service.enabled | default(true) %}
-# {{ service.domain }} - K8s service
-{{ service.domain }} {
-    reverse_proxy http://{{ k8s_ingress_endpoint }} {
-        header_up Host {host}
-        header_up X-Real-IP {remote}
-    }
-
-    header {
-        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
-        X-Frame-Options "SAMEORIGIN"
-        X-Content-Type-Options "nosniff"
-        X-XSS-Protection "1; mode=block"
-        Referrer-Policy "strict-origin-when-cross-origin"
-        -Server
-    }
-
-    log {
-        output file {{ caddy_log_dir }}/k8s-access.log
-        format json
-    }
-}
-
-{% endif %}
-{% endfor %}
-# =============================================================================
 # ROOT DOMAIN REDIRECT
 # =============================================================================
 
@@ -142,23 +110,27 @@
 
 {% endif %}
 # =============================================================================
-# WILDCARD CATCH-ALL - Returns 404 for unconfigured subdomains
+# WILDCARD K8S PROXY - All other subdomains routed to K8s Ingress
+# Endpoint: {{ k8s_ingress_endpoint }}
 # =============================================================================
 
-{% if caddy_wildcard_catchall is defined %}
-# Catch-all for unconfigured subdomains
-{{ caddy_wildcard_catchall }} {
-    respond "404 Not Found" 404
+*.{{ caddy_root_domain | default('example.com') }} {
+    reverse_proxy http://{{ k8s_ingress_endpoint }} {
+        header_up Host {host}
+        header_up X-Real-IP {remote}
+    }
 
     header {
         Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
-        Content-Type "text/plain; charset=utf-8"
+        X-Frame-Options "SAMEORIGIN"
+        X-Content-Type-Options "nosniff"
+        X-XSS-Protection "1; mode=block"
+        Referrer-Policy "strict-origin-when-cross-origin"
         -Server
     }
 
     log {
-        output file {{ caddy_log_dir }}/access.log
+        output file {{ caddy_log_dir }}/k8s-access.log
         format json
     }
 }
-{% endif %}
