@@ -21,20 +21,39 @@ RUN kubectl version --client || \
      install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl && \
      rm kubectl)
 
+# Build tools and GitHub CLI
+RUN apt-get update -qq && \
+    apt-get install -y -qq --no-install-recommends build-essential && \
+    (type -p wget >/dev/null || apt-get install -y -qq wget) && \
+    mkdir -p -m 755 /etc/apt/keyrings && \
+    wget -qO- https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+      | tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null && \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+      | tee /etc/apt/sources.list.d/github-cli.list > /dev/null && \
+    apt-get update -qq && \
+    apt-get install -y -qq gh && \
+    rm -rf /var/lib/apt/lists/*
+
 # Install Rust toolchain via rustup
 # Install as runner user so the toolchain is available during workflow execution
-# -y for non-interactive, --profile minimal for smaller image size
+# -y for non-interactive, --profile default includes rustfmt/clippy
 USER runner
 ENV RUSTUP_HOME=/home/runner/.rustup \
     CARGO_HOME=/home/runner/.cargo \
     PATH=/home/runner/.cargo/bin:$PATH
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile default && \
-    rustup component add clippy rustfmt
+    rustup component add clippy rustfmt && \
+    cargo install cargo-deny --locked
 
 USER root
 
+# Symlink Rust binaries into /usr/local/bin so they're on PATH regardless of
+# how the Actions runner spawns shell steps
+RUN for bin in /home/runner/.cargo/bin/*; do \
+      ln -sf "$bin" /usr/local/bin/; \
+    done
+
 # Verify installations
-RUN helm version && kubectl version --client
-RUN su - runner -c 'source $HOME/.cargo/env && rustc --version && cargo --version'
+RUN helm version && kubectl version --client && rustc --version && cargo --version && cargo deny --version
 
 USER runner
