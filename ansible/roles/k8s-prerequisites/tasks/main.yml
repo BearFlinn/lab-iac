@@ -51,6 +51,23 @@
         path: /etc/fstab
         regexp: '^.*\s+swap\s+swap.*$'
         state: absent
+
+    - name: Mask swap.target to prevent systemd auto-discovery of swap partitions
+      ansible.builtin.systemd:
+        name: swap.target
+        masked: yes
+
+    - name: Find active systemd swap units
+      ansible.builtin.shell: systemctl list-units --type=swap --state=active --no-legend --plain | awk '{print $1}'
+      register: active_swap_units
+      changed_when: false
+
+    - name: Mask active systemd swap units
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        masked: yes
+      loop: "{{ active_swap_units.stdout_lines }}"
+      when: active_swap_units.stdout_lines | length > 0
   become: yes
 
 - name: Install containerd and dependencies
