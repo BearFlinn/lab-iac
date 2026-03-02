@@ -23,7 +23,7 @@ RUN kubectl version --client || \
 
 # Build tools and GitHub CLI
 RUN apt-get update -qq && \
-    apt-get install -y -qq --no-install-recommends build-essential gcc-aarch64-linux-gnu && \
+    apt-get install -y -qq --no-install-recommends build-essential gcc-aarch64-linux-gnu libc6-dev-arm64-cross && \
     (type -p wget >/dev/null || apt-get install -y -qq wget) && \
     mkdir -p -m 755 /etc/apt/keyrings && \
     wget -qO- https://cli.github.com/packages/githubcli-archive-keyring.gpg \
