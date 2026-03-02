@@ -23,7 +23,7 @@ RUN kubectl version --client || \
 
 # Build tools and GitHub CLI
 RUN apt-get update -qq && \
-    apt-get install -y -qq --no-install-recommends build-essential && \
+    apt-get install -y -qq --no-install-recommends build-essential gcc-aarch64-linux-gnu && \
     (type -p wget >/dev/null || apt-get install -y -qq wget) && \
     mkdir -p -m 755 /etc/apt/keyrings && \
     wget -qO- https://cli.github.com/packages/githubcli-archive-keyring.gpg \
@@ -43,6 +43,7 @@ ENV RUSTUP_HOME=/home/runner/.rustup \
     PATH=/home/runner/.cargo/bin:$PATH
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile default && \
     rustup component add clippy rustfmt && \
+    rustup target add aarch64-unknown-linux-gnu && \
     cargo install cargo-deny --locked
 
 USER root
