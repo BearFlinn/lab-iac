@@ -34,6 +34,12 @@ RUN apt-get update -qq && \
     apt-get install -y -qq gh && \
     rm -rf /var/lib/apt/lists/*
 
+# Node.js LTS for web linting and builds
+RUN curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - && \
+    apt-get install -y -qq nodejs && \
+    rm -rf /var/lib/apt/lists/* && \
+    node --version && npm --version
+
 # Install Rust toolchain via rustup
 # Install as runner user so the toolchain is available during workflow execution
 # -y for non-interactive, --profile default includes rustfmt/clippy
@@ -55,6 +61,6 @@ RUN for bin in /home/runner/.cargo/bin/*; do \
     done
 
 # Verify installations
-RUN helm version && kubectl version --client && rustc --version && cargo --version && cargo deny --version
+RUN helm version && kubectl version --client && rustc --version && cargo --version && cargo deny --version && node --version && npm --version
 
 USER runner
