@@ -8,14 +8,14 @@ The goal: push code to any repository in the org and have it built, tested, and 
 
 ```mermaid
 graph TD
-    Internet -->|HTTPS| VPS["Hetzner VPS\nCaddy reverse proxy\nWildcard TLS via Cloudflare DNS-01"]
+    Internet -->|HTTPS| VPS["Hetzner VPS<br/>Caddy reverse proxy<br/>Wildcard TLS via Cloudflare DNS-01"]
     VPS -->|NetBird VPN| CP
 
     subgraph cluster ["Kubernetes Cluster — 14 cores, 104GB RAM"]
-        CP["Dell Inspiron 15\nControl Plane + NGINX Ingress\ni3-7100U / 8GB"]
-        CP -.- W1["MSI Laptop\nWorker\ni7-6700HQ / 32GB\nGTX 1060"]
-        CP -.- W2["Tower PC\nWorker + NFS + PostgreSQL + S3\ni7-4790 / 32GB / 9.3TB\nGTX 1060"]
-        CP -.- W3["Dell Optiplex 9020\nWorker\ni7-4790 / 32GB"]
+        CP["Dell Inspiron 15<br/>Control Plane + NGINX Ingress<br/>i3-7100U / 8GB"]
+        CP -.- W1["MSI Laptop<br/>Worker<br/>i7-6700HQ / 32GB<br/>GTX 1060"]
+        CP -.- W2["Tower PC<br/>Worker + NFS + PostgreSQL + S3<br/>i7-4790 / 32GB / 9.3TB<br/>GTX 1060"]
+        CP -.- W3["Dell Optiplex 9020<br/>Worker<br/>i7-4790 / 32GB"]
     end
 ```
 
