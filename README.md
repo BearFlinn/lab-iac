@@ -21,11 +21,18 @@ graph TD
 
 Traffic enters through a Hetzner VPS running Caddy, which terminates TLS with wildcard certificates (Let's Encrypt, DNS-01 via Cloudflare) and forwards requests over a NetBird VPN tunnel to the control plane node. The NGINX Ingress Controller on the control plane handles routing to the appropriate service across the cluster. No ports are opened on the home network.
 
-## CI/CD Platform
+## CI/CD and Deployment
 
-The cluster runs self-hosted GitHub Actions runners with Docker-in-Docker, Helm, kubectl, Rust (with aarch64 cross-compilation), Node.js, and the GitHub CLI pre-installed. A private container registry lives inside the cluster.
+A new web application can go from an empty repository to live at `*.bearflinn.com` with valid TLS in under 20 minutes. No manual server configuration, no DNS changes, no certificate provisioning — the infrastructure handles all of it.
 
-Any repository in the org can adopt this workflow:
+This works because several layers are already in place:
+
+- **Wildcard TLS** — Caddy on the VPS holds a wildcard certificate for `*.bearflinn.com` via Cloudflare DNS-01, so any new subdomain is covered immediately.
+- **Ingress routing** — Adding a Kubernetes Ingress resource with a hostname is enough to route traffic to a new service. The NGINX Ingress Controller picks it up automatically.
+- **Private registry** — A container registry runs inside the cluster. Images never leave the local network.
+- **Self-hosted runners** — GitHub Actions runners run in the cluster with Docker-in-Docker, Helm, and kubectl pre-installed. They have cluster-scoped RBAC and direct access to the registry.
+
+To deploy a new application, a repository needs three things: a Dockerfile, a Helm chart, and a workflow file.
 
 ```yaml
 # .github/workflows/deploy.yml
@@ -39,9 +46,11 @@ jobs:
       - run: helm upgrade --install my-app ./helm --set image.tag=${{ github.sha }} --wait
 ```
 
-That's the entire deployment pipeline. The runner has cluster-scoped RBAC, access to the internal registry, and Helm pre-configured. New projects go from first commit to live deployment by adding a Dockerfile, a Helm chart, and this workflow file.
+The Helm chart defines the Deployment, Service, and Ingress. A minimal Ingress resource pointing at `myapp.bearflinn.com` is all that's needed to make the application reachable from the internet. After the first push, every subsequent push to main builds, pushes, and deploys automatically.
 
-The runner image scales from 1 to 10 replicas via Horizontal Pod Autoscaler based on workflow demand.
+The runner image also includes Rust (with aarch64 cross-compilation targets), Node.js, and the GitHub CLI, so non-web projects — CLI tools, libraries, cross-compiled binaries — use the same runner infrastructure for builds and tests.
+
+Runner capacity scales from 1 to 10 replicas via Horizontal Pod Autoscaler based on workflow demand.
 
 ## Configuration Management
 
