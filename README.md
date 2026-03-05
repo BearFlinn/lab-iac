@@ -1,165 +1,166 @@
-# Infrastructure as Code Portfolio
+# Home Lab Infrastructure
 
-A DevOps portfolio demonstrating infrastructure automation, Kubernetes orchestration, and GitOps practices through a production-ready bare-metal home lab environment.
+Bare-metal Kubernetes cluster on repurposed hardware, fully managed through Infrastructure as Code. Four physical machines connected via mesh VPN to a cloud proxy, providing a self-hosted platform for deploying web applications, databases, and CI/CD pipelines.
 
-## Current Architecture
+The goal: push code to any repository in the org and have it built, tested, and deployed automatically — no external CI/CD service, no managed Kubernetes, no cloud vendor runtime costs.
 
-This repository manages a **bare-metal Kubernetes cluster** built on repurposed hardware, showcasing real-world infrastructure automation skills applicable to cloud and on-premises environments.
+## Architecture
 
-```
-Internet Traffic
-      |
-      v
-+------------------+
-|   Hetzner VPS    |  Caddy reverse proxy with auto TLS
-|   (proxy-vps)    |  Wildcard certificates via Cloudflare DNS-01
-+--------+---------+
-         |
-    NetBird VPN
-         |
-         v
-+------------------+     +------------------+     +------------------+
-| Dell Inspiron 15 |     |    MSI Laptop    |     |     Tower PC     |
-| (Control Plane)  |     |     (Worker)     |     |     (Worker)     |
-| i3-7100U, 8GB    |     | i7-6700HQ, 32GB  |     | i7-4790, 32GB    |
-|                  |     | GTX 1060 GPU     |     | GTX 1060 GPU     |
-+--------+---------+     +--------+---------+     +--------+---------+
-         |                        |                        |
-         +------------------------+------------------------+
-                                  |
-                     +------------+------------+
-                     |   Dell Optiplex 9020   |
-                     |       (Worker)         |
-                     |    i7-4790, 32GB       |
-                     +------------------------+
+```mermaid
+graph TD
+    Internet -->|HTTPS| VPS["Hetzner VPS\nCaddy reverse proxy\nWildcard TLS via Cloudflare DNS-01"]
+    VPS -->|NetBird VPN| CP
+
+    subgraph cluster ["Kubernetes Cluster — 14 cores, 104GB RAM"]
+        CP["Dell Inspiron 15\nControl Plane + NGINX Ingress\ni3-7100U / 8GB"]
+        CP -.- W1["MSI Laptop\nWorker\ni7-6700HQ / 32GB\nGTX 1060"]
+        CP -.- W2["Tower PC\nWorker + NFS + PostgreSQL + S3\ni7-4790 / 32GB / 9.3TB\nGTX 1060"]
+        CP -.- W3["Dell Optiplex 9020\nWorker\ni7-4790 / 32GB"]
+    end
 ```
 
-**Cluster Specifications:**
-- 1 control plane + 3 worker nodes
-- 104GB total RAM, 14 cores / 28 threads
-- 2 NVIDIA GPUs available for compute workloads
-- Local NFS storage provisioner
-- Self-hosted container registry
+Traffic enters through a Hetzner VPS running Caddy, which terminates TLS with wildcard certificates (Let's Encrypt, DNS-01 via Cloudflare) and forwards requests over a NetBird VPN tunnel to the control plane node. The NGINX Ingress Controller on the control plane handles routing to the appropriate service across the cluster. No ports are opened on the home network.
 
-## Technologies Demonstrated
+## CI/CD Platform
 
-| Category | Technologies |
-|----------|-------------|
-| **Container Orchestration** | Kubernetes (kubeadm), Helm, Kustomize |
-| **Configuration Management** | Ansible (roles, playbooks, vault) |
-| **Infrastructure Provisioning** | Terraform, Packer (archived) |
-| **CI/CD** | GitHub Actions, self-hosted runners |
-| **Networking** | Calico CNI, NGINX Ingress, NetBird VPN |
-| **Security** | cert-manager, Let's Encrypt, Ansible Vault |
-| **Observability** | Prometheus, Grafana (planned) |
-| **Container Runtime** | containerd, Docker |
+The cluster runs self-hosted GitHub Actions runners with Docker-in-Docker, Helm, kubectl, Rust (with aarch64 cross-compilation), Node.js, and the GitHub CLI pre-installed. A private container registry lives inside the cluster.
+
+Any repository in the org can adopt this workflow:
+
+```yaml
+# .github/workflows/deploy.yml
+jobs:
+  build-and-deploy:
+    runs-on: [self-hosted, kubernetes, lab]
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t 10.0.0.226:32346/my-app:${{ github.sha }} .
+      - run: docker push 10.0.0.226:32346/my-app:${{ github.sha }}
+      - run: helm upgrade --install my-app ./helm --set image.tag=${{ github.sha }} --wait
+```
+
+That's the entire deployment pipeline. The runner has cluster-scoped RBAC, access to the internal registry, and Helm pre-configured. New projects go from first commit to live deployment by adding a Dockerfile, a Helm chart, and this workflow file.
+
+The runner image scales from 1 to 10 replicas via Horizontal Pod Autoscaler based on workflow demand.
+
+## Configuration Management
+
+Every machine in the cluster is configured through Ansible — from initial OS setup through Kubernetes installation to application deployment. The playbooks are designed to run in sequence for a fresh cluster or individually for maintenance.
+
+**Cluster provisioning** (run once for a new cluster):
+1. `baseline-setup.yml` — Static IPs, hostnames, DNS, system packages
+2. `setup-control-plane.yml` — kubeadm init, Calico CNI (dual-stack IPv4/IPv6)
+3. `setup-workers.yml` — Node join, labeling by workload role
+4. `k8s-verify.yml` — Automated health validation
+
+**Infrastructure services** (idempotent, safe to re-run):
+- `setup-proxy-vps.yml` — Caddy reverse proxy, UFW, fail2ban
+- `tower-storage-setup.yml` — ZFS pool, NFS exports, bcache
+- `setup-postgresql.yml` — PostgreSQL with TLS, automated backups, pgvector
+- `setup-garage.yml` — S3-compatible object storage on ZFS RAID-Z1
+
+Secrets are encrypted with Ansible Vault. A single `.vault_pass` file (git-ignored) unlocks everything.
+
+### Ansible Roles
+
+| Role | Responsibility |
+|------|---------------|
+| `k8s-prerequisites` | Kernel modules, sysctl, containerd, CNI plugins |
+| `k8s-packages` | kubeadm/kubelet/kubectl with version pinning |
+| `k8s-control-plane` | Cluster init, Calico, dual-stack networking |
+| `k8s-worker` | Node join, readiness verification, labeling |
+| `caddy` | Reverse proxy with optional Cloudflare DNS plugin |
+| `postgresql-server` | Containerized PostgreSQL with TLS, backups, pgvector |
+| `garage-server` | S3-compatible storage on ZFS with resource isolation |
+| `tower-storage-setup` | ZFS RAID-Z1, NFS server, bcache caching layer |
+
+## Storage
+
+The Tower PC serves as the storage backbone:
+
+- **Block storage (NFS):** Dynamic provisioning for Kubernetes PVCs via nfs-subdir-external-provisioner. Application pods request storage through standard PersistentVolumeClaims and get NFS-backed volumes automatically.
+- **Object storage (Garage):** S3-compatible API running on a ZFS RAID-Z1 pool across 3x2TB HDDs (~4TB usable). Available for application assets, backups, and any workload that speaks S3.
+- **Database (PostgreSQL):** Runs on the Tower PC with TLS client certificates, daily automated backups via cron, and the pgvector extension for vector operations. Exposed to the cluster as a Kubernetes ExternalName service.
+
+## Networking
+
+- **CNI:** Calico with dual-stack IPv4 + IPv6 and BGP mesh between nodes
+- **Ingress:** NGINX Ingress Controller on NodePorts (HTTP 30487, HTTPS 30356)
+- **VPN:** NetBird mesh connecting all nodes and the VPS proxy
+- **Firewall:** nftables rules managed by Ansible, with specific rules to allow NetBird-to-NodePort forwarding
+- **DNS/TLS:** Wildcard certificates via cert-manager and Cloudflare DNS-01 challenges
+
+The Calico IP autodetection is configured to prefer the LAN interface over VPN tunnels (`can-reach=8.8.8.8`), which avoids a common bare-metal pitfall where BGP peers over the wrong interface.
+
+## Deployed Services
+
+Applications are managed in their own repositories, each with a Helm chart and GitHub Actions workflow:
+
+| Service | Stack |
+|---------|-------|
+| Portfolio landing page | Static site |
+| Interactive resume | Full-stack with PostgreSQL + pgvector |
+| Coaching website | Full-stack with PostgreSQL |
+| Family dashboard | Full-stack with Infisical secrets management |
 
 ## Repository Structure
 
 ```
-lab-iac/
-|-- ansible/                    # Configuration management
-|   |-- inventory/              # Host definitions (control-plane, workers, VPS)
-|   |-- group_vars/             # Variables and encrypted secrets
-|   |-- playbooks/              # Automation playbooks
-|   |-- roles/                  # Reusable Ansible roles
-|   `-- templates/              # Jinja2 templates for configs
-|
-|-- kubernetes/                 # Kubernetes manifests (Kustomize-ready)
-|   |-- github-runner/          # Self-hosted Actions runner
-|   |-- ingress-nginx/          # Ingress controller config
-|   |-- nfs-provisioner/        # Local storage provisioner
-|   |-- postgresql/             # Database deployments
-|   `-- registry/               # Private container registry
-|
-|-- docs/                       # Documentation
-|   |-- README.md               # Documentation index
-|   |-- ARCHITECTURE.md         # System design and decisions
-|   |-- DEPLOYMENT.md           # Deployment procedures
-|   `-- RUNBOOKS.md             # Operational procedures
-|
-|-- scripts/                    # Automation scripts
-|-- docker/                     # Container build contexts
-|-- packer/                     # VM image building (archived)
-`-- terraform/                  # Cloud provisioning (archived)
+ansible/
+  inventory/         Host definitions (cluster nodes, VPS)
+  group_vars/        Shared variables and vault-encrypted secrets
+  playbooks/         14 playbooks covering full cluster lifecycle
+  roles/             8 reusable roles
+  templates/         Jinja2 configs (Caddyfile, PostgreSQL, Garage, systemd)
+
+kubernetes/
+  base/              Kustomize root (registry, runner, postgresql, garage)
+  github-runner/     Runner deployment, RBAC, autoscaler, Docker daemon config
+  registry/          Private container registry (deployment, service, PVC)
+  ingress-nginx/     Helm values for NGINX Ingress Controller
+  nfs-provisioner/   Helm values for NFS dynamic provisioner
+
+docker/
+  github-runner/     Custom runner image (Rust, Helm, kubectl, Node.js, cross-compile)
+
+scripts/             Idempotent shell scripts for Helm installs and node configuration
+docs/                Architecture decisions, deployment guide, operational runbooks
 ```
 
-## What This Demonstrates
+## Getting Started
 
-### Infrastructure Automation
-- **Idempotent configuration**: Ansible playbooks safely re-runnable
-- **Secret management**: Ansible Vault for sensitive data
-- **Dynamic inventory**: Automatic host discovery
+### Provision a new cluster from scratch
 
-### Kubernetes Operations
-- **Cluster lifecycle**: Automated cluster provisioning with kubeadm
-- **GitOps patterns**: Application repos contain their own Helm charts
-- **Storage management**: NFS provisioner for persistent volumes
-- **Ingress routing**: Domain-based routing with TLS termination
-
-### CI/CD Pipeline
-- **Self-hosted runners**: GitHub Actions runners in Kubernetes
-- **Private registry**: Push/pull images without external dependencies
-- **Automated deployments**: Push to deploy via Helm
-
-### Networking & Security
-- **Zero-trust networking**: NetBird VPN for secure connectivity
-- **Automatic TLS**: Let's Encrypt with DNS-01 challenges
-- **Firewall automation**: nftables rules for K8s traffic
-
-## Quick Start
-
-### Prerequisites
-- Ansible 2.9+
-- kubectl configured for cluster access
-- SSH access to cluster nodes
-
-### Deploy to Existing Cluster
 ```bash
-# Configure an application
-cd /path/to/your-app
-helm upgrade --install app-name ./helm --wait
+# All playbooks decrypt secrets via .vault_pass (git-ignored)
+ansible-playbook -i ansible/inventory/all-nodes.yml ansible/playbooks/baseline-setup.yml -v
+ansible-playbook -i ansible/inventory/all-nodes.yml ansible/playbooks/setup-control-plane.yml -v
+ansible-playbook -i ansible/inventory/all-nodes.yml ansible/playbooks/setup-workers.yml -v
+ansible-playbook -i ansible/inventory/all-nodes.yml ansible/playbooks/k8s-verify.yml -v
 
-# View deployed services
-kubectl get ingress -A
+# Install cluster addons
+./scripts/install-cert-manager.sh
+./scripts/install-ingress-nginx.sh
+./scripts/install-nfs-provisioner.sh
+./scripts/install-github-runner.sh
 ```
 
-### Provision New Node
-```bash
-# Run baseline setup on a new machine
-ansible-playbook -i ansible/inventory/all-nodes.yml \
-  ansible/playbooks/baseline-setup.yml --limit new-node -v
-```
+### Deploy a new application
+
+1. Add a `Dockerfile` and `helm/` chart to the application repository
+2. Add the GitHub Actions workflow targeting `[self-hosted, kubernetes, lab]`
+3. Push to main
+
+The runner builds the image, pushes it to the private registry, and deploys via Helm.
 
 ## Documentation
 
-| Document | Description |
-|----------|-------------|
-| [docs/README.md](docs/README.md) | Documentation index and reading guide |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System architecture and design decisions |
-| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Deployment procedures and patterns |
-| [docs/RUNBOOKS.md](docs/RUNBOOKS.md) | Operational runbooks and troubleshooting |
-| [ansible/README.md](ansible/README.md) | Ansible configuration guide |
-
-## Archived Components
-
-The `packer/` and `terraform/` directories contain historical work from earlier phases when this lab ran on Proxmox VMs. These are preserved as learning artifacts demonstrating:
-- VM template building with Packer
-- Infrastructure provisioning with Terraform
-- Cloud-init automation
-
-The current focus is bare-metal Kubernetes, which better reflects production environments while reducing resource overhead.
-
-## Active Services
-
-Applications deployed to this cluster (managed in separate repositories):
-- **Landing Page**: Static portfolio site
-- **Resume Site**: Interactive resume with PostgreSQL backend
-- **Coaching Website**: Client-facing business application
-- **Family Dashboard**: Household management app
-
-Each application repository contains its own Helm chart following the deployment pattern documented in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+| Document | Contents |
+|----------|----------|
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Node specs, network topology, technology decisions |
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Deployment patterns, secrets management, registry operations |
+| [docs/RUNBOOKS.md](docs/RUNBOOKS.md) | Troubleshooting procedures, recovery steps, health checks |
 
 ## License
 
-MIT License - This is a personal learning and portfolio project. Feel free to reference or adapt for your own infrastructure projects.
+MIT
