@@ -27,8 +27,11 @@
     - { name: 'net.ipv6.conf.default.forwarding', value: '1' }
     # accept_ra=2 allows accepting Router Advertisements even when forwarding is enabled
     # Without this, nodes won't get global IPv6 addresses via SLAAC
+    # all/default only affect future interfaces; the physical interface needs it explicitly
     - { name: 'net.ipv6.conf.all.accept_ra', value: '2' }
     - { name: 'net.ipv6.conf.default.accept_ra', value: '2' }
+    - { name: 'net.ipv6.conf.{{ network_interface }}.accept_ra', value: '2' }
+    - { name: 'net.ipv6.conf.{{ network_interface }}.autoconf', value: '1' }
   become: yes
 
 - name: Install Kubernetes prerequisite packages
