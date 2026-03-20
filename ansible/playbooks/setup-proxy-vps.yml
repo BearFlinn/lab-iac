@@ -88,6 +88,43 @@
           community.general.ufw:
             state: enabled
 
+    - name: Configure UDP port forwarding via NAT
+      when: udp_forwarding_rules is defined and udp_forwarding_rules | length > 0
+      block:
+        - name: Enable IP forwarding
+          ansible.posix.sysctl:
+            name: net.ipv4.ip_forward
+            value: '1'
+            sysctl_set: yes
+            reload: yes
+
+        - name: Allow UFW routed traffic for forwarded ports
+          community.general.ufw:
+            rule: allow
+            route: yes
+            proto: udp
+            port: "{{ item.dest_port | string }}"
+            to_ip: "{{ item.dest_ip }}"
+            comment: "Forward: {{ item.comment | default(item.src_port ~ '/udp') }}"
+          loop: "{{ udp_forwarding_rules }}"
+
+        - name: Add NAT rules to UFW before.rules
+          ansible.builtin.blockinfile:
+            path: /etc/ufw/before.rules
+            insertbefore: "^\\*filter"
+            marker: "# {mark} ANSIBLE MANAGED - UDP PORT FORWARDING NAT RULES"
+            block: |
+              *nat
+              :PREROUTING ACCEPT [0:0]
+              :POSTROUTING ACCEPT [0:0]
+              {% for rule in udp_forwarding_rules %}
+              # {{ rule.comment | default(rule.src_port ~ '/udp forward') }}
+              -A PREROUTING -p udp --dport {{ rule.src_port }} -j DNAT --to-destination {{ rule.dest_ip }}:{{ rule.dest_port }}
+              -A POSTROUTING -d {{ rule.dest_ip }}/32 -p udp --dport {{ rule.dest_port }} -j MASQUERADE
+              {% endfor %}
+              COMMIT
+          notify: Reload UFW
+
     - name: Verify fail2ban is running
       ansible.builtin.systemd:
         name: fail2ban
@@ -130,4 +167,10 @@
           - "  Wildcard K8s proxy: *.{{ caddy_root_domain | default('N/A') }} -> {{ k8s_ingress_endpoint | default('N/A') }}"
           - ""
           - "Root domain: {{ caddy_root_domain | default('N/A') }} -> {{ caddy_root_redirect_target | default('N/A') }}"
+          - "UDP forwarding: {{ udp_forwarding_rules | default([]) | length }} rule(s)"
           - "=========================================="
+
+  handlers:
+    - name: Reload UFW
+      community.general.ufw:
+        state: reloaded

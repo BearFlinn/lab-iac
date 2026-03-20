@@ -52,6 +52,25 @@ all:
       caddy_root_domain: "bearflinn.com"
       caddy_root_redirect_target: "landing.bearflinn.com"
 
+      # =======================================================================
+      # UDP Port Forwarding (NAT/DNAT via NetBird tunnel)
+      # =======================================================================
+      # These rules forward UDP traffic from the VPS public IP through the
+      # NetBird VPN tunnel (wt0) to backend services on the home network.
+      #
+      # IMPORTANT: These are managed by the setup-proxy-vps playbook alongside
+      # UFW. If UFW is reset (which the playbook does), these rules are
+      # re-applied automatically. Do NOT add forwarding rules manually via
+      # iptables — they will be wiped on the next playbook run.
+      #
+      # NAT rules are stored in /etc/ufw/before.rules so they persist
+      # across UFW reloads.
+      udp_forwarding_rules:
+        - src_port: 8211
+          dest_ip: "100.96.46.7"
+          dest_port: 8211
+          comment: "Palworld game server on deb-web"
+
   vars:
     # Timezone
     timezone: "UTC"

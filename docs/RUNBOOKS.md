@@ -501,6 +501,53 @@ The `caddy_services` list in `ansible/inventory/proxy-vps.yml` supports three ty
 - `gin-house.bearflinn.com` → Home Assistant (Tailscale)
 - `*.bearflinn.com` (unmatched) → K8s ingress
 
+### UDP Port Forwarding (Game Servers, etc.)
+
+The VPS forwards UDP traffic through the NetBird VPN tunnel (wt0) to backend
+services on the home network using iptables NAT rules. These are managed by
+the `setup-proxy-vps.yml` playbook via the `udp_forwarding_rules` variable
+in `ansible/inventory/proxy-vps.yml`.
+
+**Why this is in the playbook and not manual:** The playbook resets UFW on
+every run (`community.general.ufw: state: reset`), which wipes any manually
+added iptables rules. By defining forwarding rules in the inventory and
+applying them in the playbook, they survive re-runs.
+
+**Active forwarding rules:**
+- `UDP 8211` → `100.96.46.7:8211` (Palworld server on deb-web)
+
+**Adding a new forwarding rule:**
+
+Add an entry to `udp_forwarding_rules` in `ansible/inventory/proxy-vps.yml`:
+```yaml
+udp_forwarding_rules:
+  - src_port: 8211
+    dest_ip: "100.96.46.7"
+    dest_port: 8211
+    comment: "Palworld game server on deb-web"
+```
+
+Then re-run the playbook:
+```bash
+ansible-playbook -i ansible/inventory/proxy-vps.yml \
+  ansible/playbooks/setup-proxy-vps.yml --vault-password-file .vault_pass -v
+```
+
+**Troubleshooting forwarding:**
+```bash
+# Check NAT rules are in place
+sudo iptables -t nat -L -n -v
+
+# Check UFW route rules exist
+sudo ufw status verbose | grep -i forward
+
+# Check forwarding is enabled
+sysctl net.ipv4.ip_forward
+
+# Verify NetBird tunnel is up and routing works
+ip route get <dest_netbird_ip>
+```
+
 ### Update Caddy Configuration
 
 ```bash
