@@ -483,6 +483,24 @@ sudo tail -f /var/log/caddy/access.log
 sudo journalctl -u caddy -f
 ```
 
+### Caddy Service Types
+
+The `caddy_services` list in `ansible/inventory/proxy-vps.yml` supports three types:
+
+| Type | Purpose | Required Fields |
+|------|---------|-----------------|
+| `proxy` | Reverse proxy to a backend | `domain`, `backend` |
+| `static` | Serve static files | `domain`, `root` |
+| `redirect` | Permanent (301) redirect to external domain | `domain`, `target` |
+
+**Active redirects:**
+- `residuum.bearflinn.com` → `agent-residuum.com` (permanent)
+
+**Active proxies:**
+- `bearflinn.com` → `landing.bearflinn.com` (root domain redirect)
+- `gin-house.bearflinn.com` → Home Assistant (Tailscale)
+- `*.bearflinn.com` (unmatched) → K8s ingress
+
 ### Update Caddy Configuration
 
 ```bash

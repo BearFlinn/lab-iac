@@ -5,7 +5,7 @@ users:
     sudo: ALL=(ALL) NOPASSWD:ALL
     shell: /bin/bash
     ssh_authorized_keys:
-      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJ3YhoRZK1c8zqqZcvtmotGT/+bZ+JDhxQTjc5R6zrmV
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBXMyPvM7ENinFxQ/h0ajlCBWZGRcCVBrzcHuyrwF+mz
 packages:
   - fail2ban
   - ufw

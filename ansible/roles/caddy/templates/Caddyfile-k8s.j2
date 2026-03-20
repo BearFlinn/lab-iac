@@ -16,7 +16,7 @@
 # Required variables:
 #   - caddy_root_domain: Base domain (e.g., bearflinn.com)
 #   - k8s_ingress_endpoint: K8s ingress host:port
-#   - caddy_services: List of non-K8s services (static sites, other proxies)
+#   - caddy_services: List of non-K8s services (static, proxy, redirect)
 
 # Global options
 {
@@ -44,7 +44,23 @@
 # =============================================================================
 
 {% for service in caddy_services | default([]) %}
-{% if service.type | default('proxy') == 'static' %}
+{% if service.type | default('proxy') == 'redirect' %}
+# {{ service.comment | default(service.domain) }}
+{{ service.domain }} {
+    redir https://{{ service.target }}{uri} permanent
+
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        -Server
+    }
+
+    log {
+        output file {{ caddy_log_dir }}/access.log
+        format json
+    }
+}
+
+{% elif service.type | default('proxy') == 'static' %}
 # {{ service.comment | default(service.domain) }}
 {{ service.domain }} {
     root * {{ service.root | default('/var/www/html') }}
@@ -57,6 +73,33 @@
         X-Content-Type-Options "nosniff"
         X-XSS-Protection "1; mode=block"
         Referrer-Policy "strict-origin-when-cross-origin"
+        -Server
+    }
+
+    log {
+        output file {{ caddy_log_dir }}/access.log
+        format json
+    }
+}
+
+{% elif service.type == 'posthog_proxy' %}
+# {{ service.comment | default(service.domain) }}
+{{ service.domain }} {
+    handle /static/* {
+        reverse_proxy https://{{ service.assets_host | default('us-assets.i.posthog.com') }} {
+            header_up Host {{ service.assets_host | default('us-assets.i.posthog.com') }}
+        }
+    }
+
+    handle {
+        reverse_proxy https://{{ service.ingest_host | default('us.i.posthog.com') }} {
+            header_up Host {{ service.ingest_host | default('us.i.posthog.com') }}
+        }
+    }
+
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Content-Type-Options "nosniff"
         -Server
     }
 

@@ -40,6 +40,13 @@ all:
           type: "static"
           root: "/var/www/html"
           comment: "Static test site"
+        - domain: "residuum.bearflinn.com"
+          type: "redirect"
+          target: "agent-residuum.com"
+          comment: "Permanent redirect to agent-residuum.com"
+        - domain: "ph.bearflinn.com"
+          type: "posthog_proxy"
+          comment: "PostHog analytics reverse proxy (avoids ad blockers)"
 
       # Root domain redirect
       caddy_root_domain: "bearflinn.com"
