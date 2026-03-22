@@ -17,6 +17,7 @@
 #   - caddy_root_domain: Base domain (e.g., bearflinn.com)
 #   - k8s_ingress_endpoint: K8s ingress host:port
 #   - caddy_services: List of non-K8s services (static, proxy, redirect)
+#   - caddy_k8s_domains: List of external domains routed to K8s ingress (optional)
 
 # Global options
 {
@@ -130,6 +131,34 @@
 }
 
 {% endif %}
+{% endfor %}
+# =============================================================================
+# EXTERNAL DOMAINS → K8S PROXY
+# =============================================================================
+
+{% for domain_entry in caddy_k8s_domains | default([]) %}
+# {{ domain_entry.comment | default(domain_entry.domain) }}
+{{ domain_entry.domain }} {
+    reverse_proxy http://{{ k8s_ingress_endpoint }} {
+        header_up Host {host}
+        header_up X-Real-IP {remote}
+    }
+
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Frame-Options "SAMEORIGIN"
+        X-Content-Type-Options "nosniff"
+        X-XSS-Protection "1; mode=block"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        -Server
+    }
+
+    log {
+        output file {{ caddy_log_dir }}/k8s-access.log
+        format json
+    }
+}
+
 {% endfor %}
 # =============================================================================
 # ROOT DOMAIN REDIRECT

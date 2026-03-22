@@ -30,6 +30,13 @@ all:
       # are proxied here - K8s ingress handles routing and 404s
       k8s_ingress_endpoint: "100.96.94.27:30487"
 
+      # External domains routed to K8s ingress (non-bearflinn.com domains)
+      caddy_k8s_domains:
+        - domain: "pennydreadfulsfx.com"
+          comment: "Penny Dreadful SFX portfolio (caz-portfolio)"
+        - domain: "www.pennydreadfulsfx.com"
+          comment: "Penny Dreadful SFX portfolio - www"
+
       # Non-K8s services (static sites, other reverse proxies)
       caddy_services:
         - domain: "gin-house.bearflinn.com"

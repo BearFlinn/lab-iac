@@ -53,6 +53,9 @@ k8s_ingress_endpoint: ""
 #     comment: "Home Assistant"
 caddy_services: []
 
+# External domains to proxy to K8s ingress (non-root-domain sites)
+caddy_k8s_domains: []
+
 # Root domain redirect (e.g., example.com -> www.example.com)
 # caddy_root_domain: "example.com"
 # caddy_root_redirect_target: "www.example.com"
