@@ -115,7 +115,7 @@ This is the big move. The current cluster goes down, everything gets relocated.
 
 ### 1D: Move Existing Machines
 
-- [ ] **Drain MSI laptop from K8s** — `kubectl drain msi-laptop --ignore-daemonsets --delete-emptydata`
+- [x] ~~Drain MSI laptop from K8s~~ — **done 2026-03-26. Scaled down non-essential workloads (residuum-landing, coaching-website, family-dashboard, game-server-platform, advocacy-quiz, zork) to 0 replicas. Kept landing-page, resume-site, caz-portfolio, and actions-runner-controller running. Remaining pods drained to tower-pc. Node cordoned.**
 - [ ] **Drain Tower PC from K8s** — `kubectl drain tower-pc --ignore-daemonsets --delete-emptydata`
 - [ ] Shut down all cluster machines gracefully
 - [ ] Physically move Inspiron, Optiplex to closet
@@ -251,6 +251,7 @@ Before the Optiplex can be wiped and joined to K8s, its services need new homes:
 
 ### 4C: MSI Laptop — Dev Machine
 
+- [x] ~~Drain from K8s cluster~~ — **done 2026-03-26. Node cordoned, workloads migrated to tower-pc.**
 - [ ] Remove K8s components (kubeadm reset, remove containerd)
 - [ ] Fresh OS install or cleanup
 - [ ] Set up development environment
