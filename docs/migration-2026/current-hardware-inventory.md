@@ -201,7 +201,7 @@ These numbers are approximate until server CPUs are identified.
 
 ## Previously Unlisted Hardware
 
-### Mini PC (Current NAS / Future Router)
+### Mini PC (Current NAS / Future Jumpbox)
 
 | Spec | Value |
 |------|-------|
@@ -213,7 +213,7 @@ These numbers are approximate until server CPUs are identified.
 | NIC (current) | Onboard (assumed 1 port) |
 | NIC (to add) | Spare 4-port NIC |
 | Current role | NAS |
-| Planned role | Dedicated router |
+| Planned role | Dedicated jumpbox |
 | Notes | Full motherboard. 3TB drive data must be backed up before repurposing. |
 
 ### APC Back-UPS RS 1500

@@ -1,0 +1,54 @@
+/* Jumpbox waybar — minimal dark theme, compact */
+
+* {
+    font-family: monospace;
+    font-size: 12px;
+    min-height: 0;
+}
+
+window#waybar {
+    background-color: #1a1a2e;
+    color: #c0caf5;
+    border-bottom: 1px solid #333333;
+}
+
+#workspaces button {
+    padding: 0 6px;
+    color: #888888;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+}
+
+#workspaces button.focused {
+    color: #7aa2f7;
+    background-color: #24283b;
+}
+
+#clock, #cpu, #memory, #disk, #network, #custom-hostname {
+    padding: 0 8px;
+}
+
+#cpu {
+    color: #9ece6a;
+}
+
+#memory {
+    color: #e0af68;
+}
+
+#disk {
+    color: #bb9af7;
+}
+
+#network {
+    color: #7dcfff;
+}
+
+#network.disconnected {
+    color: #f7768e;
+}
+
+#custom-hostname {
+    color: #565f89;
+}
