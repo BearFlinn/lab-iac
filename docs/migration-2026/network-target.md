@@ -1,6 +1,6 @@
 # Target Network Architecture
 
-Last updated: 2026-03-24
+Last updated: 2026-03-26
 
 ## Physical Layout
 
@@ -93,6 +93,8 @@ Alternatively, keep it even simpler: **just use VLAN 10 as a dedicated storage n
 | Storage | 20 | NFS/S3 traffic only | R730 (dedicated NIC port), Quanta, Optiplex, Inspiron |
 
 This is the highest-value segmentation — keeps storage I/O off the general network. The R730's 4-port NIC can dedicate ports to this. Worth doing even without a router.
+
+**Quanta direct link:** The Quanta will have 1-2 ports direct-connected to the R730 (bypassing the switch entirely) for dedicated NFS I/O. As the heaviest K8s worker, this prevents it from saturating the switch with storage traffic. Remaining Quanta NIC ports connect to the switch for general/K8s traffic.
 
 ## WiFi Architecture
 

@@ -1,6 +1,6 @@
 # Migration Plan
 
-Last updated: 2026-03-24
+Last updated: 2026-03-26
 
 ## Guiding Principles
 
@@ -8,6 +8,14 @@ Last updated: 2026-03-24
 - **Data safety first** — back up the 3TB drive before touching any storage
 - **Network before compute** — machines need connectivity before they can be configured
 - **One role at a time** — don't drain a machine from K8s until its replacement is confirmed working
+
+---
+
+## Migration Strategy
+
+**Staging approach:** Before tearing down the current K8s cluster, stand up critical workloads in a temporary VM (on R730 or Raspberry Pi on hand) so they stay available throughout the migration. This removes time pressure from the cluster rebuild.
+
+**Anchor machine:** The R730 comes online first — basic OS, staging VM for critical services, then PXE server and storage. Everything else gets shuffled around it.
 
 ---
 
@@ -20,6 +28,7 @@ Do all of this before touching the physical setup. Can be done in parallel.
 - [x] ~~Test POST on R730xd~~ — **confirmed. BIOS 2.3.4, iDRAC accessible.**
 - [x] ~~Identify R730xd CPU~~ — **Intel Xeon E5-2630 v3 (8C/16T @ 2.4 GHz, 85W)**
 - [x] ~~Check R730xd drive bay config~~ — **12× 3.5" front + 2× 2.5" rear confirmed**
+- [x] ~~Remove 3TB drive from mini PC~~ — **physically removed 2026-03-26, data migration deferred until R730 online**
 - [x] ~~Test POST on Quanta~~ — **confirmed. AMI BIOS, boots to EFI shell (no drives).**
 - [x] ~~Identify Quanta CPUs~~ — **2× Intel Xeon E5-2670 (Sandy Bridge-EP), 8C/16T each = 16C/32T total @ 2.6 GHz**
 - [x] ~~Check Quanta drive bays~~ — **6× SATA, no hot-swap bays, internal mount only, currently empty**
@@ -33,7 +42,7 @@ Do all of this before touching the physical setup. Can be done in parallel.
 ### 0B: Data Safety
 
 - [ ] **Back up critical data before migration:**
-  - 3TB drive on mini PC — **still a blocker**, but can bootstrap R730xd with some 4TB drives first, then back up 3TB there
+  - 3TB drive (removed from mini PC 2026-03-26) — migrate data once R730 is online
   - Palworld server data (deb-web) — save files, config
   - Residuum files (deb-web)
   - Everything else is stale or expendable (tower-pc ZFS pool ~9MB, deb-web duplicate apps)
@@ -44,7 +53,7 @@ Document everything that's running so nothing gets lost in the migration:
 
 - [x] ~~K8s workloads~~ — **inventoried. 10 app deployments + infra (ingress, cert-manager, registry, NFS provisioner, actions runner).**
 - [x] ~~deb-web (Optiplex) services~~ — **inventoried. Running duplicate Docker Compose copies of most K8s apps, plus Prometheus/Grafana monitoring stack, Palworld (systemd), Caddy, cloudflared, GitHub Actions runner, agent-docs-sync.**
-- [x] ~~Tower-pc services~~ — **NFS export at /mnt/nfs-storage (bcache-backed 1TB HDD). ZFS pool DEGRADED (1 of 3 drives missing, ~9MB data). No Docker containers. No extra services.**
+- [x] ~~Tower-pc services~~ — **NFS export at /mnt/nfs-storage (bcache-backed 1TB HDD). ZFS pool had appeared DEGRADED but all 3×2TB drives are healthy — the setup script targeted a card reader slot (/dev/sdg) instead of the third drive (/dev/sdd). ~9MB data. No Docker containers. No extra services.**
 - [x] ~~MSI laptop workloads~~ — **Nothing custom — just kubelet/containerd. Hosts 18 of ~25 pods (most K8s workloads schedule here). Clean removal.**
 - [ ] **DNS/networking dependencies** — what breaks if IPs change? (NFS export references 10.0.0.0/24 + NetBird IP 172.30.186.199; VPS proxy routes to K8s ingress via NetBird)
 - [x] ~~Ansible vault~~ — **.vault_pass exists (45 bytes). Ensure backed up outside repo.**
@@ -89,7 +98,8 @@ This is the big move. The current cluster goes down, everything gets relocated.
 
 ### 1C: Set Up Switch & Network
 
-- [ ] Mount SR2024 in closet
+- [x] ~~Initial closet networking~~ — **5-port managed switch relocated to closet (2026-03-26). Current K8s machines + desktop on 8-port unmanaged switch.**
+- [ ] Mount SR2024 in closet (replaces temporary 5-port managed switch)
 - [ ] Connect Xfinity uplink to switch
 - [ ] Configure VLANs on SR2024:
   - VLAN 1 (default/untagged): Home network — Xfinity DHCP, bedroom, garage, APs
@@ -127,18 +137,21 @@ This is the big move. The current cluster goes down, everything gets relocated.
 
 ## Phase 2: New Machines Online
 
-### 2A: R730 — Storage Server
+### 2A: R730 — Storage Server + PXE Server
 
 - [ ] Install drives in R730xd:
   - Boot: 240GB SATA SSD (from tower-pc) in rear 2.5" bay
+  - Cache: 1× SSD as bcache for the data pool
   - Initial data drives: start with some 4TB drives, get online, back up 3TB drive
   - Remaining drives after backup: rest of 4TBs + 3TBs + optionally tower-pc's 3×2TB ZFS drives
-- [ ] Install OS (Proxmox? Debian + ZFS? TrueNAS?)
-- [ ] Configure storage pools:
-  - Main pool from the large drives
-  - Decide on filesystem/RAID level (ZFS RAID-Z2 recommended for this many drives)
+- [ ] Install OS (Debian — base for MergerFS + SnapRAID)
+- [ ] Configure storage:
+  - MergerFS pool across all data drives (supports mismatched sizes)
+  - SnapRAID for parity protection
+  - bcache SSD for read acceleration
 - [ ] Set up NFS exports for K8s PVCs
 - [ ] Set up S3-compatible storage if needed (Garage or MinIO)
+- [ ] Set up PXE boot server (TFTP/DHCP) for diskless K8s nodes (Inspiron, Optiplex, Quanta)
 - [ ] Configure R730 NIC:
   - Port 1: VLAN 1 (general/management + internet)
   - Port 2: VLAN 10 (lab network)
@@ -147,10 +160,11 @@ This is the big move. The current cluster goes down, everything gets relocated.
 - [ ] Install NetBird for VPN access
 - [ ] Verify NFS is accessible from K8s nodes
 
-### 2B: Quanta — K8s Worker
+### 2B: Quanta — K8s Worker (Diskless)
 
-- [ ] Install 250GB SSD (spare) + 4-port NIC with riser
-- [ ] Install OS (Ubuntu Server or Debian — match existing cluster OS)
+- [ ] Install 4-port NIC with PCIe riser (no local storage — PXE boot from R730)
+- [ ] Configure direct connection(s) from Quanta to R730 for dedicated NFS I/O
+- [ ] PXE boot OS from R730
 - [ ] Run baseline-setup Ansible playbook
 - [ ] Configure networking (VLAN 1 + VLAN 10, match K8s node config)
 - [ ] Install NetBird
@@ -180,10 +194,11 @@ Before the Optiplex can be wiped and joined to K8s, its services need new homes:
 - [ ] **GitHub Actions runner** — already has K8s manifests in the cluster, verify it works on new nodes
 - [ ] **Any other services** — identified in Phase 0C
 
-### 3C: Optiplex Joins K8s
+### 3C: Optiplex Joins K8s (Diskless)
 
 - [ ] Back up anything on Optiplex that isn't already migrated
-- [ ] Wipe and reinstall OS
+- [ ] Remove SSD — repurpose to jumpbox
+- [ ] PXE boot OS from R730
 - [ ] Run baseline-setup Ansible playbook
 - [ ] Configure networking (VLAN 1 + VLAN 10)
 - [ ] Install NetBird

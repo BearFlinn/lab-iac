@@ -1,6 +1,6 @@
 # Current Hardware Inventory
 
-Last updated: 2026-03-24
+Last updated: 2026-03-26
 
 ---
 
@@ -14,10 +14,11 @@ Last updated: 2026-03-24
 | Form factor | Laptop |
 | CPU | Intel i3-7100U — 2C/4T @ 2.7 GHz |
 | RAM | 8 GB |
-| Storage | 256 GB SSD |
+| Storage | 256 GB SSD (to be removed — repurposed to jumpbox) |
 | GPU | None |
 | Network | enp2s0, IP 10.0.0.226 |
 | Current role | K8s control plane (single-node etcd, apiserver, scheduler, controller-manager) |
+| Migration note | Will PXE boot from R730 (diskless). SSD repurposed to jumpbox. |
 
 ### tower-pc — Worker
 
@@ -27,7 +28,7 @@ Last updated: 2026-03-24
 | Form factor | Full tower |
 | CPU | Intel i7-4790 — 4C/8T @ 3.6–4.0 GHz |
 | RAM | 24 GB |
-| Storage | 128 GB NVMe (bcache backing), 240 GB SATA SSD (OS), 1 TB HDD (NFS), 3×2 TB HDD (ZFS RAID-Z1 ~4 TB usable) — **~6.4 TB total raw** |
+| Storage | 128 GB NVMe (bcache backing), 240 GB SATA SSD (OS), 1 TB HDD (NFS), 3×2 TB HDD (all healthy — ZFS pool appeared degraded due to setup script targeting a card reader instead of the 3rd drive) — **~6.4 TB total raw** |
 | GPU | NVIDIA GTX 1060 3 GB |
 | Network | eno1, IP 10.0.0.249 |
 | Current role | K8s worker — NFS server, storage services, GPU workloads |
@@ -56,11 +57,11 @@ Last updated: 2026-03-24
 | Form factor | SFF desktop |
 | CPU | Intel i7-4790 — 4C/8T |
 | RAM | 32 GB |
-| Storage | 512 GB SSD |
+| Storage | 512 GB SSD (to be removed — repurposed to jumpbox) |
 | GPU | None |
 | Network | IP not currently assigned in cluster |
 | Current role | **Not in K8s cluster.** Currently runs as `deb-web` — barebones Debian web hosting server + Palworld game server. Also hosts CI/CD pipeline (self-hosted GitHub Actions runner). |
-| Notes | Was planned as general-compute K8s worker. Services need migrating before it can join the cluster. |
+| Notes | Will PXE boot from R730 (diskless). SSD goes to jumpbox. Services need migrating before it can join the cluster. |
 
 ## External Infrastructure
 
@@ -102,7 +103,7 @@ Last updated: 2026-03-24
 | Form factor | Rackmount |
 | CPU | 2× Intel Xeon E5-2670 0 — 8C/16T @ 2.6 GHz (turbo 3.3 GHz), Sandy Bridge-EP, 115W TDP each (230W total CPU) |
 | RAM | 64 GB DDR3 1333 MHz |
-| Storage | 6× SATA ports, no hot-swap bays — drives mount internally. Currently empty. |
+| Storage | 6× SATA ports, no hot-swap bays — drives mount internally. Currently empty. Will PXE boot (diskless). |
 | GPU | TBD — check PCIe slots |
 | Remote mgmt | IPMI/BMC supported — set static IP while monitor is connected |
 | BIOS | AMI v2.14.1219 (dated 2012-10-04) |
@@ -214,7 +215,7 @@ These numbers are approximate until server CPUs are identified.
 | NIC (to add) | Spare 4-port NIC |
 | Current role | NAS |
 | Planned role | Dedicated jumpbox |
-| Notes | Full motherboard. 3TB drive data must be backed up before repurposing. |
+| Notes | Full motherboard. 3TB drive data must be backed up before repurposing. Will receive an SSD (from Optiplex or Inspiron) to improve I/O for Claude Code and terminal workflows. |
 
 ### APC Back-UPS RS 1500
 
@@ -243,7 +244,7 @@ These numbers are approximate until server CPUs are identified.
 - [ ] Test all 24 ports on the SR2024 switch
 - [ ] Determine Aerohive AP firmware situation — can they run standalone without HiveManager/cloud?
 - [ ] Back up the data on the one 3 TB drive before repurposing
-- [ ] Determine which spare HDDs go into which machines
+- [x] ~~Determine which spare HDDs go into which machines~~ — **All data HDDs go in R730xd (MergerFS pool). SSDs: 1 → jumpbox, 1 → tower PC (LLM storage), 1 → R730 bcache**
 - [ ] Determine GPU placement across machines
 - [ ] Plan power and rack/shelf layout for the new room
 - [ ] Assess power draw — servers can pull 500W+ each under load

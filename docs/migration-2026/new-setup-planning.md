@@ -1,6 +1,6 @@
 # New Setup Planning
 
-Last updated: 2026-03-24
+Last updated: 2026-03-26
 
 ## Target Architecture
 
@@ -45,9 +45,9 @@ Last updated: 2026-03-24
   - Total available: up to **33TB raw** — fits easily in the R730xd's bays with room to spare
   - 2× 2.5" rear bays ideal for OS/boot SSDs (keep spinning rust for data only)
 - **VMs:** Occasional, light use — cybersec experimentation, provisioning hardware for friends, etc. Spin up when needed, shut down when not.
+- **Storage software:** MergerFS + SnapRAID — chosen for mismatched drive support without licensing cost
+- **Boot cache:** One SSD as bcache for the data pool
 - **Open questions:**
-  - ZFS? MergerFS + SnapRAID? TrueNAS? Proxmox w/ ZFS?
-  - RAID level: Z2 recommended with this many drives (double parity)
   - NFS? S3 (Garage/MinIO)? Both?
   - Back up the 3TB drive with important data first
 
@@ -56,18 +56,22 @@ Last updated: 2026-03-24
 - **Role:** Main K8s compute workhorse — 2× CPUs, 32 cores, 64 GB RAM, fully dedicated to cluster
 - **Why:** Most powerful machine in the fleet. K8s benefits from strong workers, and this gives headroom for automation/parallel workloads.
 - **No VMs** — Quanta is fully committed to K8s
+- **Boot:** PXE boot from R730 (diskless)
+- **Network:** 4-port NIC installed via PCIe riser. 1-2 ports direct-connected to R730 for dedicated NFS I/O, remaining ports on switch
 
 ### Dell Optiplex 9020 → K8s Worker
 
 - **Role:** Second K8s worker node
 - **Migrating from:** Standalone deb-web duties (web hosting, Palworld, CI/CD runner) — these move into K8s workloads
-- **Specs:** i7-4790 4C/8T, 32 GB RAM, 512 GB SSD
+- **Specs:** i7-4790 4C/8T, 32 GB RAM
+- **Boot:** PXE boot from R730 (diskless) — SSD repurposed elsewhere
 
 ### Dell Inspiron 15 → K8s Control Plane (Unchanged)
 
 - **Role:** Stays as K8s control plane
 - **Why:** Lightweight enough for a small cluster's control plane. Not worth the effort of migrating this role to another machine.
-- **Specs:** i3-7100U 2C/4T, 8 GB RAM, 256 GB SSD
+- **Specs:** i3-7100U 2C/4T, 8 GB RAM
+- **Boot:** PXE boot from R730 (diskless) — SSD repurposed to jumpbox
 
 ### Tower PC → Dedicated GPU Inference Workstation (Standalone)
 
@@ -75,7 +79,7 @@ Last updated: 2026-03-24
 - **GPU plan:** 1080 Ti (11GB) + existing 1060 (3GB) + 1050 Ti (4GB) = 18 GB combined VRAM
   - GTX 760 (2GB) — probably not worth a slot
   - Need to verify PSU wattage and available PCIe slots/power connectors
-- **Storage:** Existing drives stay (240GB OS SSD, etc). ZFS pool drives may migrate to R730.
+- **Storage:** Existing drives stay (240GB OS SSD, etc). ZFS pool drives may migrate to R730. Adding an SSD for LLM model storage.
 - **Software:** Ollama / vLLM / text-generation-inference TBD. Likely exposed as API to other machines.
 
 ### MSI Laptop → Dev Machine (Removed from Cluster)
@@ -83,10 +87,32 @@ Last updated: 2026-03-24
 - **Role:** Personal development workstation
 - **No cluster role.** GPU (GTX 1060 3GB) stays with the laptop.
 
+### Mini PC (AMD C60) → Jumpbox / Command Center
+
+- **Role:** Dedicated jumpbox — SSH gateway, Claude Code, stats display
+- **Storage:** Receives an SSD from Optiplex or Inspiron (replacing the 3TB HDD after data backup)
+- **Why:** AMD C60 is too slow for routing but fine for terminal/SSH work. SSD removes disk I/O as bottleneck.
+
 ### proxy-vps (Hetzner) → Stays As-Is
 
 - Caddy reverse proxy + NetBird VPN gateway
 - Role unchanged
+
+## Boot & Storage Strategy
+
+**K8s nodes are diskless.** Inspiron, Optiplex, and Quanta all PXE boot from the R730. This makes them disposable — any node can be rebuilt by just PXE booting a replacement. The R730 runs the PXE/TFTP server.
+
+**SSD redistribution:**
+
+| SSD | Source | Destination | Purpose |
+|-----|--------|-------------|---------|
+| 256 GB | Inspiron | Jumpbox | OS + Claude Code I/O |
+| 512 GB | Optiplex | Tower PC | LLM model storage |
+| 128 GB NVMe | Tower PC | R730 | bcache for MergerFS pool |
+
+**Stateful workloads run on R730**, not in K8s. K8s is purely stateless — NFS PVCs for anything that needs persistence, served from R730's MergerFS pool.
+
+**Quanta gets dedicated NFS link(s)** — 1-2 direct connections to R730 bypassing the switch to avoid I/O bottlenecks on the heaviest worker.
 
 ## Network Equipment
 
@@ -142,7 +168,7 @@ Compared to current cluster: more than 3× the compute cores, 50% more RAM, on f
 - [x] ~~VM host~~ — **R730**
 - [ ] **Network topology** — needs full discussion
 - [ ] **Tower-pc PSU/PCIe audit** — can it actually hold 3 GPUs?
-- [ ] **R730 storage software** — ZFS vs TrueNAS vs Proxmox w/ ZFS vs MergerFS+SnapRAID
+- [x] ~~R730 storage software~~ — **MergerFS + SnapRAID** (mismatched drives, no license cost)
 - [ ] **R730 drive layout** — which drives go where
 - [ ] **3TB data backup** — must happen before any drive reformatting
 - [x] ~~R730 CPU identification~~ — **Xeon E5-2630 v3, 8C/16T**

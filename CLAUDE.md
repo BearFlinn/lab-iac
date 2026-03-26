@@ -97,3 +97,4 @@ Applications use GitOps: push to main → GitHub Actions builds image → pushes
 
 - Any and all configuration or infrastructures MUST be conducted with IaC.
 - If any changes cannot be conducted via IaC, they must be clearly documented.
+- Warnings are blockers and MUST be resolved before considering work complete. If a warning is expected and truly cannot be resolved, it must be clearly documented with an explanation of why.
