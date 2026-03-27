@@ -1,80 +1,41 @@
-# Repository Overview
+# lab-iac
 
-Homelab Infrastructure as Code, mid-migration to new hardware. Previous K8s cluster configs are archived in `archive/pre-migration-2026/` with original directory structure preserved.
-
-**Active infrastructure:**
-- **R730xd** (10.0.0.200) — Storage server, Debian 13, iDRAC at 10.0.0.203
-- **Hetzner VPS** (proxy-vps) — Caddy reverse proxy, NetBird VPN endpoint
-- **Jumpbox** — AMD C60 mini PC, lightweight command center (in progress)
-
-**Migration in progress:** See `docs/migration-2026/` for full plan, hardware inventory, and network design.
-
-# Common Commands
-
-## Ansible Playbooks
-
-```bash
-# All playbooks use vault - .vault_pass must exist in repo root (git-ignored)
-ansible-playbook -i ansible/inventory/r730xd.yml ansible/playbooks/setup-r730xd.yml -v
-ansible-playbook -i ansible/inventory/r730xd.yml ansible/playbooks/r730xd-storage-prep.yml -v
-ansible-playbook -i ansible/inventory/proxy-vps.yml ansible/playbooks/setup-proxy-vps.yml -v
-```
-
-## Scripts
-
-```bash
-# R730xd setup (idempotent)
-./scripts/build-r730xd-iso.sh        # Build preseeded Debian ISO
-./scripts/configure-r730xd-jbod.sh   # Configure PERC H730 for JBOD via iDRAC
-
-# Jumpbox
-./scripts/build-jumpbox-image.sh     # Build Debian Trixie image
-```
-
-# Architecture
-
-## Active Machines
-
-| Node | IP | Role | Notable |
-|------|----|------|---------|
-| r730xd | 10.0.0.200 | Storage server | Debian 13, 32GB ECC, 12x 3.5" + 2x 2.5" bays, iDRAC 10.0.0.203 |
-| proxy-vps | Hetzner | Reverse proxy | Caddy, NetBird VPN, SSH port 2222 |
-| msi-laptop | 10.0.0.177 | Dev/management | Not in cluster, used for managing infra |
-
-## Machines Pending Migration
-
-See `docs/migration-2026/current-hardware-inventory.md` for full specs.
-
-- **dell-inspiron-15** (10.0.0.226) — Current K8s control plane, will become diskless PXE node
-- **tower-pc** (10.0.0.249) — Current K8s worker/NFS, will become GPU inference workstation
-- **dell-optiplex-9020** — Current deb-web server, will become diskless K8s worker
-- **Quanta QSSC-2ML** — New server, will be diskless K8s worker
-
-# Repository Structure
-
-```
-ansible/
-├── inventory/{proxy-vps.yml, r730xd.yml}
-├── group_vars/all/{vars.yml, vault.yml}
-├── playbooks/{setup-proxy-vps.yml, setup-r730xd.yml, r730xd-storage-prep.yml}
-└── roles/{caddy/, r730xd-storage-prep/}
-
-configs/
-├── jumpbox/{sway/, waybar/, foot/}
-└── r730xd/preseed.cfg
-
-scripts/{build-r730xd-iso.sh, configure-r730xd-jbod.sh, build-jumpbox-image.sh}
-docs/migration-2026/                  # Active planning docs
-archive/pre-migration-2026/           # Previous cluster configs (preserved structure)
-```
+Homelab Infrastructure as Code. See `README.md` for architecture, machines, repo structure, and common commands. See `docs/migration-2026/` for migration plan and hardware inventory.
 
 # Secrets Management
 
 - **Ansible Vault:** `group_vars/all/vault.yml` encrypted, decrypted via `.vault_pass` file
 - **Vault password file:** Must exist at repo root, git-ignored
+- Secrets must never appear in plaintext in IaC — use `no_log: true` for tasks that handle sensitive values
 
-# Important Instructions
+# Rules
 
-- Any and all configuration or infrastructures MUST be conducted with IaC.
-- If any changes cannot be conducted via IaC, they must be clearly documented.
-- Warnings are blockers and MUST be resolved before considering work complete. If a warning is expected and truly cannot be resolved, it must be clearly documented with an explanation of why.
+- All configuration and infrastructure MUST be conducted with IaC. Manual changes must be clearly documented.
+- Warnings are blockers. Resolve before considering work complete. If a warning truly cannot be resolved, document why.
+- Decision records: When a non-obvious choice is made, write an ADR in `docs/decisions/` (use `/adr` skill).
+
+# Operational Readiness Checklist
+
+Every service, machine, or infrastructure component stood up during the migration MUST have answers to the following before it is considered complete. If a question doesn't apply, document why.
+
+## Observability
+- **Health signal:** How do we know this is working right now? (e.g., systemd status, HTTP health endpoint, kubectl readiness probe, process check)
+- **Metrics:** What should be measured? (e.g., disk usage, request latency, queue depth, CPU/memory) Where do metrics go?
+- **Logs:** Where do logs live? Are they rotated? Can they be searched? (e.g., journald, file path, stdout to container runtime)
+
+## Alerting
+- **Failure detection:** How do we know when this breaks? What specifically triggers an alert? (e.g., service down, disk >90%, cert expiring, backup failed)
+- **Alert destination:** Where do alerts go? (e.g., Ntfy, email, Slack, dashboard, UPS shutdown signal)
+- **On-call response:** Who or what acts on the alert? Is there a runbook or is the fix obvious?
+
+## Troubleshooting
+- **First steps:** If this is down, what do you check first? (e.g., `systemctl status X`, `kubectl logs`, check upstream dependency)
+- **Dependencies:** What does this depend on? What depends on this? (e.g., NFS requires R730xd network, K8s pods require NFS)
+- **Common failure modes:** What's most likely to go wrong? (e.g., disk full, OOM, network unreachable, cert expired, DNS)
+- **Recovery:** How do you restart or rebuild this? Is it automatic (systemd restart, K8s reschedule) or manual?
+
+## Documentation
+- **Decision record:** If a non-obvious choice was made, is there an ADR in `docs/decisions/`? (Use `/adr` skill)
+- **Runbook:** For anything that requires multi-step recovery, is there a runbook?
+
+When writing Ansible roles, scripts, or configs — if the operational story isn't addressed in the IaC itself (e.g., monitoring agent installed, health check configured, log rotation set up), flag it as a TODO or open question rather than silently skipping it.
