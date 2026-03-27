@@ -106,7 +106,7 @@ This is the highest-value segmentation — keeps storage I/O off the general net
 
 - Without a custom router, VLAN-tagged SSIDs (separate guest network) are harder to use — the Xfinity box can't route for a guest VLAN. APs would run a single SSID on the default VLAN for now.
 - Xfinity WiFi can be **disabled** once AP coverage is verified, or left on as a fallback.
-- **PoE note:** SR2024 does NOT have PoE. Need PoE injectors for each AP.
+- **PoE note:** SR2024 provides PoE (802.3at/PoE+) — no injectors needed.
 
 ## NetBird VPN
 
@@ -134,9 +134,9 @@ Unchanged from current setup:
 
 ## Open Questions
 
-- [ ] **SR2024 VLAN verification** — confirm it supports 802.1Q VLAN tagging (it should, but verify before planning around it)
-- [ ] **SR2024 PoE** — almost certainly no. Budget for 3× PoE injectors for the Aerohive APs.
-- [ ] **Aerohive firmware** — can they run standalone without HiveManager? Can they do VLAN-tagged SSIDs?
+- [x] **SR2024 VLAN verification** — confirmed: supports 802.1Q VLAN tagging, LACP bonding, trunk/access port modes
+- [x] **SR2024 PoE** — confirmed: SR2024 provides PoE (802.3at/PoE+). All 3 APs powered successfully by the switch. No injectors needed.
+- [x] **Aerohive firmware** — confirmed: standalone mode works via `no capwap client enable`. VLAN-tagged SSIDs work via user-profile attributes. Switch runs HiveOS 6.5r8, AP230 runs HiveOS 8.1r1.
 - [ ] **Xfinity gateway model** — does it play nice with a managed switch doing VLANs on the LAN side?
 - [ ] **Storage VLAN worth it now?** — dedicated storage VLAN is high value but adds config complexity on every lab machine. Decide before migration.
 - [ ] **D-Link DIR-868L** — could potentially be reflashed with OpenWrt and used as an additional WiFi AP if needed, but low priority.
