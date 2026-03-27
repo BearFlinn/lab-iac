@@ -26,7 +26,7 @@ Last updated: 2026-03-26
 
 +------------------+ +------------------+
 | Dell R730        | | Tower PC         |
-| Storage + VMs    | | GPU Inference    |
+| Storage + VMs    | | Router + GPU     |
 | Standalone       | | Standalone       |
 +------------------+ +------------------+
 ```
@@ -40,11 +40,13 @@ Last updated: 2026-03-26
 - **Why:** Up to 12× 3.5" front hot-swap bays + 2× 2.5" rear + 4-port NIC + iDRAC. Purpose-built for this role.
 - **Replaces:** tower-pc as storage backbone
 - **Storage plan:**
-  - Spare drives: 3×4TB + 5×3TB = 27TB raw
+  - Spare drives: 2×4TB + 4×3TB = 20TB raw (plus 1×3TB with data pending backup)
   - Potentially migrate tower-pc's 3×2TB ZFS drives = +6TB raw
-  - Total available: up to **33TB raw** — fits easily in the R730xd's bays with room to spare
+  - Total available: up to **27TB raw** (29TB once 3TB drive data is backed up) — fits easily in the R730xd's bays with room to spare
   - 2× 2.5" rear bays ideal for OS/boot SSDs (keep spinning rust for data only)
-- **VMs:** Occasional, light use — cybersec experimentation, provisioning hardware for friends, etc. Spin up when needed, shut down when not.
+- **VMs:**
+  - **Staging VM (migration):** Hosts critical workloads (web services, etc.) while the K8s cluster is being rebuilt. Ensures no downtime for production services during the transition. Torn down once the new cluster is online.
+  - Long-term: occasional, light use — cybersec experimentation, provisioning hardware for friends, etc. Spin up when needed, shut down when not.
 - **Storage software:** MergerFS + SnapRAID — chosen for mismatched drive support without licensing cost
 - **Boot cache:** One SSD as bcache for the data pool
 - **Open questions:**
@@ -73,9 +75,10 @@ Last updated: 2026-03-26
 - **Specs:** i3-7100U 2C/4T, 8 GB RAM
 - **Boot:** PXE boot from R730 (diskless) — SSD repurposed to jumpbox
 
-### Tower PC → Dedicated GPU Inference Workstation (Standalone)
+### Tower PC → Router + GPU Inference Workstation (Standalone)
 
-- **Role:** GPU inference workstation, removed from K8s cluster
+- **Role:** Lab router + GPU inference workstation, removed from K8s cluster
+- **Why router here:** CPU will be largely unused by inference workloads, it's already outside the cluster, and its other workloads are non-critical. Consolidates routing onto an existing machine rather than dedicating hardware.
 - **GPU plan:** 1080 Ti (11GB) + existing 1060 (3GB) + 1050 Ti (4GB) = 18 GB combined VRAM
   - GTX 760 (2GB) — probably not worth a slot
   - Need to verify PSU wattage and available PCIe slots/power connectors

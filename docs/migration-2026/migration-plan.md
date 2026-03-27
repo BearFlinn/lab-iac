@@ -33,11 +33,11 @@ Do all of this before touching the physical setup. Can be done in parallel.
 - [x] ~~Identify Quanta CPUs~~ — **2× Intel Xeon E5-2670 (Sandy Bridge-EP), 8C/16T each = 16C/32T total @ 2.6 GHz**
 - [x] ~~Check Quanta drive bays~~ — **6× SATA, no hot-swap bays, internal mount only, currently empty**
 - [x] ~~Configure Quanta BMC/IPMI~~ — **static IP set, dedicated NIC port**
-- [ ] **Verify Quanta sine wave tolerance** — will it run on the APC UPS or does it need pure sine?
-- [ ] **Audit Tower PC PSU** — wattage, available PCIe power connectors (6-pin, 8-pin), number of PCIe x16 slots
+- [ ] **Verify Quanta sine wave tolerance** — will it run on the APC UPS or does it need pure sine? **Deferred — will test when physically setting up in closet.**
+- [ ] **Audit Tower PC PSU** — wattage, available PCIe power connectors (6-pin, 8-pin), number of PCIe x16 slots. **Blocked until Phase 3** — tower is currently primary K8s worker (handles majority of workload post-MSI drain)
 - [ ] **Test SR2024 switch** — power on, access management interface, confirm VLAN support, test ports
 - [x] ~~Check Aerohive AP + switch firmware~~ — **confirmed standalone capable, no cloud dependency (per previous owner)**
-- [ ] **Check UPS** — does the APC cable (RJ45-to-USB) exist or need to be sourced?
+- [ ] **Check UPS** — APC RJ45-to-USB data cable still needed for NUT monitoring. **Deferred — not blocking migration.**
 
 ### 0B: Data Safety
 
@@ -64,11 +64,11 @@ Document everything that's running so nothing gets lost in the migration:
 
 - [x] ~~Ethernet cable~~ — **~300ft cat6 on hand**
 - [x] ~~PoE for APs~~ — **switch has 12 PoE ports, no injectors needed**
-- [ ] APC RJ45-to-USB data cable (940-0127 or compatible)
+- [ ] APC RJ45-to-USB data cable (940-0127 or compatible) — **deferred, not blocking migration**
 - [x] ~~Power strips~~ — **on hand**
 - [x] ~~Closet power~~ — **dedicated 20A circuit**
-- [ ] RJ45-to-USB console cable for Aerohive AP/switch configuration
-- [ ] PCIe riser for Quanta (needed to install 4-port NIC — Quanta has no onboard RJ45)
+- [x] ~~RJ45-to-USB console cable for Aerohive AP/switch configuration~~ — **received, used to factory reset all 3 APs (2026-03-27)**
+- [x] ~~PCIe riser for Quanta~~ — **received, 4-port NIC installed (2026-03-27)**
 
 ---
 
@@ -159,10 +159,14 @@ This is the big move. The current cluster goes down, everything gets relocated.
 - [x] ~~Set up iDRAC remote management~~ — **SSH racadm working at 10.0.0.203. Note: no Enterprise license, so no virtual media. HTTPS web UI works for basic monitoring.**
 - [ ] Install NetBird for VPN access
 - [ ] Verify NFS is accessible from K8s nodes
+- [ ] **Stand up staging VM** — host critical workloads (web services, etc.) here while K8s cluster is being rebuilt. This unblocks draining the tower-pc without downtime for production services.
+  - Containerized or bare services — whatever gets them running fastest
+  - Update VPS proxy to route traffic to staging VM
+  - Verify all critical services are reachable before proceeding to Phase 3
 
 ### 2B: Quanta — K8s Worker (Diskless)
 
-- [ ] Install 4-port NIC with PCIe riser (no local storage — PXE boot from R730)
+- [x] ~~Install 4-port NIC with PCIe riser~~ — **installed (2026-03-27)** (no local storage — PXE boot from R730)
 - [ ] Configure direct connection(s) from Quanta to R730 for dedicated NFS I/O
 - [ ] PXE boot OS from R730
 - [ ] Run baseline-setup Ansible playbook
@@ -226,9 +230,11 @@ Before the Optiplex can be wiped and joined to K8s, its services need new homes:
 
 ## Phase 4: Standalone Machines
 
-### 4A: Tower PC — GPU Inference Workstation
+### 4A: Tower PC — Router + GPU Inference Workstation
 
-- [ ] Shut down tower-pc
+Tower PC takes on the router role because its CPU will be largely unused by inference workloads, it's already outside the cluster, and its other workloads are non-critical.
+
+- [ ] Shut down tower-pc (critical workloads already on R730 staging VM from Phase 2A)
 - [ ] Migrate ZFS drives to R730 (if not done in Phase 2A)
 - [ ] Install GPUs: 1080 Ti + 1050 Ti (keep existing 1060)
   - Verify PSU can handle the load (1080 Ti alone is ~250W)
@@ -236,6 +242,10 @@ Before the Optiplex can be wiped and joined to K8s, its services need new homes:
 - [ ] Reinstall OS (or repurpose existing install)
 - [ ] Install NVIDIA drivers
 - [ ] Install inference stack (Ollama, vLLM, or text-generation-inference)
+- [ ] Configure routing:
+  - Connect WAN (Xfinity gateway) and LAN interfaces
+  - Set up NAT, firewall rules, DHCP
+  - Replace Xfinity gateway's routing role
 - [ ] Configure API access from other machines on the lab VLAN
 - [ ] Connect to UPS (battery-backed outlet)
 
@@ -295,6 +305,9 @@ Phase 1 (planned downtime)
 Phase 2A: R730 storage   Phase 2B: Quanta joins K8s
          │                 │
          v                 │
+  Staging VM on R730 ────── Critical services move here, unblocks tower-pc
+         │                 │
+         v                 │
 Phase 3A: Storage cutover  │
          │                 │
          v                 v
@@ -304,17 +317,18 @@ Phase 3B: Migrate deb-web services
 Phase 3C: Optiplex joins K8s
          │
          v
-Phase 3D: Remove old workers
+Phase 3D: Remove old workers (incl. tower-pc)
          │
          v
 Phase 3E: Verify cluster
          │
          ├──────────────────────┐
          v                      v
-Phase 4A: Tower PC → GPU    Phase 4B: WiFi APs
+Phase 4A: Tower PC →       Phase 4B: WiFi APs
+  Router + GPU inference        │
          │                      │
          v                      v
-Phase 5: Cleanup & documentation
+Phase 5: Cleanup & documentation (tear down staging VM)
 ```
 
 ---

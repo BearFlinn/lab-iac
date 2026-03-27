@@ -203,17 +203,15 @@ Last updated: 2026-03-26
 
 ## Aggregate Resources — All Available Hardware (Post-Migration Potential)
 
-These numbers are approximate until server CPUs are identified.
-
 | Resource | Estimate |
 |----------|----------|
-| CPU cores | TBD (depends on server CPUs — likely 20-40+ cores total) |
-| RAM | ~152 GB (8 + 24 + 32 + 32 + 64 − 32 MSI removal) |
+| CPU cores | ~30C/52T (Inspiron 2C/4T + Optiplex 4C/4T + R730 8C/16T + Quanta 16C/32T) — tower PC excluded (standalone GPU workstation) |
+| RAM | ~136 GB (8 + 32 + 32 + 64) — tower PC (24 GB) excluded |
 | GPUs | 1080 Ti (11GB), 1060 3GB (tower), 1050 Ti (4GB), 760 (2GB) |
 | Storage (installed) | ~9.2 TB raw |
-| Storage (spare HDDs) | ~27 TB raw |
+| Storage (spare HDDs) | ~23 TB raw (2×4TB + 5×3TB, 1×3TB has data pending backup) |
 | Network | 24-port managed GbE switch, 3× WiFi APs |
-| Physical machines | 4 (inspiron, tower, optiplex, R730, Quanta) — 5 total minus MSI |
+| Physical machines | 5 (Inspiron, Optiplex, R730, Quanta, Tower PC) — MSI laptop removed from cluster |
 
 ---
 
@@ -248,7 +246,7 @@ These numbers are approximate until server CPUs are identified.
 
 ### Spare 4-Port NIC
 
-- **Going into the Quanta** — Quanta has no onboard RJ45 (currently using RJ45-to-SFP adapter). Needs a PCIe riser to install.
+- **Installed in the Quanta** via PCIe riser (2026-03-27).
 
 ## Open Questions / TODO
 

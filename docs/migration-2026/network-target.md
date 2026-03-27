@@ -1,6 +1,6 @@
 # Target Network Architecture
 
-Last updated: 2026-03-26
+Last updated: 2026-03-27
 
 ## Physical Layout
 
@@ -13,7 +13,7 @@ Closet (Lab):
   - Quanta QSSC-2ML (K8s worker)
   - Dell Optiplex 9020 (K8s worker)
   - Dell Inspiron 15 (K8s control plane)
-  - Tower PC (GPU inference) — may be in closet or nearby depending on noise/heat
+  - Tower PC (router + GPU inference) — may be in closet or nearby depending on noise/heat
 
 Cable runs from closet:
   - To Xfinity gateway (uplink)
@@ -26,10 +26,17 @@ Cable runs from closet:
 
 ```
               [ISP / Xfinity Gateway]
-              Router / DHCP / NAT / DNS
-                   Living Room
+                 Bridge mode
+                  Living Room
                         |
                         | (cable run to closet)
+                        v
+              +-------------------+
+              |    Tower PC       |
+              |  Router + GPU     |
+              |  NAT/DHCP/DNS/FW  |
+              +-------------------+
+                        |
                         v
             +-------------------+
             |    SR2024 Switch  |
@@ -42,34 +49,25 @@ Cable runs from closet:
            (VLAN 10)      (VLAN 1)  (VLAN 1) (trunk)
 ```
 
-### How This Works Without a Custom Router
+### How This Works
 
-- **Xfinity gateway stays as router/NAT/DHCP/DNS** for internet-facing traffic — no bottleneck, full gig throughput
-- **SR2024 handles VLANs** — lab traffic is segmented at Layer 2 even without inter-VLAN firewall rules
-- **Lab machines use static IPs** (as they already do via Ansible) — they don't depend on Xfinity DHCP
-- **Home devices get DHCP from Xfinity** as usual on the default/untagged VLAN
-- **Lab VLAN is isolated from home VLAN at Layer 2** — home devices can't reach lab machines unless the switch routes between VLANs (and we don't enable that)
-- **Lab machines reach the internet** via a trunk port on the switch that carries the lab VLAN to the Xfinity gateway — OR by having the Xfinity gateway on the default VLAN and giving lab machines a default gateway on that VLAN too
+- **Xfinity gateway in bridge mode** — passes the public IP through to the Tower PC, which handles all routing
+- **Tower PC is the router** — runs NAT, DHCP, DNS, and inter-VLAN firewall rules. CPU is largely unused by its GPU inference workload, and its other roles are non-critical, making it a good fit.
+- **SR2024 handles VLANs** — lab traffic is segmented at Layer 2, with the Tower PC providing inter-VLAN routing and firewall rules (router-on-a-stick)
+- **Lab machines use static IPs** (as they already do via Ansible) on the lab VLAN
+- **Home devices get DHCP from the Tower PC** on the default/untagged VLAN
+- **Lab VLAN is isolated from home VLAN** — inter-VLAN traffic goes through the Tower PC's firewall rules
 
-### Limitation
+### What This Unlocks (vs. Xfinity-only)
 
-- **No inter-VLAN firewall** — we can isolate VLANs but can't write granular rules between them. This is acceptable for now — the goal is isolation, not filtering.
-- **No custom DNS** — lab machines continue using /etc/hosts via Ansible. Can add a DNS container on K8s later (CoreDNS or Pi-hole) for local resolution.
-- **DHCP for lab stays manual** — static IPs via Ansible, not a DHCP server per VLAN.
+- **Inter-VLAN firewall rules** — granular control over what can cross VLAN boundaries
+- **Custom DHCP per VLAN** — static assignments for lab, dynamic for home
+- **Local DNS** — lab-internal resolution (e.g., `r730.lab.local`) without /etc/hosts hacks
+- **Full control** — no dependency on Xfinity gateway's limited feature set
 
-### Future: Drop-In Router Upgrade
+## VLAN Design
 
-When a suitable x86 box becomes available (used thin client, etc.), it slots in between the Xfinity gateway and the SR2024:
-
-```
-  [Xfinity in bridge mode] → [Router] → [SR2024]
-```
-
-This unlocks: inter-VLAN firewall rules, custom DHCP per VLAN, local DNS, and full control. The VLAN config on the switch doesn't change — just add a router on a stick.
-
-## VLAN Design (Simplified)
-
-Without a router, keep it simple — 2 VLANs to start, expandable later.
+With the Tower PC as router, full inter-VLAN routing and firewall rules are available. Start with 2 VLANs, expand as needed.
 
 | VLAN | ID | Purpose | Members |
 |------|----|---------|---------|
@@ -104,7 +102,7 @@ This is the highest-value segmentation — keeps storage I/O off the general net
 | AP130 #1 | Garage/workshop | Workshop coverage |
 | AP130 #2 | Far side of house or closet area | Dead spot coverage |
 
-- Without a custom router, VLAN-tagged SSIDs (separate guest network) are harder to use — the Xfinity box can't route for a guest VLAN. APs would run a single SSID on the default VLAN for now.
+- With the Tower PC as router, VLAN-tagged SSIDs (e.g., separate guest network) are fully supported — the router can provide DHCP and firewall rules per VLAN.
 - Xfinity WiFi can be **disabled** once AP coverage is verified, or left on as a fallback.
 - **PoE note:** SR2024 provides PoE (802.3at/PoE+) — no injectors needed.
 
@@ -118,9 +116,9 @@ Unchanged from current setup:
 
 ## DNS
 
-- **For now:** Continue using /etc/hosts managed by Ansible (current approach)
-- **Near-term improvement:** Run CoreDNS or Pi-hole on K8s for lab-internal DNS resolution (e.g., `r730.lab.local`, `quanta.lab.local`). Lab machines point to this for DNS.
-- **When router arrives:** Move DNS to the router for whole-network resolution
+- **For now:** Continue using /etc/hosts managed by Ansible (current approach) during migration
+- **Post-migration:** Run DNS on the Tower PC (router) for whole-network resolution — lab-internal names (e.g., `r730.lab.local`, `quanta.lab.local`) and upstream forwarding. Eliminates the need for /etc/hosts management via Ansible.
+- **Alternative:** Run CoreDNS or Pi-hole on K8s if preferred, but having it on the router is simpler and doesn't create a chicken-and-egg problem with K8s needing DNS to boot.
 
 ## Cable Runs Needed
 
@@ -145,6 +143,6 @@ Unchanged from current setup:
 
 | Device | Status | Potential Use |
 |--------|--------|---------------|
-| Mini PC (AMD C60) | Too slow for gig routing | Repurpose as NAS, Pi-hole, or monitoring box |
+| Mini PC (AMD C60) | Jumpbox / command center | SSH gateway, Claude Code, stats display |
 | D-Link DIR-868L | Consumer router | Could flash OpenWrt and use as AP, or keep as spare |
 | Existing consumer switches (5-port ×2, 8-port ×1, 5-port managed ×1) | Replaced by SR2024 | Spares. Workshop might keep a small switch if only one cable run goes to the garage. |
