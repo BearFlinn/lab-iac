@@ -1,8 +1,13 @@
 # Repository Overview
 
-Bare-metal Kubernetes portfolio project on repurposed hardware. Four physical machines connected via NetBird VPN to a Hetzner VPS proxy.
+Homelab Infrastructure as Code, mid-migration to new hardware. Previous K8s cluster configs are archived in `archive/pre-migration-2026/` with original directory structure preserved.
 
-**Traffic flow:** Internet → Hetzner VPS (Caddy) → NetBird VPN → Home cluster
+**Active infrastructure:**
+- **R730xd** (10.0.0.200) — Storage server, Debian 13, iDRAC at 10.0.0.203
+- **Hetzner VPS** (proxy-vps) — Caddy reverse proxy, NetBird VPN endpoint
+- **Jumpbox** — AMD C60 mini PC, lightweight command center (in progress)
+
+**Migration in progress:** See `docs/migration-2026/` for full plan, hardware inventory, and network design.
 
 # Common Commands
 
@@ -10,89 +15,63 @@ Bare-metal Kubernetes portfolio project on repurposed hardware. Four physical ma
 
 ```bash
 # All playbooks use vault - .vault_pass must exist in repo root (git-ignored)
-ansible-playbook -i ansible/inventory/all-nodes.yml ansible/playbooks/<playbook>.yml -v
-
-# For proxy-vps playbooks (requires vault for Cloudflare token)
+ansible-playbook -i ansible/inventory/r730xd.yml ansible/playbooks/setup-r730xd.yml -v
+ansible-playbook -i ansible/inventory/r730xd.yml ansible/playbooks/r730xd-storage-prep.yml -v
 ansible-playbook -i ansible/inventory/proxy-vps.yml ansible/playbooks/setup-proxy-vps.yml -v
 ```
 
-Key playbooks in execution order for new cluster:
-1. `baseline-setup.yml` - OS setup per machine
-2. `setup-control-plane.yml` - kubeadm init + Calico
-3. `setup-workers.yml` - join workers
-4. `k8s-verify.yml` - health validation
-5. `setup-proxy-vps.yml` - configure VPS proxy
-
-## Kubernetes Operations
+## Scripts
 
 ```bash
+# R730xd setup (idempotent)
+./scripts/build-r730xd-iso.sh        # Build preseeded Debian ISO
+./scripts/configure-r730xd-jbod.sh   # Configure PERC H730 for JBOD via iDRAC
 
-# Deploy Kustomize manifests
-kubectl apply -k kubernetes/base
-
-# Infrastructure scripts (idempotent, safe to re-run)
-./scripts/install-cert-manager.sh
-./scripts/install-ingress-nginx.sh
-./scripts/install-nfs-provisioner.sh
+# Jumpbox
+./scripts/build-jumpbox-image.sh     # Build Debian Trixie image
 ```
 
 # Architecture
 
-## Cluster Nodes
+## Active Machines
 
 | Node | IP | Role | Notable |
 |------|----|------|---------|
-| dell-inspiron-15 | 10.0.0.226 | Control plane | 8GB RAM (resource-constrained) |
-| tower-pc | 10.0.0.249 | Worker | NFS server, PostgreSQL, 9.3TB storage |
-| msi-laptop | 10.0.0.177 | Dev machine | Removed from cluster, used for managing infra. GTX 1060 GPU |
-| r730xd | 10.0.0.200 | Storage server | Standalone, Debian 13, 32GB ECC, iDRAC 10.0.0.203 |
-| dell-optiplex-9020 | (disabled) | Worker | General compute - not yet in cluster |
+| r730xd | 10.0.0.200 | Storage server | Debian 13, 32GB ECC, 12x 3.5" + 2x 2.5" bays, iDRAC 10.0.0.203 |
+| proxy-vps | Hetzner | Reverse proxy | Caddy, NetBird VPN, SSH port 2222 |
+| msi-laptop | 10.0.0.177 | Dev/management | Not in cluster, used for managing infra |
 
-## Key Network Details
+## Machines Pending Migration
 
-- Pod CIDR: `10.244.0.0/16`
-- Service CIDR: `10.96.0.0/12`
-- Ingress NodePorts: HTTP `30487`, HTTPS `30356`
-- Container registry: `10.0.0.226:32346` (insecure)
-- NFS export: `10.0.0.249:/mnt/nfs-storage`
+See `docs/migration-2026/current-hardware-inventory.md` for full specs.
 
-## Technology Stack
-
-- **Orchestration:** Kubernetes 1.31 via kubeadm, Calico CNI
-- **Config management:** Ansible with vault-encrypted secrets
-- **Storage:** NFS dynamic provisioner on tower-pc
-- **TLS:** cert-manager with Let's Encrypt (DNS-01 via Cloudflare)
-- **Ingress:** NGINX Ingress Controller
-- **External proxy:** Caddy on Hetzner VPS
+- **dell-inspiron-15** (10.0.0.226) — Current K8s control plane, will become diskless PXE node
+- **tower-pc** (10.0.0.249) — Current K8s worker/NFS, will become GPU inference workstation
+- **dell-optiplex-9020** — Current deb-web server, will become diskless K8s worker
+- **Quanta QSSC-2ML** — New server, will be diskless K8s worker
 
 # Repository Structure
 
 ```
 ansible/
-├── inventory/all-nodes.yml      # Master inventory with hardware specs
-├── group_vars/all/vault.yml     # Encrypted secrets (Cloudflare token)
-├── group_vars/k8s_cluster.yml   # K8s versions, CIDR ranges
-├── playbooks/                   # 14 playbooks
-└── roles/                       # Reusable components
+├── inventory/{proxy-vps.yml, r730xd.yml}
+├── group_vars/all/{vars.yml, vault.yml}
+├── playbooks/{setup-proxy-vps.yml, setup-r730xd.yml, r730xd-storage-prep.yml}
+└── roles/{caddy/, r730xd-storage-prep/}
 
-kubernetes/
-├── base/                        # Kustomize manifests (registry, github-runner, postgresql)
-├── ingress-nginx/values.yaml    # Helm values
-└── nfs-provisioner/values.yaml  # Helm values
+configs/
+├── jumpbox/{sway/, waybar/, foot/}
+└── r730xd/preseed.cfg
 
-scripts/                         # Shell scripts (set -euo pipefail, idempotent)
-docs/                            # ARCHITECTURE.md, DEPLOYMENT.md, RUNBOOKS.md
+scripts/{build-r730xd-iso.sh, configure-r730xd-jbod.sh, build-jumpbox-image.sh}
+docs/migration-2026/                  # Active planning docs
+archive/pre-migration-2026/           # Previous cluster configs (preserved structure)
 ```
 
 # Secrets Management
 
 - **Ansible Vault:** `group_vars/all/vault.yml` encrypted, decrypted via `.vault_pass` file
 - **Vault password file:** Must exist at repo root, git-ignored
-- **K8s secrets:** Managed via CI/CD pipelines in application repos
-
-# Deployment Pattern
-
-Applications use GitOps: push to main → GitHub Actions builds image → pushes to registry (10.0.0.226:32346) → deploys via Helm. Self-hosted runners in cluster handle CI/CD.
 
 # Important Instructions
 
