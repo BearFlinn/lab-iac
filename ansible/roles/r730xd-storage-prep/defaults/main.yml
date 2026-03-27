@@ -1,0 +1,22 @@
+---
+# R730xd Storage Preparation Variables
+# Prepares raw HDDs as individually mounted ext4 filesystems
+# for use with MergerFS + SnapRAID
+
+# Base mount path — drives mount as {{ storage_mount_base }}/disk1, disk2, etc.
+storage_mount_base: "/mnt/data"
+
+# Filesystem type (ext4 recommended for SnapRAID compatibility)
+storage_filesystem: "ext4"
+
+# mkfs options: no reserved blocks (-m 0), large file optimization
+storage_mkfs_options: "-m 0 -T largefile4"
+
+# Mount options — nofail prevents boot hang if a drive dies
+storage_mount_options: "defaults,noatime,nofail"
+
+# Minimum drive size in bytes to consider as a data drive (filters out boot SSD)
+data_drive_min_size_bytes: 1000000000000  # 1 TB
+
+# Optional: explicit disk serial numbers to exclude from all operations
+exclude_disks: []

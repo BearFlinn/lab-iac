@@ -1,0 +1,7 @@
+---
+- name: Prepare R730xd data drives
+  hosts: r730xd
+  gather_facts: yes
+  become: yes
+  roles:
+    - r730xd-storage-prep
