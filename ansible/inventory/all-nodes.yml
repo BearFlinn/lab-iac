@@ -42,7 +42,7 @@ all:
           total_storage_gb: 256
           form_factor: "Laptop"
           model: "Dell Inspiron 15-3567"
-          roles: ["control-plane"]
+          node_roles: ["control-plane"]
 
     k8s_workers:
       hosts:
@@ -98,7 +98,7 @@ all:
               purpose: "ZFS RAID-Z1 pool (part 3)"
           total_storage_gb: 6368
           form_factor: "Full Tower"
-          roles: ["compute", "storage", "gpu-enabled"]
+          node_roles: ["compute", "storage", "gpu-enabled"]
           use_cases: ["kubernetes", "ml-workloads", "media-encoding"]
           # Note: storage_config is in ansible/inventory/host_vars/tower-pc.yml
 
@@ -127,7 +127,7 @@ all:
           total_storage_gb: 2000
           form_factor: "Laptop"
           model: "MSI GS43VR 6RE Phantom Pro"
-          roles: ["compute", "gpu-enabled", "portable", "monitoring", "observability"]
+          node_roles: ["compute", "gpu-enabled", "portable", "monitoring", "observability"]
           use_cases: ["development", "testing", "remote-deployment"]
 
         # Temporarily disabled - migrating services before adding to cluster
@@ -153,3 +153,23 @@ all:
       children:
         k8s_control_plane:
         k8s_workers:
+
+    storage_servers:
+      hosts:
+        r730xd:
+          ansible_host: 10.0.0.200
+          ansible_connection: ssh
+          ansible_user: bearf
+          # Hardware specs
+          cpu: "Intel Xeon E5-2630 v3 (8C/16T @ 2.4 GHz)"
+          cpu_cores: 8
+          cpu_threads: 16
+          ram: "32GB"
+          ram_gb: 32
+          storage:
+            - name: "OS SSD"
+              type: "SSD"
+              purpose: "Operating system"
+          form_factor: "2U Rackmount"
+          model: "Dell PowerEdge R730xd"
+          node_roles: ["storage"]

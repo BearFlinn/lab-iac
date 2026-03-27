@@ -44,7 +44,8 @@ kubectl apply -k kubernetes/base
 |------|----|------|---------|
 | dell-inspiron-15 | 10.0.0.226 | Control plane | 8GB RAM (resource-constrained) |
 | tower-pc | 10.0.0.249 | Worker | NFS server, PostgreSQL, 9.3TB storage |
-| msi-laptop | 10.0.0.177 | Worker | Monitoring workloads, GTX 1060 GPU |
+| msi-laptop | 10.0.0.177 | Dev machine | Removed from cluster, used for managing infra. GTX 1060 GPU |
+| r730xd | 10.0.0.200 | Storage server | Standalone, Debian 13, 32GB ECC, iDRAC 10.0.0.203 |
 | dell-optiplex-9020 | (disabled) | Worker | General compute - not yet in cluster |
 
 ## Key Network Details

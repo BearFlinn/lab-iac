@@ -74,6 +74,15 @@ Last updated: 2026-03-24
 - **No dedicated storage network** — when the R730 starts serving NFS to K8s nodes, that traffic shares bandwidth with everything else
 - **The managed switch is wasted** — sitting in the chain doing nothing useful
 
+## Management Network
+
+Out-of-band management interfaces (iDRAC, BMC/IPMI) are on the 10.0.0.x lab subnet, reachable directly. Managed via `ipmitool` (both) and `racadm` (R730 only, when HTTPS is working).
+
+| Interface | IP | Notes |
+|-----------|-----|-------|
+| R730xd iDRAC | 10.0.0.203 | Firmware 2.40, IPMI + HTTPS working |
+| Quanta BMC/IPMI | 10.0.0.201 | Not yet verified |
+
 ## Network Equipment Available for Migration
 
 | Equipment | Location | Notes |

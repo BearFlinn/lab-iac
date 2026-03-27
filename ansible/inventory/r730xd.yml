@@ -1,0 +1,33 @@
+---
+# Dell R730xd — Standalone Storage Server
+# Use this inventory for R730xd-specific playbooks
+#
+# Usage:
+#   ansible-playbook -i ansible/inventory/r730xd.yml ansible/playbooks/setup-r730xd.yml -v
+
+all:
+  hosts:
+    r730xd:
+      ansible_host: 10.0.0.200
+      ansible_connection: ssh
+      ansible_user: bearf
+      # Hardware specs
+      cpu: "Intel Xeon E5-2630 v3 (8C/16T @ 2.4 GHz)"
+      cpu_cores: 8
+      cpu_threads: 16
+      ram: "32GB"
+      ram_gb: 32
+      storage:
+        - name: "OS SSD"
+          type: "SSD"
+          purpose: "Operating system"
+      form_factor: "2U Rackmount"
+      model: "Dell PowerEdge R730xd"
+      node_roles: ["storage"]
+
+  vars:
+    network_dns:
+      - "8.8.8.8"
+      - "8.8.4.4"
+    timezone: "America/New_York"
+    enable_firewall: false

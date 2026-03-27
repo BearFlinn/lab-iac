@@ -89,11 +89,19 @@ Last updated: 2026-03-26
 | Form factor | 2U rackmount |
 | CPU | 1× Intel Xeon E5-2630 v3 — 8C/16T @ 2.4 GHz (turbo), 20 MB cache, 85W TDP. Second socket empty. |
 | RAM | 32 GB DDR4 ECC (expandable — 24 DIMM slots total) |
-| NIC | 4-port (onboard) |
-| Drive bays | **12× 3.5" front** (hot-swap) + **2× 2.5" rear** — confirmed |
+| NIC | Broadcom GbE 4-port 5720-t rNDC (onboard) |
+| Drive bays | **12× 3.5" front** (hot-swap, 2 backplanes) + **2× 2.5" rear** — confirmed |
+| RAID | Dell PERC H730 Mini |
+| PSUs | 2× 750W redundant (Delta) |
+| iDRAC | 10.0.0.203, firmware 2.86.86.86, IPMI + SSH racadm working |
+| Service tag | 45L1DH2 |
+| Built | December 2016 |
 | GPU | TBD (supports full-height PCIe cards) |
-| Status | Decommissioned, needs assessment |
-| TODO | Test POST, check iDRAC access, verify drive bay count/config, check which bays are populated |
+| OS | Debian 13.4 (Trixie), kernel 6.12.74, UEFI boot |
+| OS IP | 10.0.0.200 on eno1 (static) |
+| Boot drive | Samsung SSD 850 EVO 250GB in bay 12 (rear 2.5" slot), non-RAID mode |
+| Status | **Online.** OS installed 2026-03-26 via preseeded USB. Baseline playbook applied. |
+| TODO | Install data drives, configure MergerFS + SnapRAID, set up NFS exports, enroll in NetBird |
 
 #### Quanta QSSC-2ML
 
@@ -105,7 +113,7 @@ Last updated: 2026-03-26
 | RAM | 64 GB DDR3 1333 MHz |
 | Storage | 6× SATA ports, no hot-swap bays — drives mount internally. Currently empty. Will PXE boot (diskless). |
 | GPU | TBD — check PCIe slots |
-| Remote mgmt | IPMI/BMC supported — set static IP while monitor is connected |
+| Remote mgmt | IPMI/BMC at 10.0.0.201 (on lab subnet) |
 | BIOS | AMI v2.14.1219 (dated 2012-10-04) |
 | Status | POST confirmed, no drives installed |
 | TODO | Set BMC/IPMI static IP, check PCIe slot count/type, install OS drive |
@@ -158,9 +166,9 @@ Last updated: 2026-03-26
 
 | Drives | Capacity | Type | Notes |
 |--------|----------|------|-------|
-| 3× 4 TB | 12 TB total | HDD | Available for storage pool |
+| 2× 4 TB | 8 TB total | HDD | Available for storage pool (1× 4TB dead, discarded) |
 | 5× 3 TB | 15 TB total | HDD | **1 drive has data that needs to be preserved before reuse** |
-| **Total spare** | **27 TB raw** | | |
+| **Total spare** | **23 TB raw** | | |
 
 ---
 
@@ -235,12 +243,12 @@ These numbers are approximate until server CPUs are identified.
 
 ## Open Questions / TODO
 
-- [ ] Identify the CPU in the R730 (check iDRAC or boot to BIOS)
-- [ ] Identify both CPUs in the Quanta QSSC-2ML (check BMC/IPMI or boot to BIOS)
-- [ ] Check R730 drive bay configuration (SFF vs LFF)
-- [ ] Check Quanta drive bay configuration
-- [ ] Test POST on both servers
-- [ ] Verify iDRAC (R730) and BMC/IPMI (Quanta) remote management access
+- [x] ~~Identify the CPU in the R730~~ — **Intel Xeon E5-2630 v3 (8C/16T @ 2.4 GHz)**
+- [x] ~~Identify both CPUs in the Quanta QSSC-2ML~~ — **2× Intel Xeon E5-2670 (8C/16T each)**
+- [x] ~~Check R730 drive bay configuration~~ — **12× 3.5" front (LFF) + 2× 2.5" rear**
+- [x] ~~Check Quanta drive bay configuration~~ — **6× SATA, internal mount, no hot-swap**
+- [x] ~~Test POST on both servers~~ — **both confirmed**
+- [x] ~~Verify iDRAC (R730) and BMC/IPMI (Quanta) remote management access~~ — **iDRAC SSH racadm working (no Enterprise license — no virtual media). Quanta BMC/IPMI at 10.0.0.201.**
 - [ ] Test all 24 ports on the SR2024 switch
 - [ ] Determine Aerohive AP firmware situation — can they run standalone without HiveManager/cloud?
 - [ ] Back up the data on the one 3 TB drive before repurposing

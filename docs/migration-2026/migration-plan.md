@@ -139,12 +139,12 @@ This is the big move. The current cluster goes down, everything gets relocated.
 
 ### 2A: R730 — Storage Server + PXE Server
 
-- [ ] Install drives in R730xd:
-  - Boot: 240GB SATA SSD (from tower-pc) in rear 2.5" bay
+- [x] ~~Install boot drive~~ — **Samsung SSD 850 EVO 250GB in rear bay 12 (non-RAID mode)**
+- [ ] Install data drives:
   - Cache: 1× SSD as bcache for the data pool
   - Initial data drives: start with some 4TB drives, get online, back up 3TB drive
   - Remaining drives after backup: rest of 4TBs + 3TBs + optionally tower-pc's 3×2TB ZFS drives
-- [ ] Install OS (Debian — base for MergerFS + SnapRAID)
+- [x] ~~Install OS~~ — **Debian 13.4 (Trixie) installed 2026-03-26 via preseeded USB (fully scripted: `scripts/build-r730xd-iso.sh`). UEFI boot, static IP 10.0.0.200, SSH key auth, baseline playbook applied (`ansible/playbooks/setup-r730xd.yml`).**
 - [ ] Configure storage:
   - MergerFS pool across all data drives (supports mismatched sizes)
   - SnapRAID for parity protection
@@ -156,7 +156,7 @@ This is the big move. The current cluster goes down, everything gets relocated.
   - Port 1: VLAN 1 (general/management + internet)
   - Port 2: VLAN 10 (lab network)
   - Port 3-4: VLAN 20 (dedicated storage, if using storage VLAN)
-- [ ] Set up iDRAC remote management
+- [x] ~~Set up iDRAC remote management~~ — **SSH racadm working at 10.0.0.203. Note: no Enterprise license, so no virtual media. HTTPS web UI works for basic monitoring.**
 - [ ] Install NetBird for VPN access
 - [ ] Verify NFS is accessible from K8s nodes
 
@@ -261,8 +261,9 @@ Before the Optiplex can be wiped and joined to K8s, its services need new homes:
 
 ## Phase 5: Cleanup & Documentation
 
-- [ ] Update Ansible inventory (`all-nodes.yml`) with new topology
-- [ ] Add R730 and Quanta to Ansible inventory (standalone or K8s groups)
+- [x] ~~Add R730 to Ansible inventory~~ — **added as `storage_servers` group in `all-nodes.yml` + dedicated `ansible/inventory/r730xd.yml`**
+- [ ] Add Quanta to Ansible inventory
+- [ ] Update Ansible inventory (`all-nodes.yml`) with final topology
 - [ ] Update `docs/ARCHITECTURE.md` with new cluster topology
 - [ ] Update `CLAUDE.md` with new node table, IPs, roles
 - [ ] Update VPS proxy inventory if any endpoints changed

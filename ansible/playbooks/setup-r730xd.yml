@@ -1,0 +1,162 @@
+---
+# R730xd Baseline Setup Playbook
+# Standalone storage server — NOT a Kubernetes node
+#
+# Key differences from baseline-setup.yml:
+#   - Swap stays enabled (not a K8s node)
+#   - No K8s-specific firewall rules
+#   - Adds storage-oriented packages (smartmontools, lm-sensors, hdparm)
+#
+# Usage:
+#   ansible-playbook -i ansible/inventory/r730xd.yml ansible/playbooks/setup-r730xd.yml -v
+
+- name: R730xd baseline setup
+  hosts: all
+  gather_facts: yes
+  become: yes
+  vars:
+    gateway: "{{ network_gateway | default(ansible_default_ipv4.gateway) }}"
+    dns_servers: "{{ network_dns | default(['8.8.8.8', '8.8.4.4']) }}"
+    network_interface: "{{ ansible_default_ipv4.interface }}"
+    current_static_ip: "{{ static_ip | default(ansible_default_ipv4.address) }}"
+    current_netmask: "{{ ansible_default_ipv4.netmask }}"
+
+  tasks:
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install baseline packages
+      ansible.builtin.apt:
+        name:
+          - curl
+          - wget
+          - git
+          - vim
+          - htop
+          - net-tools
+          - dnsutils
+          - iputils-ping
+          - traceroute
+          - tcpdump
+          - nfs-common
+          - lvm2
+          - python3
+          - python3-pip
+        state: present
+
+    - name: Install storage server packages
+      ansible.builtin.apt:
+        name:
+          - smartmontools
+          - lm-sensors
+          - hdparm
+          - nvme-cli
+          - sysstat
+          - iotop
+        state: present
+
+    - name: Set hostname
+      ansible.builtin.hostname:
+        name: "{{ inventory_hostname }}"
+      when: inventory_hostname is defined
+
+    - name: Update /etc/hosts with hostname
+      ansible.builtin.lineinfile:
+        path: /etc/hosts
+        regexp: '^127\.0\.1\.1'
+        line: "127.0.1.1 {{ inventory_hostname }}"
+        state: present
+
+    - name: Configure timezone
+      community.general.timezone:
+        name: "{{ timezone | default('America/New_York') }}"
+
+    - name: Verify static IP configuration
+      block:
+        - name: Check current IP matches expected
+          ansible.builtin.assert:
+            that:
+              - current_static_ip == "10.0.0.200"
+            fail_msg: "Expected IP 10.0.0.200 but got {{ current_static_ip }}"
+            success_msg: "Static IP is correctly set to {{ current_static_ip }}"
+
+    - name: Verify network configuration file exists
+      ansible.builtin.stat:
+        path: /etc/network/interfaces
+      register: interfaces_file
+
+    - name: Ensure static IP is configured in /etc/network/interfaces
+      when: interfaces_file.stat.exists
+      block:
+        - name: Check interfaces file contains static config
+          ansible.builtin.shell: grep -c "inet static" /etc/network/interfaces
+          register: static_check
+          changed_when: false
+          failed_when: false
+
+        - name: Configure static IP if not already set
+          ansible.builtin.copy:
+            content: |
+              # Managed by Ansible — setup-r730xd.yml
+              source /etc/network/interfaces.d/*
+
+              auto lo
+              iface lo inet loopback
+
+              auto {{ network_interface }}
+              allow-hotplug {{ network_interface }}
+              iface {{ network_interface }} inet static
+                  address {{ current_static_ip }}
+                  netmask {{ current_netmask }}
+                  gateway {{ gateway }}
+                  dns-nameservers {{ dns_servers | join(' ') }}
+            dest: /etc/network/interfaces
+            mode: '0644'
+          when: static_check.stdout | int == 0
+
+    - name: Enable and configure firewall (ufw)
+      block:
+        - name: Install ufw
+          ansible.builtin.apt:
+            name: ufw
+            state: present
+
+        - name: Allow SSH
+          community.general.ufw:
+            rule: allow
+            port: '22'
+            proto: tcp
+
+        - name: Allow NFS (port 2049)
+          community.general.ufw:
+            rule: allow
+            port: '2049'
+            proto: tcp
+
+        - name: Set default policies
+          community.general.ufw:
+            direction: "{{ item.direction }}"
+            policy: "{{ item.policy }}"
+          loop:
+            - { direction: 'incoming', policy: 'deny' }
+            - { direction: 'outgoing', policy: 'allow' }
+
+        - name: Enable ufw
+          community.general.ufw:
+            state: enabled
+      when: enable_firewall | default(false) | bool
+
+    - name: Display machine info
+      ansible.builtin.debug:
+        msg:
+          - "Hostname: {{ inventory_hostname }}"
+          - "IP Address: {{ current_static_ip }}"
+          - "Netmask: {{ current_netmask }}"
+          - "Interface: {{ network_interface }}"
+          - "Gateway: {{ gateway }}"
+          - "DNS Servers: {{ dns_servers | join(', ') }}"
+          - "OS: {{ ansible_distribution }} {{ ansible_distribution_version }}"
+          - "Kernel: {{ ansible_kernel }}"
+          - "Swap: enabled (storage server — not a K8s node)"
