@@ -241,10 +241,10 @@ Before the Optiplex can be wiped and joined to K8s, its services need new homes:
 
 ### 4B: WiFi APs
 
-- [ ] Flash/configure Aerohive APs for standalone mode (if possible)
+- [x] ~~Flash/configure Aerohive APs for standalone mode~~ — **confirmed standalone via `no capwap client enable`. All 3 APs factory reset and CAPWAP disabled (2026-03-27).**
 - [ ] Mount AP230 in central location
 - [ ] Mount AP130(s) for coverage extension
-- [ ] Connect to SR2024 via PoE injectors
+- [ ] Connect to SR2024 (PoE from switch, no injectors needed)
 - [ ] Configure SSID + password
 - [ ] Test coverage throughout house
 - [ ] Disable Xfinity gateway WiFi (once verified)
@@ -326,8 +326,8 @@ Phase 5: Cleanup & documentation
 | 3TB drive data lost | High | Back up FIRST in Phase 0B, verify backup before proceeding |
 | R730 won't POST / dead hardware | Medium | Test in Phase 0A before planning around it |
 | Quanta won't POST | High | Test in Phase 0A — if dead, need to restructure (tower stays as K8s worker?) |
-| SR2024 VLAN issues | Medium | Test in Phase 0A. Fallback: flat network, still an upgrade over daisy-chain |
-| Aerohive APs can't run standalone | Low | Fallback: keep Xfinity WiFi, use D-Link as OpenWrt AP, or buy cheap AP |
+| ~~SR2024 VLAN issues~~ | ~~Medium~~ | ~~Resolved: VLANs, LACP, PoE all confirmed working (2026-03-27)~~ |
+| ~~Aerohive APs can't run standalone~~ | ~~Low~~ | ~~Resolved: standalone mode confirmed on all 3 APs (2026-03-27)~~ |
 | Tower PSU can't handle 3 GPUs | Medium | Test in Phase 0A. Fallback: only 2 GPUs, or upgrade PSU |
 | K8s cluster won't recover after move | Medium | Take etcd backup before Phase 1D. Worst case: rebuild cluster (Ansible playbooks exist) |
 | Power circuit overloaded | High | Assess total draw in Phase 0A. May need dedicated circuit for closet |

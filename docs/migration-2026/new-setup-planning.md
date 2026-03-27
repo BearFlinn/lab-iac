@@ -126,7 +126,7 @@ Last updated: 2026-03-26
 
 - AP230 as primary (higher performance, 3×3:3 MIMO)
 - AP130s for coverage extension
-- Firmware situation needs resolving (standalone vs cloud-managed)
+- Standalone mode confirmed — all 3 run HiveOS CLI without cloud/controller dependency
 
 ## Network Topology
 

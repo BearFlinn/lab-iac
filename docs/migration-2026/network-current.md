@@ -88,7 +88,7 @@ Out-of-band management interfaces (iDRAC, BMC/IPMI) are on the 10.0.0.x lab subn
 | Equipment | Location | Notes |
 |-----------|----------|-------|
 | SR2024 (24-port managed GbE + 2 SFP) | New | VLAN-capable, replaces the switch chain in the lab |
-| 2× Aerohive AP130 | New | PoE, need firmware check |
-| 1× Aerohive AP230 | New | PoE, higher performance |
+| 2× Aerohive AP130 | New | PoE, standalone confirmed (HiveOS 6.5r8b / 6.5r1b) |
+| 1× Aerohive AP230 | New | PoE, standalone confirmed (HiveOS 8.1r1), higher performance |
 | R730 4-port NIC | In R730 | Could dedicate ports to storage network |
 | Xfinity gateway | Living room | Stays as WAN/ISP handoff — question is whether to bridge it or keep it as router |

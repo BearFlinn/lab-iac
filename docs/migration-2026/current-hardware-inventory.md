@@ -124,12 +124,15 @@ Last updated: 2026-03-26
 
 | Spec | Value |
 |------|-------|
-| Model | Aerohive AP130 |
+| Model | Aerohive AP130 (×2) |
 | Type | Wireless access point |
 | WiFi | 802.11ac Wave 1, dual-band |
-| PoE | Yes (802.3af) |
-| Status | Need to verify firmware/standalone mode capability |
-| TODO | Check if running HiveOS or can be flashed to standalone. Aerohive was acquired by Extreme Networks — may need community firmware. |
+| PoE | Yes (802.3at from SR2024) |
+| Firmware | #1: HiveOS 6.5r8b (Oct 2017), #2: HiveOS 6.5r1b (Jul 2015) |
+| MAC (mgt0) | #1: 88:5b:dd:b6:14:c0, #2: 88:5b:dd:2d:22:80 |
+| Hostname | #1: AH-b614c0, #2: AH-2d2280 |
+| Status | Factory reset, standalone mode confirmed, CAPWAP disabled |
+| Notes | #2 has older firmware and 1 bad NAND block — consider updating to match #1 |
 
 #### Aerohive AP230
 
@@ -138,9 +141,12 @@ Last updated: 2026-03-26
 | Model | Aerohive AP230 |
 | Type | Wireless access point |
 | WiFi | 802.11ac Wave 1, dual-band, 3×3:3 MIMO |
-| PoE | Yes (802.3af) |
-| Status | Need to verify firmware/standalone mode capability |
-| TODO | Same firmware considerations as AP130s. Higher-end model — better for primary AP. |
+| PoE | Yes (802.3at from SR2024) |
+| Firmware | HiveOS 8.1r1 (Aug 2017) |
+| MAC (mgt0) | 9c:5d:12:1c:ea:80 |
+| Hostname | AH-1cea80 |
+| Status | Factory reset, standalone mode confirmed, CAPWAP disabled |
+| Notes | Higher-end model — primary AP. 1 GHz CPU, Linux 3.16.36 |
 
 #### Aerohive SR2024 Switch
 
@@ -148,11 +154,14 @@ Last updated: 2026-03-26
 |------|-------|
 | Model | Aerohive SR2024 |
 | Type | Managed gigabit switch |
-| Ports | 24× 1GbE (12× PoE) |
-| PoE | Yes — 12 ports |
-| Status | Needs testing |
-| Notes | Same Aerohive ecosystem as the APs — may share management/firmware considerations |
-| TODO | Test all ports, check management interface, verify VLAN support, reset to factory if needed |
+| Ports | 24× 1GbE + 2× SFP (+ 2× combo GbE/SFP) |
+| PoE | Yes — 802.3at (PoE+), confirmed powering all 3 APs |
+| Firmware | HiveOS 6.5r8 (Aug 2017) |
+| MAC (mgt0) | 08:ea:44:86:4d:00 |
+| Hostname | AH-864d00 |
+| Status | Factory reset, standalone mode confirmed, CAPWAP disabled |
+| Management | SSH + CLI (web UI exists but read-only). No cloud dependency. |
+| Features confirmed | 802.1Q VLANs, LACP link aggregation, trunk/access port modes |
 
 ### Spare GPUs
 
@@ -249,8 +258,8 @@ These numbers are approximate until server CPUs are identified.
 - [x] ~~Check Quanta drive bay configuration~~ — **6× SATA, internal mount, no hot-swap**
 - [x] ~~Test POST on both servers~~ — **both confirmed**
 - [x] ~~Verify iDRAC (R730) and BMC/IPMI (Quanta) remote management access~~ — **iDRAC SSH racadm working (no Enterprise license — no virtual media). Quanta BMC/IPMI at 10.0.0.201.**
-- [ ] Test all 24 ports on the SR2024 switch
-- [ ] Determine Aerohive AP firmware situation — can they run standalone without HiveManager/cloud?
+- [x] ~~Test all 24 ports on the SR2024 switch~~ — **ports 1–4 confirmed working (APs on 1–3, laptop on 4). Full port test pending but switch responds correctly. VLANs, LACP, PoE all confirmed (2026-03-27).**
+- [x] ~~Determine Aerohive AP firmware situation~~ — **all 3 APs run standalone via `no capwap client enable`. Factory reset and CAPWAP disabled on all devices (2026-03-27). See docs/aerohive-serial-interface.md for details.**
 - [ ] Back up the data on the one 3 TB drive before repurposing
 - [x] ~~Determine which spare HDDs go into which machines~~ — **All data HDDs go in R730xd (MergerFS pool). SSDs: 1 → jumpbox, 1 → tower PC (LLM storage), 1 → R730 bcache**
 - [ ] Determine GPU placement across machines

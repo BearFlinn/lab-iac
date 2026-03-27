@@ -129,7 +129,7 @@ Unchanged from current setup:
 | Xfinity gateway (living room) | Closet | Uplink to SR2024 |
 | Closet (SR2024) | Master bedroom | Sibling's connection |
 | Closet (SR2024) | Garage | Workshop connection |
-| Closet (SR2024) | AP locations (×3) | WiFi APs (need PoE injectors) |
+| Closet (SR2024) | AP locations (×3) | WiFi APs (PoE from switch, no injectors needed) |
 | Within closet | Short patch cables | All lab machines to SR2024 |
 
 ## Open Questions
