@@ -1,0 +1,22 @@
+---
+# r730xd-vm-host role defaults
+# Installs KVM/libvirt and configures bridged networking for VMs
+
+# --- Virtualization ---
+vm_user: "bearf"
+
+# --- Bridge Network ---
+# Bridge gives VMs routable IPs on the LAN (no NAT)
+bridge_name: "br0"
+# Physical interface to attach to the bridge
+# R730xd primary NIC — verify with `ip link` on the host
+bridge_physical_interface: "eno1"
+bridge_address: "10.0.0.200"
+bridge_netmask: "255.255.255.0"
+bridge_gateway: "10.0.0.1"
+bridge_dns:
+  - "8.8.8.8"
+  - "8.8.4.4"
+
+# --- VM Storage ---
+vm_storage_pool_path: "/var/lib/libvirt/images"

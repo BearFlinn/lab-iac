@@ -1,0 +1,320 @@
+---
+# deploy-staging-services.yml — Deploy critical workloads to the staging VM
+#
+# Clones repos from grizzly-endeavors org, builds container images, and runs
+# services via Docker Compose with Caddy for domain routing.
+#
+# See ADR-002 for why this temporary staging environment exists.
+#
+# Services:
+#   - landing-page: static site (nginx), port 80
+#   - caz-portfolio: Rust binary, port 3000
+#   - resume-site: Python/FastAPI + SQLite + AI keys, port 8000
+#
+# Prerequisites:
+#   - Staging VM running and SSH-reachable (create-staging-vm.yml)
+#   - gh CLI authenticated on the staging VM (run `gh auth login` first)
+#   - NetBird installed and joined on the staging VM
+#
+# Usage:
+#   ansible-playbook -i ansible/inventory/lab-nodes.yml -l staging-vm \
+#     ansible/playbooks/deploy-staging-services.yml -v
+#
+# Secrets:
+#   resume-site needs CEREBRAS_API_KEY and GEMINI_API_KEY.
+#   Pass via --extra-vars or set in the vault:
+#     -e cerebras_api_key=... -e gemini_api_key=...
+
+- name: Deploy critical workloads to staging VM
+  hosts: staging-vm
+  become: yes
+  gather_facts: yes
+
+  vars:
+    deploy_user: "bearf"
+    deploy_dir: "/home/{{ deploy_user }}/staging"
+    compose_dir: "{{ deploy_dir }}/compose"
+    github_org: "grizzly-endeavors"
+
+    # Service definitions — derived from actual repo Dockerfiles and K8s deployments
+    staging_services:
+      - name: landing-page
+        repo: "{{ github_org }}/landing-page"
+        # nginx:alpine, serves static files on port 80
+        internal_port: 80
+        host_port: 8080
+        dockerfile: "Dockerfile"
+        context: "."
+
+      - name: caz-portfolio
+        repo: "{{ github_org }}/caz-portfolio"
+        # Rust multi-stage build, binary listens on port 3000
+        internal_port: 3000
+        host_port: 3000
+        dockerfile: "Dockerfile"
+        context: "."
+
+      - name: resume-site
+        repo: "{{ github_org }}/resume-site"
+        # Python/FastAPI + asyncpg, listens on port 8000, requires Postgres
+        internal_port: 8000
+        host_port: 8000
+        dockerfile: "backend/Dockerfile"
+        context: "."
+
+    # AI API keys for resume-site (pass via --extra-vars or vault)
+    cerebras_api_key: "{{ vault_cerebras_api_key | default('') }}"
+    gemini_api_key: "{{ vault_gemini_api_key | default('') }}"
+
+    # Postgres credentials for resume-site
+    resume_db_user: "resume"
+    resume_db_password: "resume_staging"
+    resume_db_name: "resume"
+
+  tasks:
+    # =======================================================================
+    # Setup
+    # =======================================================================
+
+    - name: Create deployment directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: '0755'
+      loop:
+        - "{{ deploy_dir }}"
+        - "{{ compose_dir }}"
+
+    - name: Verify gh CLI is authenticated
+      ansible.builtin.command: gh auth status
+      become_user: "{{ deploy_user }}"
+      changed_when: false
+      failed_when: gh_status.rc != 0
+      register: gh_status
+
+    - name: Verify Docker is running
+      ansible.builtin.systemd:
+        name: docker
+        state: started
+      check_mode: yes
+      register: docker_check
+      failed_when: docker_check.changed
+
+    # =======================================================================
+    # Clone and Build
+    # =======================================================================
+
+    - name: Clone service repositories
+      ansible.builtin.command: >
+        gh repo clone {{ item.repo }} {{ deploy_dir }}/{{ item.name }}
+      args:
+        creates: "{{ deploy_dir }}/{{ item.name }}"
+      become_user: "{{ deploy_user }}"
+      loop: "{{ staging_services }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Pull latest changes for existing repos
+      ansible.builtin.command: git pull
+      args:
+        chdir: "{{ deploy_dir }}/{{ item.name }}"
+      become_user: "{{ deploy_user }}"
+      loop: "{{ staging_services }}"
+      loop_control:
+        label: "{{ item.name }}"
+      changed_when: false
+
+    - name: Build container images
+      ansible.builtin.command: >
+        docker build -t {{ item.name }}:latest
+        -f {{ item.dockerfile }}
+        {{ item.context }}
+      args:
+        chdir: "{{ deploy_dir }}/{{ item.name }}"
+      loop: "{{ staging_services }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    # =======================================================================
+    # Docker Compose
+    # =======================================================================
+
+    - name: Deploy docker-compose.yml
+      ansible.builtin.copy:
+        content: |
+          # Staging VM — critical workloads during K8s migration
+          # Managed by Ansible — deploy-staging-services.yml
+          # TEMPORARY: tear down after migration Phase 5
+
+          services:
+            landing-page:
+              image: landing-page:latest
+              restart: unless-stopped
+              # nginx listens on 80 internally
+              expose:
+                - "80"
+
+            caz-portfolio:
+              image: caz-portfolio:latest
+              restart: unless-stopped
+              expose:
+                - "3000"
+
+            resume-db:
+              image: pgvector/pgvector:pg16
+              restart: unless-stopped
+              environment:
+                - POSTGRES_USER={{ resume_db_user }}
+                - POSTGRES_PASSWORD={{ resume_db_password }}
+                - POSTGRES_DB={{ resume_db_name }}
+              volumes:
+                - resume_pgdata:/var/lib/postgresql/data
+
+            resume-site:
+              image: resume-site:latest
+              restart: unless-stopped
+              environment:
+                - DATABASE_URL=postgresql://{{ resume_db_user }}:{{ resume_db_password }}@resume-db:5432/{{ resume_db_name }}
+                - CEREBRAS_API_KEY={{ cerebras_api_key }}
+                - GEMINI_API_KEY={{ gemini_api_key }}
+              expose:
+                - "8000"
+              depends_on:
+                - resume-db
+
+            caddy:
+              image: caddy:2-alpine
+              restart: unless-stopped
+              ports:
+                - "80:80"
+              volumes:
+                - ./Caddyfile:/etc/caddy/Caddyfile:ro
+                - caddy_data:/data
+                - caddy_config:/config
+              depends_on:
+                - landing-page
+                - caz-portfolio
+                - resume-site
+
+          volumes:
+            resume_pgdata:
+            caddy_data:
+            caddy_config:
+        dest: "{{ compose_dir }}/docker-compose.yml"
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: '0600'
+      no_log: true  # contains API keys
+
+    - name: Deploy Caddyfile for domain routing
+      ansible.builtin.copy:
+        content: |
+          # Staging VM Caddy — routes domains to local containers
+          # Managed by Ansible — deploy-staging-services.yml
+          #
+          # TLS is terminated at the VPS proxy — this Caddy serves HTTP only.
+          # The VPS proxy forwards to this machine's NetBird IP on port 80.
+
+          {
+              auto_https off
+          }
+
+          # Landing page — bearflinn.com root domain and landing subdomain
+          :80 {
+              @landing host landing.bearflinn.com
+              handle @landing {
+                  reverse_proxy landing-page:80
+              }
+
+              @root host bearflinn.com
+              handle @root {
+                  redir https://landing.bearflinn.com{uri} permanent
+              }
+
+              # Resume site
+              @resume host resume.bearflinn.com
+              handle @resume {
+                  reverse_proxy resume-site:8000
+              }
+
+              # Caz portfolio — pennydreadfulsfx.com
+              @caz host pennydreadfulsfx.com www.pennydreadfulsfx.com
+              handle @caz {
+                  reverse_proxy caz-portfolio:3000
+              }
+
+              # Catch-all
+              handle {
+                  respond "staging-vm: service not found" 404
+              }
+          }
+        dest: "{{ compose_dir }}/Caddyfile"
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: '0644'
+
+    - name: Start services with Docker Compose
+      ansible.builtin.command: docker compose up -d
+      args:
+        chdir: "{{ compose_dir }}"
+
+    # =======================================================================
+    # Verify
+    # =======================================================================
+
+    - name: Wait for Caddy to be ready
+      ansible.builtin.wait_for:
+        port: 80
+        delay: 5
+        timeout: 60
+
+    - name: Check landing-page health
+      ansible.builtin.uri:
+        url: "http://localhost:80/"
+        return_content: no
+        status_code: [200, 301, 302, 404]
+        headers:
+          Host: "landing.bearflinn.com"
+      retries: 5
+      delay: 10
+
+    - name: Check caz-portfolio health
+      ansible.builtin.uri:
+        url: "http://localhost:80/"
+        return_content: no
+        status_code: [200, 301, 302]
+        headers:
+          Host: "pennydreadfulsfx.com"
+      retries: 5
+      delay: 10
+
+    - name: Check resume-site health
+      ansible.builtin.uri:
+        url: "http://localhost:80/"
+        return_content: no
+        status_code: [200, 301, 302]
+        headers:
+          Host: "resume.bearflinn.com"
+      retries: 5
+      delay: 10
+
+    - name: Display deployment summary
+      ansible.builtin.debug:
+        msg:
+          - "Staging services deployed!"
+          - ""
+          - "Services:"
+          - "  landing-page  -> landing.bearflinn.com"
+          - "  caz-portfolio -> pennydreadfulsfx.com"
+          - "  resume-site   -> resume.bearflinn.com"
+          - ""
+          - "All traffic enters via Caddy on port 80."
+          - ""
+          - "Next steps:"
+          - "  1. Get staging VM NetBird IP: ssh bearf@10.0.0.210 'netbird status'"
+          - "  2. Update k8s_ingress_endpoint in ansible/inventory/proxy-vps.yml"
+          - "     to <netbird-ip>:80"
+          - "  3. Run setup-proxy-vps.yml to apply VPS routing change"
+          - "  4. Verify: curl -H 'Host: landing.bearflinn.com' https://bearflinn.com"

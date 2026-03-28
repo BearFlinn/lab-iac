@@ -1,0 +1,244 @@
+---
+# create-staging-vm.yml — Provision a temporary staging VM on R730xd
+#
+# This VM hosts critical workloads during the K8s cluster rebuild.
+# See ADR-002 for rationale. Torn down after migration Phase 5.
+#
+# Prerequisites:
+#   - R730xd baseline setup complete (setup-r730xd.yml)
+#   - r730xd-vm-host role applied (libvirt installed)
+#   - Default libvirt NAT network active (virsh net-start default)
+#
+# Usage:
+#   ansible-playbook -i ansible/inventory/r730xd.yml ansible/playbooks/create-staging-vm.yml -v
+#
+# Notes:
+#   - VM runs on libvirt's default NAT network (192.168.122.x)
+#   - Reachable from outside via SSH ProxyJump through R730xd, or via NetBird
+#   - MUST use --boot uefi — the Debian generic cloud image requires UEFI
+#   - MUST use "generic" image, NOT "genericcloud" (lacks AHCI drivers for cloud-init ISO)
+#   - Uses virt-install's native --cloud-init flag (not a hand-built ISO)
+
+- name: Provision staging VM on R730xd
+  hosts: r730xd
+  become: yes
+  gather_facts: yes
+
+  vars:
+    staging_vm_name: "staging-vm"
+    staging_vm_vcpus: 4
+    staging_vm_ram_mb: 8192
+    staging_vm_disk_gb: 30
+    staging_vm_user: "bearf"
+    staging_vm_ssh_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBXMyPvM7ENinFxQ/h0ajlCBWZGRcCVBrzcHuyrwF+mz"
+
+    cloud_image_url: "https://cloud.debian.org/images/cloud/trixie/daily/latest/debian-13-generic-amd64-daily.qcow2"
+    cloud_image_path: "/var/lib/libvirt/images/debian-13-generic-amd64.qcow2"
+    vm_disk_path: "/var/lib/libvirt/images/{{ staging_vm_name }}.qcow2"
+    cloud_init_dir: "/var/lib/libvirt/cloud-init/{{ staging_vm_name }}"
+
+  tasks:
+    # =======================================================================
+    # Verify Prerequisites
+    # =======================================================================
+
+    - name: Verify libvirtd is running
+      ansible.builtin.systemd:
+        name: libvirtd
+        state: started
+      check_mode: yes
+      register: libvirtd_check
+      failed_when: libvirtd_check.changed
+
+    - name: Ensure default NAT network is active
+      ansible.builtin.shell: virsh net-info default | grep -q "Active.*yes"
+      changed_when: false
+
+    # =======================================================================
+    # Check if VM Already Exists
+    # =======================================================================
+
+    - name: Check if staging VM already exists
+      ansible.builtin.shell: virsh dominfo {{ staging_vm_name }} 2>/dev/null
+      register: vm_exists
+      changed_when: false
+      failed_when: false
+
+    - name: Skip creation if VM already exists
+      ansible.builtin.debug:
+        msg: "VM '{{ staging_vm_name }}' already exists. Skipping creation."
+      when: vm_exists.rc == 0
+
+    # =======================================================================
+    # Download Cloud Image
+    # =======================================================================
+
+    - name: Check if cloud image exists
+      ansible.builtin.stat:
+        path: "{{ cloud_image_path }}"
+      register: cloud_image_stat
+
+    - name: Download Debian generic cloud image
+      ansible.builtin.command: >
+        curl -L -o {{ cloud_image_path }}
+        {{ cloud_image_url }}
+      when: vm_exists.rc != 0 and not cloud_image_stat.stat.exists
+
+    # =======================================================================
+    # Prepare Cloud-Init
+    # =======================================================================
+
+    - name: Create cloud-init directory
+      ansible.builtin.file:
+        path: "{{ cloud_init_dir }}"
+        state: directory
+        mode: '0755'
+      when: vm_exists.rc != 0
+
+    - name: Create cloud-init user-data
+      ansible.builtin.copy:
+        content: |
+          #cloud-config
+          hostname: {{ staging_vm_name }}
+          manage_etc_hosts: true
+          timezone: America/New_York
+
+          users:
+            - name: {{ staging_vm_user }}
+              sudo: ALL=(ALL) NOPASSWD:ALL
+              shell: /bin/bash
+              ssh_authorized_keys:
+                - {{ staging_vm_ssh_key }}
+
+          package_update: true
+          package_upgrade: true
+          packages:
+            - curl
+            - git
+            - vim
+            - htop
+            - ca-certificates
+            - gnupg
+
+          runcmd:
+            # Install Docker
+            - install -m 0755 -d /etc/apt/keyrings
+            - curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
+            - chmod a+r /etc/apt/keyrings/docker.asc
+            - echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian trixie stable" > /etc/apt/sources.list.d/docker.list
+            - apt-get update
+            - apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+            - usermod -aG docker {{ staging_vm_user }}
+            # Install gh CLI
+            - curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+            - chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg
+            - echo "deb [arch=amd64 signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" > /etc/apt/sources.list.d/github-cli.list
+            - apt-get update
+            - apt-get install -y gh
+
+          final_message: "staging-vm cloud-init complete after $UPTIME seconds"
+        dest: "{{ cloud_init_dir }}/user-data"
+        mode: '0644'
+      when: vm_exists.rc != 0
+
+    - name: Create cloud-init meta-data
+      ansible.builtin.copy:
+        content: |
+          instance-id: {{ staging_vm_name }}
+          local-hostname: {{ staging_vm_name }}
+        dest: "{{ cloud_init_dir }}/meta-data"
+        mode: '0644'
+      when: vm_exists.rc != 0
+
+    # =======================================================================
+    # Create and Start VM
+    # =======================================================================
+
+    - name: Create VM disk from cloud image
+      ansible.builtin.command: >
+        qemu-img create -f qcow2 -F qcow2
+        -b {{ cloud_image_path }}
+        {{ vm_disk_path }}
+        {{ staging_vm_disk_gb }}G
+      args:
+        creates: "{{ vm_disk_path }}"
+      when: vm_exists.rc != 0
+
+    - name: Create staging VM
+      ansible.builtin.command: >
+        virt-install
+        --name {{ staging_vm_name }}
+        --vcpus {{ staging_vm_vcpus }}
+        --memory {{ staging_vm_ram_mb }}
+        --disk path={{ vm_disk_path }},device=disk,bus=virtio
+        --os-variant debian12
+        --virt-type kvm
+        --graphics none
+        --console pty,target_type=serial
+        --network network=default,model=virtio
+        --cloud-init user-data={{ cloud_init_dir }}/user-data,meta-data={{ cloud_init_dir }}/meta-data
+        --boot uefi
+        --noautoconsole
+        --import
+      when: vm_exists.rc != 0
+
+    # =======================================================================
+    # Wait for VM
+    # =======================================================================
+
+    - name: Wait for VM to get a DHCP lease
+      ansible.builtin.shell: >
+        virsh domifaddr {{ staging_vm_name }} --source lease 2>/dev/null | grep -oP '[\d]+\.[\d]+\.[\d]+\.[\d]+'
+      register: vm_ip_check
+      retries: 18
+      delay: 10
+      until: vm_ip_check.stdout | trim | length > 0
+      changed_when: false
+
+    - name: Set discovered VM IP
+      ansible.builtin.set_fact:
+        discovered_vm_ip: "{{ vm_ip_check.stdout | trim }}"
+
+    - name: Wait for SSH to become reachable
+      ansible.builtin.wait_for:
+        host: "{{ discovered_vm_ip }}"
+        port: 22
+        delay: 5
+        timeout: 120
+
+    - name: Add R730xd SSH key to VM authorized_keys
+      ansible.builtin.shell: >
+        ssh -o StrictHostKeyChecking=no {{ staging_vm_user }}@{{ discovered_vm_ip }}
+        'mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys' < /home/{{ staging_vm_user }}/.ssh/id_ed25519.pub
+      args:
+        creates: false
+      changed_when: true
+
+    - name: Wait for cloud-init to complete
+      ansible.builtin.command: >
+        ssh -o StrictHostKeyChecking=no {{ staging_vm_user }}@{{ discovered_vm_ip }}
+        cloud-init status --wait
+      retries: 3
+      delay: 30
+      until: cloud_init_status.rc == 0
+      register: cloud_init_status
+      changed_when: false
+
+    # =======================================================================
+    # Summary
+    # =======================================================================
+
+    - name: Display staging VM info
+      ansible.builtin.debug:
+        msg:
+          - "Staging VM is running!"
+          - "Name: {{ staging_vm_name }}"
+          - "IP: {{ discovered_vm_ip }} (NAT — reachable from R730xd)"
+          - "SSH (from R730xd): ssh {{ staging_vm_user }}@{{ discovered_vm_ip }}"
+          - "SSH (from dev): ssh -J bearf@10.0.0.200 {{ staging_vm_user }}@{{ discovered_vm_ip }}"
+          - "vCPUs: {{ staging_vm_vcpus }}, RAM: {{ staging_vm_ram_mb }}MB, Disk: {{ staging_vm_disk_gb }}GB"
+          - ""
+          - "Next steps:"
+          - "  1. Install NetBird with your machine token"
+          - "  2. Auth gh CLI: gh auth login"
+          - "  3. Deploy workloads: ansible-playbook -l staging-vm ansible/playbooks/deploy-staging-services.yml"

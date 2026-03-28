@@ -1,0 +1,96 @@
+---
+# r730xd-vm-host: Install KVM/libvirt and configure bridged networking
+#
+# After this role runs, the host can create VMs with routable LAN IPs
+# via the br0 bridge interface.
+
+# =======================================================================
+# Virtualization Packages
+# =======================================================================
+
+- name: Install KVM and libvirt packages
+  ansible.builtin.apt:
+    name:
+      - qemu-kvm
+      - libvirt-daemon-system
+      - libvirt-clients
+      - virtinst
+      - bridge-utils
+      - genisoimage          # for building cloud-init ISOs
+      - cloud-image-utils    # for cloud-init tooling (cloud-localds)
+    state: present
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Ensure libvirtd is enabled and running
+  ansible.builtin.systemd:
+    name: libvirtd
+    enabled: yes
+    state: started
+
+- name: Add user to libvirt and kvm groups
+  ansible.builtin.user:
+    name: "{{ vm_user }}"
+    groups:
+      - libvirt
+      - kvm
+    append: yes
+
+# =======================================================================
+# Bridge Network
+# =======================================================================
+
+- name: Check if bridge is already configured
+  ansible.builtin.shell: ip link show {{ bridge_name }} 2>/dev/null
+  register: bridge_check
+  changed_when: false
+  failed_when: false
+
+- name: Deploy bridge network configuration
+  ansible.builtin.template:
+    src: interfaces-bridge.j2
+    dest: /etc/network/interfaces
+    mode: '0644'
+    backup: yes
+  register: bridge_config
+  notify: Restart networking
+
+# WARNING: Applying bridge config will briefly drop the SSH connection.
+# The handler restarts networking, which re-establishes connectivity on
+# the same IP (now on br0 instead of eno1). The playbook should use
+# async + poll or be run with `--check` first to verify.
+- name: Display bridge configuration warning
+  ansible.builtin.debug:
+    msg: >
+      Bridge config has been written. If this is the first run,
+      networking will restart and the SSH connection will drop briefly.
+      Reconnect and verify with: ip addr show {{ bridge_name }}
+  when: bridge_config.changed
+
+# =======================================================================
+# VM Storage Pool
+# =======================================================================
+
+- name: Ensure VM storage directory exists
+  ansible.builtin.file:
+    path: "{{ vm_storage_pool_path }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0711'
+
+# Disable the default NAT network — we use bridged networking
+- name: Check if default libvirt network is active
+  ansible.builtin.shell: virsh net-list --name | grep -w default
+  register: default_net_check
+  changed_when: false
+  failed_when: false
+
+- name: Destroy default libvirt network
+  ansible.builtin.command: virsh net-destroy default
+  when: default_net_check.rc == 0
+
+- name: Undefine default libvirt network
+  ansible.builtin.command: virsh net-undefine default
+  when: default_net_check.rc == 0
+  failed_when: false  # may already be undefined

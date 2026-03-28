@@ -1,0 +1,19 @@
+# Managed by Ansible — r730xd-vm-host role
+# Bridge network: VMs get routable LAN IPs via {{ bridge_name }}
+source /etc/network/interfaces.d/*
+
+auto lo
+iface lo inet loopback
+
+auto {{ bridge_physical_interface }}
+iface {{ bridge_physical_interface }} inet manual
+
+auto {{ bridge_name }}
+iface {{ bridge_name }} inet static
+    bridge_ports {{ bridge_physical_interface }}
+    bridge_stp off
+    bridge_fd 0
+    address {{ bridge_address }}
+    netmask {{ bridge_netmask }}
+    gateway {{ bridge_gateway }}
+    dns-nameservers {{ bridge_dns | join(' ') }}
