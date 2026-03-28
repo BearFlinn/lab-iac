@@ -1,0 +1,14 @@
+# Managed by Ansible — r730xd-snapraid
+[Unit]
+Description=SnapRAID Sync
+After=local-fs.target
+{% for drive in snapraid_parity_mounts + snapraid_data_mounts %}
+RequiresMountsFor={{ drive.path }}
+{% endfor %}
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/snapraid sync{% if snapraid_delete_threshold > 0 %} --force-threshold {{ snapraid_delete_threshold }}{% endif %} -l /var/log/snapraid-sync.log
+Nice=19
+IOSchedulingClass=idle
+OOMScoreAdjust=-200

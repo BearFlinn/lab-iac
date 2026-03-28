@@ -1,0 +1,143 @@
+---
+# R730xd Full Storage Stack
+# Chains: bay resolution → storage-prep → mergerfs → snapraid → nfs-server
+#
+# Drive bays are defined in inventory (r730xd_drive_bays). The pre_tasks
+# resolve bay numbers to OS block devices via iDRAC racadm at runtime.
+#
+# Prerequisites:
+#   - R730xd baseline setup applied (setup-r730xd.yml)
+#   - Data drives physically installed and in Non-RAID/JBOD mode via iDRAC
+#   - iDRAC accessible at idrac_host with credentials in vault
+#
+# Usage:
+#   ansible-playbook -i ansible/inventory/r730xd.yml ansible/playbooks/r730xd-storage.yml \
+#     --vault-password-file .vault_pass -v
+#
+# After first run:
+#   - Run `ssh r730xd 'sudo snapraid sync'` (initial sync takes hours)
+#   - Update K8s NFS provisioner to point at 10.0.0.200:/mnt/pool
+
+- name: R730xd storage stack
+  hosts: r730xd
+  gather_facts: yes
+  become: yes
+
+  vars:
+    idrac_ssh_cmd: "sshpass -p {{ idrac_password }} ssh -o StrictHostKeyChecking=no -o LogLevel=ERROR root@{{ idrac_host }}"
+
+  pre_tasks:
+    - name: Validate drive bay inventory exists
+      ansible.builtin.assert:
+        that:
+          - r730xd_drive_bays is defined
+          - r730xd_drive_bays | length > 0
+        fail_msg: >
+          No drive bays defined. Add r730xd_drive_bays to inventory
+          (ansible/inventory/r730xd.yml).
+
+    - name: Query iDRAC for physical disk info
+      ansible.builtin.command: >
+        {{ idrac_ssh_cmd }} "racadm storage get pdisks -o"
+      delegate_to: localhost
+      become: false
+      register: idrac_pdisks_raw
+      changed_when: false
+      no_log: true
+
+    - name: Parse iDRAC disk info into bay→serial mapping
+      ansible.builtin.set_fact:
+        idrac_bay_map: "{{ _bay_map }}"
+      vars:
+        _bay_map: >-
+          {%- set result = {} -%}
+          {%- set current_bay = {'value': ''} -%}
+          {%- set current_serial = {'value': ''} -%}
+          {%- for line in idrac_pdisks_raw.stdout_lines -%}
+            {%- if 'Disk.Bay.' in line -%}
+              {%- if current_bay.value and current_serial.value -%}
+                {%- set _ = result.update({current_bay.value | int: current_serial.value}) -%}
+              {%- endif -%}
+              {%- set bay_match = line | regex_search('Disk\.Bay\.(\d+):Enclosure', '\1') -%}
+              {%- if bay_match -%}
+                {%- set _ = current_bay.update({'value': bay_match[0]}) -%}
+                {%- set _ = current_serial.update({'value': ''}) -%}
+              {%- endif -%}
+            {%- elif 'SerialNumber' in line and '=' in line -%}
+              {%- set serial = line.split('=')[1] | trim -%}
+              {%- set _ = current_serial.update({'value': serial}) -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {%- if current_bay.value and current_serial.value -%}
+            {%- set _ = result.update({current_bay.value | int: current_serial.value}) -%}
+          {%- endif -%}
+          {{ result }}
+
+    - name: Query host block devices
+      ansible.builtin.command: lsblk -J -b -o NAME,SERIAL,SIZE,TYPE
+      register: lsblk_output
+      changed_when: false
+
+    - name: Build serial→device mapping from host
+      ansible.builtin.set_fact:
+        serial_to_device: "{{ _serial_map }}"
+      vars:
+        _serial_map: >-
+          {%- set result = {} -%}
+          {%- for dev in (lsblk_output.stdout | from_json).blockdevices -%}
+            {%- if dev.type == 'disk' and dev.serial -%}
+              {%- set _ = result.update({dev.serial | trim: dev.name}) -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {{ result }}
+
+    - name: Resolve drive bays to OS devices
+      ansible.builtin.set_fact:
+        resolved_drives: "{{ _resolved }}"
+      vars:
+        _resolved: >-
+          {%- set result = [] -%}
+          {%- for bay_def in r730xd_drive_bays -%}
+            {%- set bay_num = bay_def.bay | int -%}
+            {%- set serial = idrac_bay_map.get(bay_num, '') -%}
+            {%- if serial -%}
+              {%- set device = serial_to_device.get(serial, '') -%}
+              {%- if device -%}
+                {%- set _ = result.append({
+                  'bay': bay_num,
+                  'role': bay_def.role,
+                  'serial': serial,
+                  'device': device
+                }) -%}
+              {%- endif -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {{ result }}
+
+    - name: Validate all inventory bays were resolved
+      ansible.builtin.assert:
+        that:
+          - resolved_drives | length == r730xd_drive_bays | length
+        fail_msg: >
+          Could not resolve all drive bays. Expected {{ r730xd_drive_bays | length }}
+          drives, found {{ resolved_drives | length }}.
+          Check that drives are installed, in JBOD mode, and visible to the OS.
+          iDRAC bay→serial map: {{ idrac_bay_map }}
+          Host serial→device map: {{ serial_to_device }}
+
+    - name: Display resolved drive mapping
+      ansible.builtin.debug:
+        msg: "Bay {{ item.bay }} ({{ item.role }}): serial={{ item.serial }} → /dev/{{ item.device }}"
+      loop: "{{ resolved_drives }}"
+      loop_control:
+        label: "bay{{ item.bay }}"
+
+  roles:
+    - role: r730xd-storage-prep
+      tags: [storage, storage-prep]
+    - role: r730xd-mergerfs
+      tags: [storage, mergerfs]
+    - role: r730xd-snapraid
+      tags: [storage, snapraid]
+    - role: r730xd-nfs-server
+      tags: [storage, nfs]

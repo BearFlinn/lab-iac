@@ -1,0 +1,11 @@
+---
+galaxy_info:
+  author: bearf
+  description: Install and configure MergerFS to pool individual data drives into a unified mount
+  license: MIT
+  min_ansible_version: "2.10"
+  platforms:
+    - name: Debian
+      versions:
+        - trixie
+dependencies: []

@@ -1,0 +1,104 @@
+---
+# r730xd-mergerfs: Pool data drives into a unified mount via MergerFS
+
+- name: Filter data drives from drive mounts
+  ansible.builtin.set_fact:
+    mergerfs_sources: >-
+      {{
+        data_drive_mounts
+        | selectattr('role', 'equalto', 'data')
+        | sort(attribute='bay')
+        | list
+      }}
+
+- name: Validate data drives exist
+  ansible.builtin.assert:
+    that:
+      - data_drive_mounts is defined
+      - mergerfs_sources | length > 0
+    fail_msg: >
+      No data drives found. Ensure r730xd-storage-prep has run and at least one
+      drive bay has role: data in the inventory.
+
+- name: Install fuse3 (MergerFS dependency)
+  ansible.builtin.apt:
+    name: fuse3
+    state: present
+
+- name: Install MergerFS from GitHub release
+  when: mergerfs_install_from_github
+  block:
+    - name: Check if MergerFS is already installed
+      ansible.builtin.command: mergerfs --version
+      register: mergerfs_installed_version
+      changed_when: false
+      failed_when: false
+
+    - name: Determine if MergerFS install/upgrade needed
+      ansible.builtin.set_fact:
+        mergerfs_needs_install: >-
+          {{
+            mergerfs_installed_version.rc != 0 or
+            mergerfs_github_version not in (mergerfs_installed_version.stdout | default(''))
+          }}
+
+    - name: Download MergerFS .deb from GitHub
+      ansible.builtin.get_url:
+        url: "https://github.com/trapexit/mergerfs/releases/download/{{ mergerfs_github_version }}/mergerfs_{{ mergerfs_github_version }}.debian-trixie_amd64.deb"
+        dest: "/tmp/mergerfs_{{ mergerfs_github_version }}.deb"
+        mode: "0644"
+      when: mergerfs_needs_install
+
+    - name: Install MergerFS .deb
+      ansible.builtin.apt:
+        deb: "/tmp/mergerfs_{{ mergerfs_github_version }}.deb"
+        state: present
+      when: mergerfs_needs_install
+
+    - name: Clean up downloaded .deb
+      ansible.builtin.file:
+        path: "/tmp/mergerfs_{{ mergerfs_github_version }}.deb"
+        state: absent
+      when: mergerfs_needs_install
+
+- name: Install MergerFS from apt
+  ansible.builtin.apt:
+    name: mergerfs
+    state: present
+  when: not mergerfs_install_from_github
+
+- name: Build MergerFS source string
+  ansible.builtin.set_fact:
+    mergerfs_source_string: "{{ mergerfs_sources | map(attribute='path') | join(':') }}"
+
+- name: Create MergerFS mount point
+  ansible.builtin.file:
+    path: "{{ mergerfs_mount_point }}"
+    state: directory
+    mode: "0755"
+
+- name: Mount MergerFS pool and add to fstab
+  ansible.builtin.mount:
+    path: "{{ mergerfs_mount_point }}"
+    src: "{{ mergerfs_source_string }}"
+    fstype: "fuse.mergerfs"
+    opts: "{{ mergerfs_options }},nofail"
+    state: mounted
+  notify: remount mergerfs
+
+- name: Verify MergerFS is mounted
+  ansible.builtin.command: "df -h {{ mergerfs_mount_point }}"
+  register: mergerfs_df
+  changed_when: false
+
+- name: Display MergerFS summary
+  ansible.builtin.debug:
+    msg:
+      - "=== MergerFS Pool Configuration Complete ==="
+      - ""
+      - "Mount point: {{ mergerfs_mount_point }}"
+      - "Sources: {{ mergerfs_source_string }}"
+      - "Create policy: {{ mergerfs_create_policy }}"
+      - "Data drives: {{ mergerfs_sources | length }}"
+      - ""
+      - "{{ mergerfs_df.stdout_lines | default([]) }}"

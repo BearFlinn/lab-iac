@@ -1,85 +1,42 @@
 ---
 # R730xd Storage Preparation
-# Discovers data HDDs, partitions, formats ext4, and mounts them
+# Mounts drives at bay-based paths using resolved_drives fact from playbook pre-tasks
+# Partitions, formats, and mounts each drive at /mnt/data/bay<N>
+
+- name: Validate resolved_drives fact exists
+  ansible.builtin.assert:
+    that:
+      - resolved_drives is defined
+      - resolved_drives | length > 0
+    fail_msg: >
+      resolved_drives fact is not set. This role must be called from
+      r730xd-storage.yml which resolves drive bays via iDRAC in pre_tasks.
 
 - name: Install parted (required for partitioning)
   ansible.builtin.apt:
     name: parted
     state: present
 
-- name: Gather block device information
-  ansible.builtin.command: lsblk -J -b -o NAME,SIZE,TYPE,ROTA,SERIAL,MODEL,MOUNTPOINT,FSTYPE
-  register: lsblk_output
-  changed_when: false
-
-- name: Identify boot disk
-  ansible.builtin.command: findmnt -n -o SOURCE /
-  register: boot_source
-  changed_when: false
-
-- name: Resolve boot disk to parent device
-  ansible.builtin.set_fact:
-    boot_disk_name: "{{ boot_source.stdout | regex_replace('[0-9]+$', '') | basename }}"
-
-- name: Build list of eligible data drives
-  ansible.builtin.set_fact:
-    data_drives: >-
-      {{
-        (lsblk_output.stdout | from_json).blockdevices
-        | selectattr('type', 'equalto', 'disk')
-        | selectattr('rota', 'equalto', true)
-        | rejectattr('name', 'equalto', boot_disk_name)
-        | sort(attribute='name')
-        | list
-      }}
-
-- name: Filter by minimum size
-  ansible.builtin.set_fact:
-    data_drives: >-
-      {{
-        data_drives
-        | selectattr('size', 'ge', data_drive_min_size_bytes)
-        | list
-      }}
-
-- name: Filter out excluded disks by serial
-  ansible.builtin.set_fact:
-    data_drives: >-
-      {{
-        data_drives
-        | rejectattr('serial', 'in', exclude_disks)
-        | list
-      }}
-  when: exclude_disks | length > 0
-
-- name: Display discovered data drives
+- name: Display resolved drives
   ansible.builtin.debug:
-    msg: "Found {{ data_drives | length }} data drive(s): {{ data_drives | map(attribute='name') | list | join(', ') }}"
+    msg: "Bay {{ item.bay }} ({{ item.role }}): /dev/{{ item.device }} — serial {{ item.serial }}"
+  loop: "{{ resolved_drives }}"
+  loop_control:
+    label: "bay{{ item.bay }}"
 
-- name: Display boot disk (excluded)
-  ansible.builtin.debug:
-    msg: "Boot disk: {{ boot_disk_name }} (excluded from all operations)"
-
-- name: Fail if no data drives found
-  ansible.builtin.fail:
-    msg: >
-      No eligible data drives found. Ensure drives are installed, converted to
-      Non-RAID/JBOD mode via iDRAC, and visible to the OS (check lsblk).
-  when: data_drives | length == 0
-
-- name: Create GPT partition table on each data drive
+- name: Create GPT partition table on each drive
   community.general.parted:
-    device: "/dev/{{ item.name }}"
+    device: "/dev/{{ item.device }}"
     label: gpt
     state: info
   register: disk_info
-  loop: "{{ data_drives }}"
+  loop: "{{ resolved_drives }}"
   loop_control:
-    label: "{{ item.name }}"
+    label: "bay{{ item.bay }} (/dev/{{ item.device }})"
 
 - name: Create single partition on drives without partitions
   community.general.parted:
-    device: "/dev/{{ item.item.name }}"
+    device: "/dev/{{ item.item.device }}"
     number: 1
     label: gpt
     part_start: "0%"
@@ -88,42 +45,47 @@
   when: item.partitions | length == 0
   loop: "{{ disk_info.results }}"
   loop_control:
-    label: "{{ item.item.name }}"
+    label: "bay{{ item.item.bay }}"
 
 - name: Build partition device list
   ansible.builtin.set_fact:
-    data_partitions: "{{ data_drives | map(attribute='name') | map('regex_replace', '$', '1') | list }}"
+    drive_partitions: >-
+      {{
+        resolved_drives | map(attribute='device')
+        | map('regex_replace', '$', '1')
+        | list
+      }}
 
-- name: Create ext4 filesystem on each partition
+- name: Create ext4 filesystem on each partition (skips existing)
   ansible.builtin.filesystem:
     fstype: "{{ storage_filesystem }}"
     dev: "/dev/{{ item }}"
     opts: "{{ storage_mkfs_options }}"
-  loop: "{{ data_partitions }}"
+  loop: "{{ drive_partitions }}"
   loop_control:
     label: "{{ item }}"
 
 - name: Create mount point directories
   ansible.builtin.file:
-    path: "{{ storage_mount_base }}/disk{{ idx + 1 }}"
+    path: "{{ storage_mount_base }}/bay{{ resolved_drives[idx].bay }}"
     state: directory
     mode: "0755"
-  loop: "{{ data_partitions }}"
+  loop: "{{ drive_partitions }}"
   loop_control:
     index_var: idx
-    label: "disk{{ idx + 1 }}"
+    label: "bay{{ resolved_drives[idx].bay }}"
 
 - name: Get partition UUIDs
   ansible.builtin.command: "blkid -s UUID -o value /dev/{{ item }}"
   register: partition_uuids
   changed_when: false
-  loop: "{{ data_partitions }}"
+  loop: "{{ drive_partitions }}"
   loop_control:
     label: "{{ item }}"
 
 - name: Mount partitions and add to fstab
   ansible.builtin.mount:
-    path: "{{ storage_mount_base }}/disk{{ idx + 1 }}"
+    path: "{{ storage_mount_base }}/bay{{ resolved_drives[idx].bay }}"
     src: "UUID={{ item.stdout }}"
     fstype: "{{ storage_filesystem }}"
     opts: "{{ storage_mount_options }}"
@@ -131,22 +93,32 @@
   loop: "{{ partition_uuids.results }}"
   loop_control:
     index_var: idx
-    label: "disk{{ idx + 1 }} (UUID={{ item.stdout }})"
+    label: "bay{{ resolved_drives[idx].bay }} (UUID={{ item.stdout }})"
 
 - name: Build list of active mount points
   ansible.builtin.set_fact:
-    active_mount_points: "{{ range(1, data_drives | length + 1) | map('regex_replace', '^(.*)$', storage_mount_base ~ '/disk\\1') | list }}"
+    active_mount_points: >-
+      {{
+        resolved_drives | map(attribute='bay')
+        | map('regex_replace', '^(.*)$', storage_mount_base ~ '/bay\1')
+        | list
+      }}
 
-- name: Find all existing disk mount point directories
+- name: Find all existing bay mount point directories
   ansible.builtin.find:
     paths: "{{ storage_mount_base }}"
     file_type: directory
-    patterns: "disk*"
+    patterns: "bay*"
   register: existing_mount_dirs
 
 - name: Identify stale mount points (no longer backed by a drive)
   ansible.builtin.set_fact:
-    stale_mount_points: "{{ existing_mount_dirs.files | map(attribute='path') | reject('in', active_mount_points) | list }}"
+    stale_mount_points: >-
+      {{
+        existing_mount_dirs.files | map(attribute='path')
+        | reject('in', active_mount_points)
+        | list
+      }}
 
 - name: Remove stale fstab entries and unmount missing drives
   ansible.builtin.mount:
@@ -164,6 +136,23 @@
   loop_control:
     label: "{{ item }}"
 
+- name: Build data_drive_mounts fact for downstream roles
+  ansible.builtin.set_fact:
+    data_drive_mounts: "{{ _mounts }}"
+  vars:
+    _mounts: >-
+      {%- set result = [] -%}
+      {%- for drive in resolved_drives -%}
+        {%- set _ = result.append({
+          'bay': drive.bay,
+          'role': drive.role,
+          'serial': drive.serial,
+          'device': drive.device,
+          'path': storage_mount_base ~ '/bay' ~ drive.bay | string
+        }) -%}
+      {%- endfor -%}
+      {{ result }}
+
 - name: Display final storage layout
   ansible.builtin.command: lsblk -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINT
   register: final_lsblk
@@ -178,12 +167,9 @@
     msg:
       - "=== R730xd Storage Preparation Complete ==="
       - ""
-      - "Data drives: {{ data_drives | length }}"
+      - "Drives: {{ resolved_drives | length }}"
+      - "  Parity: {{ resolved_drives | selectattr('role', 'equalto', 'parity') | list | length }}"
+      - "  Data: {{ resolved_drives | selectattr('role', 'equalto', 'data') | list | length }}"
       - "Filesystem: {{ storage_filesystem }}"
       - "Mount base: {{ storage_mount_base }}"
-      - "Mount options: {{ storage_mount_options }}"
-      - ""
-      - "Next steps:"
-      - "  - Configure MergerFS pool across {{ storage_mount_base }}/disk*"
-      - "  - Configure SnapRAID parity"
-      - "  - Set up NFS exports"
+      - "Mount paths: {{ data_drive_mounts | map(attribute='path') | list | join(', ') }}"

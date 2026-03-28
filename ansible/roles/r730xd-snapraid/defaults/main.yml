@@ -1,0 +1,50 @@
+---
+# r730xd-snapraid: SnapRAID parity protection with automated sync and scrub
+#
+# Requires: data_drive_mounts fact set by r730xd-storage-prep role
+#   Drives with role == "parity" are used for parity files
+#   Drives with role == "data" are protected by parity
+#
+# Drive assignment comes entirely from r730xd_drive_bays in inventory.
+
+# --- Content Files ---
+# At least one content file must be on a non-data, non-parity location.
+# This path is on the boot SSD.
+snapraid_boot_content_path: "/var/lib/snapraid/snapraid.content"
+
+# --- Exclude Patterns ---
+snapraid_excludes:
+  - "*.unrecoverable"
+  - "/tmp/"
+  - "/lost+found/"
+  - ".Thumbs.db"
+  - ".DS_Store"
+  - "*.part"
+  - "/.snapraid.content"
+
+# --- SnapRAID Options ---
+# Block size in KiB (256 is the default and recommended)
+snapraid_block_size: 256
+
+# Auto-save sync progress every N GiB (allows resume if interrupted)
+snapraid_autosave_gb: 250
+
+# --- Automation (systemd timers) ---
+snapraid_timer_enabled: true
+
+# Sync schedule — daily at 03:00
+snapraid_sync_schedule: "*-*-* 03:00:00"
+
+# Scrub schedule — weekly Sunday at 05:00
+snapraid_scrub_schedule: "Sun *-*-* 05:00:00"
+
+# Percentage of array to verify per scrub run
+# 8% weekly ≈ full coverage every ~3 months
+snapraid_scrub_percentage: 8
+
+# Only scrub blocks older than this many days
+snapraid_scrub_min_age: 10
+
+# Safety net: abort sync if more than N files were deleted
+# Prevents accidental mass deletion from propagating to parity
+snapraid_delete_threshold: 40

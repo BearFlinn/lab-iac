@@ -1,0 +1,30 @@
+---
+# r730xd-nfs-server: NFS server exporting the MergerFS pool
+# Primary consumer: K8s NFS provisioner for persistent volumes
+
+# Path to export (should be the MergerFS pool mount point)
+nfs_export_path: "/mnt/pool"
+
+# Network allowed to access NFS exports
+nfs_export_network: "10.0.0.0/24"
+
+# NFS export options
+# rw               — read-write access
+# sync             — write to disk before responding (data safety)
+# no_subtree_check — don't verify file is in exported subtree (performance)
+# no_root_squash   — allow root on client to act as root (required for K8s provisioner)
+nfs_export_options: "rw,sync,no_subtree_check,no_root_squash"
+
+# Additional exports (list of dicts with path, network, options)
+# Example:
+#   nfs_additional_exports:
+#     - path: "/mnt/pool/media"
+#       network: "10.0.0.0/24"
+#       options: "ro,sync,no_subtree_check"
+nfs_additional_exports: []
+
+# Open firewall ports (follows enable_firewall from inventory)
+nfs_open_firewall: "{{ enable_firewall | default(false) | bool }}"
+
+# Number of NFS server threads
+nfs_server_threads: 8

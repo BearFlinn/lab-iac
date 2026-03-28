@@ -1,0 +1,11 @@
+---
+galaxy_info:
+  author: bearf
+  description: Configure SnapRAID parity protection with automated sync and scrub via systemd timers
+  license: MIT
+  min_ansible_version: "2.10"
+  platforms:
+    - name: Debian
+      versions:
+        - trixie
+dependencies: []

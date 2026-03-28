@@ -12,3 +12,7 @@
 # Get this from: https://dash.cloudflare.com/profile/api-tokens
 # Required permissions: Zone:DNS:Edit for the specific zone
 vault_cloudflare_api_token: "your-cloudflare-api-token-here"
+
+# iDRAC root password for R730xd remote management
+# Used by r730xd-storage.yml to resolve drive bays at runtime
+vault_idrac_password: "your-idrac-password-here"

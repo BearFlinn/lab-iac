@@ -1,0 +1,11 @@
+# Managed by Ansible — r730xd-snapraid
+[Unit]
+Description=SnapRAID Scrub Timer
+
+[Timer]
+OnCalendar={{ snapraid_scrub_schedule }}
+Persistent=true
+RandomizedDelaySec=600
+
+[Install]
+WantedBy=timers.target

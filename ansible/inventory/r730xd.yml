@@ -4,6 +4,8 @@
 #
 # Usage:
 #   ansible-playbook -i ansible/inventory/r730xd.yml ansible/playbooks/setup-r730xd.yml -v
+#   ansible-playbook -i ansible/inventory/r730xd.yml ansible/playbooks/r730xd-storage.yml \
+#     --vault-password-file .vault_pass -v
 
 all:
   hosts:
@@ -17,13 +19,23 @@ all:
       cpu_threads: 16
       ram: "32GB"
       ram_gb: 32
-      storage:
-        - name: "OS SSD"
-          type: "SSD"
-          purpose: "Operating system"
       form_factor: "2U Rackmount"
       model: "Dell PowerEdge R730xd"
       node_roles: ["storage"]
+
+      # iDRAC connection (used by r730xd-storage.yml to resolve drive bays)
+      idrac_host: "10.0.0.203"
+
+      # Drive bay assignments — source of truth for all storage roles
+      # Bay 12 (rear 2.5") is the boot SSD, excluded automatically
+      # role: parity | data
+      r730xd_drive_bays:
+        - bay: 0
+          role: parity       # 4TB — must be >= largest data drive
+        - bay: 1
+          role: data         # 3TB
+        - bay: 2
+          role: data         # 3TB
 
   vars:
     network_dns:
@@ -31,3 +43,4 @@ all:
       - "8.8.4.4"
     timezone: "America/New_York"
     enable_firewall: false
+    idrac_password: "{{ vault_idrac_password }}"

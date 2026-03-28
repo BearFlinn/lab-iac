@@ -1,0 +1,15 @@
+# Managed by Ansible — r730xd-snapraid
+[Unit]
+Description=SnapRAID Scrub
+After=local-fs.target
+{% for drive in snapraid_parity_mounts + snapraid_data_mounts %}
+RequiresMountsFor={{ drive.path }}
+{% endfor %}
+Conflicts=snapraid-sync.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/snapraid scrub -p {{ snapraid_scrub_percentage }} -o {{ snapraid_scrub_min_age }} -l /var/log/snapraid-scrub.log
+Nice=19
+IOSchedulingClass=idle
+OOMScoreAdjust=-200

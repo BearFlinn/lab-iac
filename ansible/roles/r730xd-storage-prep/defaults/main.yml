@@ -1,9 +1,11 @@
 ---
 # R730xd Storage Preparation Variables
-# Prepares raw HDDs as individually mounted ext4 filesystems
-# for use with MergerFS + SnapRAID
+# Mounts drives at bay-based paths using resolved_drives fact from playbook pre-tasks
+#
+# Requires: resolved_drives fact set by r730xd-storage.yml pre-tasks
+#   Each entry: {bay: N, role: "parity"|"data", serial: "...", device: "sdX"}
 
-# Base mount path — drives mount as {{ storage_mount_base }}/disk1, disk2, etc.
+# Base mount path — drives mount as {{ storage_mount_base }}/bay0, bay1, etc.
 storage_mount_base: "/mnt/data"
 
 # Filesystem type (ext4 recommended for SnapRAID compatibility)
@@ -15,8 +17,5 @@ storage_mkfs_options: "-m 0 -T largefile4"
 # Mount options — nofail prevents boot hang if a drive dies
 storage_mount_options: "defaults,noatime,nofail"
 
-# Minimum drive size in bytes to consider as a data drive (filters out boot SSD)
-data_drive_min_size_bytes: 1000000000000  # 1 TB
-
-# Optional: explicit disk serial numbers to exclude from all operations
-exclude_disks: []
+# Boot drive bay number (excluded from all operations)
+boot_drive_bay: 12

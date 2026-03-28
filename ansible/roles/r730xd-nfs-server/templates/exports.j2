@@ -1,0 +1,8 @@
+# Managed by Ansible — r730xd-nfs-server
+# NFS exports for R730xd storage server
+# Primary consumer: K8s NFS provisioner (nfs-subdir-external-provisioner)
+
+{{ nfs_export_path }} {{ nfs_export_network }}({{ nfs_export_options }})
+{% for export in nfs_additional_exports %}
+{{ export.path }} {{ export.network }}({{ export.options }})
+{% endfor %}

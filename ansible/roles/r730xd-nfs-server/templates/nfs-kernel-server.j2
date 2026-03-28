@@ -1,0 +1,9 @@
+# Managed by Ansible — r730xd-nfs-server
+# /etc/default/nfs-kernel-server
+
+# Number of NFS server threads
+RPCNFSDCOUNT={{ nfs_server_threads }}
+RPCNFSDPRIORITY=0
+RPCMOUNTDOPTS="--manage-gids"
+NEED_SVCGSSD=""
+RPCSVCGSSDOPTS=""

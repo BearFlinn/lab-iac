@@ -1,0 +1,11 @@
+# Managed by Ansible — r730xd-snapraid
+[Unit]
+Description=SnapRAID Sync Timer
+
+[Timer]
+OnCalendar={{ snapraid_sync_schedule }}
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

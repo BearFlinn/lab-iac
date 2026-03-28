@@ -1,0 +1,11 @@
+---
+galaxy_info:
+  author: bearf
+  description: Configure NFS server to export the MergerFS pool for K8s persistent volumes
+  license: MIT
+  min_ansible_version: "2.10"
+  platforms:
+    - name: Debian
+      versions:
+        - trixie
+dependencies: []

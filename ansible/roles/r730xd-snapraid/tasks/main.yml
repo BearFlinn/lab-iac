@@ -1,0 +1,127 @@
+---
+# r730xd-snapraid: Configure SnapRAID parity protection with systemd timers
+
+- name: Filter parity drives from drive mounts
+  ansible.builtin.set_fact:
+    snapraid_parity_mounts: >-
+      {{
+        data_drive_mounts
+        | selectattr('role', 'equalto', 'parity')
+        | sort(attribute='bay')
+        | list
+      }}
+
+- name: Filter data drives from drive mounts
+  ansible.builtin.set_fact:
+    snapraid_data_mounts: >-
+      {{
+        data_drive_mounts
+        | selectattr('role', 'equalto', 'data')
+        | sort(attribute='bay')
+        | list
+      }}
+
+- name: Validate drive configuration
+  ansible.builtin.assert:
+    that:
+      - data_drive_mounts is defined
+      - snapraid_parity_mounts | length > 0
+      - snapraid_data_mounts | length > 0
+    fail_msg: >
+      SnapRAID requires at least one parity drive and one data drive.
+      Found {{ snapraid_parity_mounts | length }} parity, {{ snapraid_data_mounts | length }} data.
+      Check r730xd_drive_bays in inventory.
+
+- name: Warn if more parity than data drives
+  ansible.builtin.debug:
+    msg: >
+      WARNING: {{ snapraid_parity_mounts | length }} parity drive(s) for only
+      {{ snapraid_data_mounts | length }} data drive(s). Consider reassigning
+      a parity drive to data for more usable space.
+  when: snapraid_parity_mounts | length >= snapraid_data_mounts | length
+
+- name: Install SnapRAID
+  ansible.builtin.apt:
+    name: snapraid
+    state: present
+
+- name: Create content file directory on boot SSD
+  ansible.builtin.file:
+    path: "{{ snapraid_boot_content_path | dirname }}"
+    state: directory
+    mode: "0755"
+
+- name: Deploy SnapRAID configuration
+  ansible.builtin.template:
+    src: snapraid.conf.j2
+    dest: /etc/snapraid.conf
+    mode: "0644"
+
+- name: Deploy snapraid-sync systemd service
+  ansible.builtin.template:
+    src: snapraid-sync.service.j2
+    dest: /etc/systemd/system/snapraid-sync.service
+    mode: "0644"
+  notify:
+    - reload systemd
+    - restart snapraid-sync timer
+
+- name: Deploy snapraid-sync systemd timer
+  ansible.builtin.template:
+    src: snapraid-sync.timer.j2
+    dest: /etc/systemd/system/snapraid-sync.timer
+    mode: "0644"
+  notify:
+    - reload systemd
+    - restart snapraid-sync timer
+
+- name: Deploy snapraid-scrub systemd service
+  ansible.builtin.template:
+    src: snapraid-scrub.service.j2
+    dest: /etc/systemd/system/snapraid-scrub.service
+    mode: "0644"
+  notify:
+    - reload systemd
+    - restart snapraid-scrub timer
+
+- name: Deploy snapraid-scrub systemd timer
+  ansible.builtin.template:
+    src: snapraid-scrub.timer.j2
+    dest: /etc/systemd/system/snapraid-scrub.timer
+    mode: "0644"
+  notify:
+    - reload systemd
+    - restart snapraid-scrub timer
+
+- name: Enable and start SnapRAID timers
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    enabled: true
+    state: started
+    daemon_reload: true
+  loop:
+    - snapraid-sync.timer
+    - snapraid-scrub.timer
+  when: snapraid_timer_enabled
+
+- name: Check SnapRAID status (informational)
+  ansible.builtin.command: snapraid status
+  register: snapraid_status
+  changed_when: false
+  failed_when: false
+
+- name: Display SnapRAID summary
+  ansible.builtin.debug:
+    msg:
+      - "=== SnapRAID Configuration Complete ==="
+      - ""
+      - "Parity: {{ snapraid_parity_mounts | map(attribute='path') | list | join(', ') }}"
+      - "Data:   {{ snapraid_data_mounts | map(attribute='path') | list | join(', ') }}"
+      - "Config: /etc/snapraid.conf"
+      - ""
+      - "Timers:"
+      - "  Sync:  {{ snapraid_sync_schedule }}"
+      - "  Scrub: {{ snapraid_scrub_schedule }} ({{ snapraid_scrub_percentage }}%)"
+      - ""
+      - "IMPORTANT: Run the initial sync manually — it takes hours:"
+      - "  ssh r730xd 'sudo snapraid sync'"

@@ -1,0 +1,26 @@
+---
+# r730xd-mergerfs: Pool individual data drives into a unified mount
+#
+# Requires: data_drive_mounts fact set by r730xd-storage-prep role
+#   Each entry: {bay: N, role: "parity"|"data", path: "/mnt/data/bayN", ...}
+#   Only entries with role == "data" are included in the pool.
+
+# Mount point for the merged pool
+mergerfs_mount_point: "/mnt/pool"
+
+# Create policy — how MergerFS decides where to write new files
+# epmfs = existing path, most free space (best for general storage with mixed drives)
+mergerfs_create_policy: "epmfs"
+
+# MergerFS mount options
+# allow_other        — allow non-root users to access (required for NFS)
+# use_ino            — use MergerFS-generated inode numbers (NFS compatibility)
+# cache.files=partial — page cache for reads (improves NFS performance)
+# dropcacheonclose   — drop cache on close (prevents stale reads with SnapRAID)
+# minfreespace=20G   — don't write to drives with < 20GB free
+# moveonenospc=true  — if drive fills during write, move file to another drive
+mergerfs_options: "defaults,noatime,allow_other,use_ino,cache.files=partial,dropcacheonclose=true,minfreespace=20G,moveonenospc=true,category.create={{ mergerfs_create_policy }},fsname=mergerfs"
+
+# Install from GitHub .deb release (more current than Debian repos)
+mergerfs_install_from_github: true
+mergerfs_github_version: "2.40.2"

@@ -1,6 +1,7 @@
 ---
 # Proxy VPS Inventory with Wildcard Certificate Support
 # This is an EXAMPLE - copy to proxy-vps-wildcard.yml and customize
+# File uses .example extension (not .yml.example) so Ansible won't try to parse it
 
 all:
   hosts:

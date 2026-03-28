@@ -5,6 +5,7 @@
   ansible.builtin.apt:
     name:
       - ipmitool
+      - freeipmi-tools
       - edac-utils
       - prometheus-node-exporter
     state: present
@@ -98,6 +99,10 @@
         remote_src: true
         mode: "0755"
       notify: Restart ipmi-exporter
+      when: >
+        not ipmi_exporter_binary.stat.exists or
+        (ipmi_exporter_installed_version.stdout is defined and
+         ipmi_exporter_version not in (ipmi_exporter_installed_version.stdout | default('')))
 
     - name: Create ipmi_exporter system user
       ansible.builtin.user:

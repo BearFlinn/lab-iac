@@ -1,0 +1,3 @@
+---
+- name: remount mergerfs
+  ansible.builtin.command: "mount -o remount {{ mergerfs_mount_point }}"

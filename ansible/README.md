@@ -23,7 +23,7 @@ Configuration management for active infrastructure. Previous K8s cluster and tow
 |------|-------|
 | `proxy-vps.yml` | Hetzner VPS (SSH port 2222) |
 | `r730xd.yml` | Dell R730xd storage server (10.0.0.200) |
-| `proxy-vps-wildcard.yml.example` | Template for wildcard proxy inventory |
+| `proxy-vps-wildcard.example` | Template for wildcard proxy inventory |
 
 ## Running playbooks
 

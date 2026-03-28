@@ -1,0 +1,34 @@
+# Managed by Ansible — r730xd-snapraid
+# SnapRAID configuration for R730xd storage server
+# https://www.snapraid.it/manual
+
+# Parity drives
+{% for drive in snapraid_parity_mounts %}
+{% if loop.index == 1 %}
+parity {{ drive.path }}/snapraid.parity
+{% else %}
+{{ loop.index }}-parity {{ drive.path }}/snapraid.parity
+{% endif %}
+{% endfor %}
+
+# Content files — metadata about protected files
+# At least one must be on a non-data, non-parity location (boot SSD)
+content {{ snapraid_boot_content_path }}
+{% for drive in snapraid_data_mounts %}
+content {{ drive.path }}/.snapraid.content
+{% endfor %}
+
+# Data drives
+{% for drive in snapraid_data_mounts %}
+data d{{ loop.index }} {{ drive.path }}/
+{% endfor %}
+
+# Exclude patterns
+{% for pattern in snapraid_excludes %}
+exclude {{ pattern }}
+{% endfor %}
+
+# Options
+blocksize {{ snapraid_block_size }}
+hashsize 16
+autosave {{ snapraid_autosave_gb }}

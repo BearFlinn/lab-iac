@@ -1,0 +1,87 @@
+---
+# r730xd-nfs-server: NFS server exporting the MergerFS pool
+
+- name: Install NFS server packages
+  ansible.builtin.apt:
+    name:
+      - nfs-kernel-server
+      - nfs-common
+    state: present
+
+- name: Verify export path is a mount point
+  ansible.builtin.command: "findmnt {{ nfs_export_path }}"
+  register: export_mount_check
+  changed_when: false
+  failed_when: false
+
+- name: Fail if export path is not mounted
+  ansible.builtin.fail:
+    msg: >
+      {{ nfs_export_path }} is not mounted. Ensure the r730xd-mergerfs role
+      has run and the MergerFS pool is active. Check: mount | grep mergerfs
+  when: export_mount_check.rc != 0
+
+- name: Deploy NFS exports file
+  ansible.builtin.template:
+    src: exports.j2
+    dest: /etc/exports
+    mode: "0644"
+  notify:
+    - export nfs
+    - restart nfs-server
+
+- name: Deploy NFS server configuration
+  ansible.builtin.template:
+    src: nfs-kernel-server.j2
+    dest: /etc/default/nfs-kernel-server
+    mode: "0644"
+  notify: restart nfs-server
+
+- name: Enable and start NFS server
+  ansible.builtin.systemd:
+    name: nfs-server
+    enabled: true
+    state: started
+
+- name: Enable and start NFS idmapd
+  ansible.builtin.systemd:
+    name: nfs-idmapd
+    enabled: true
+    state: started
+
+- name: Open NFS firewall ports
+  community.general.ufw:
+    rule: allow
+    port: "{{ item.port }}"
+    proto: "{{ item.proto }}"
+  loop:
+    - { port: "2049", proto: "tcp" }
+    - { port: "2049", proto: "udp" }
+    - { port: "111", proto: "tcp" }
+    - { port: "111", proto: "udp" }
+    - { port: "20048", proto: "tcp" }
+    - { port: "20048", proto: "udp" }
+  loop_control:
+    label: "{{ item.port }}/{{ item.proto }}"
+  when: nfs_open_firewall | bool
+
+- name: Verify NFS exports are active
+  ansible.builtin.command: exportfs -s
+  register: nfs_active_exports
+  changed_when: false
+
+- name: Display NFS summary
+  ansible.builtin.debug:
+    msg:
+      - "=== NFS Server Configuration Complete ==="
+      - ""
+      - "Export: {{ nfs_export_path }} → {{ nfs_export_network }}"
+      - "Options: {{ nfs_export_options }}"
+      - "Threads: {{ nfs_server_threads }}"
+      - ""
+      - "Active exports:"
+      - "{{ nfs_active_exports.stdout_lines }}"
+      - ""
+      - "K8s NFS provisioner should point at:"
+      - "  server: {{ ansible_default_ipv4.address | default('10.0.0.200') }}"
+      - "  path: {{ nfs_export_path }}"
