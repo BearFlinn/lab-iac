@@ -1,6 +1,6 @@
 # Migration Plan
 
-Last updated: 2026-03-26
+Last updated: 2026-03-28
 
 ## Guiding Principles
 
@@ -159,10 +159,13 @@ This is the big move. The current cluster goes down, everything gets relocated.
 - [x] ~~Set up iDRAC remote management~~ — **SSH racadm working at 10.0.0.203. Note: no Enterprise license, so no virtual media. HTTPS web UI works for basic monitoring.**
 - [ ] Install NetBird for VPN access
 - [ ] Verify NFS is accessible from K8s nodes
-- [ ] **Stand up staging VM** — host critical workloads (web services, etc.) here while K8s cluster is being rebuilt. This unblocks draining the tower-pc without downtime for production services.
-  - Containerized or bare services — whatever gets them running fastest
-  - Update VPS proxy to route traffic to staging VM
-  - Verify all critical services are reachable before proceeding to Phase 3
+- [x] ~~**Stand up staging VM**~~ — **done 2026-03-28. Debian 13 VM on libvirt NAT network (192.168.122.191), 4 vCPU / 8GB RAM. KVM/libvirt installed via `ansible/roles/r730xd-vm-host`, VM provisioned via `ansible/playbooks/create-staging-vm.yml`. Uses Debian generic cloud image + cloud-init + UEFI boot. Docker, gh CLI, and NetBird (100.96.220.249) installed. Critical services deployed via `ansible/playbooks/deploy-staging-services.yml`:**
+  - **landing-page** (nginx) — landing.bearflinn.com
+  - **caz-portfolio** (Rust) — pennydreadfulsfx.com
+  - **resume-site** (FastAPI + pgvector/pg16) — resume.bearflinn.com
+  - **Caddy reverse proxy on port 80, routes by Host header. All repos cloned from grizzly-endeavors org, built from source on VM.**
+  - [ ] Update VPS proxy to route traffic to staging VM (NetBird IP 100.96.220.249:80)
+  - [ ] Verify all critical services are reachable from public internet before proceeding to Phase 3
 
 ### 2B: Quanta — K8s Worker (Diskless)
 
@@ -272,7 +275,8 @@ Tower PC takes on the router role because its CPU will be largely unused by infe
 ## Phase 5: Cleanup & Documentation
 
 - [x] ~~Add R730 to Ansible inventory~~ — **added as `storage_servers` group in `all-nodes.yml` + dedicated `ansible/inventory/r730xd.yml`**
-- [ ] Add Quanta to Ansible inventory
+- [x] ~~Add all lab machines to unified Ansible inventory~~ — **done 2026-03-28. `ansible/inventory/lab-nodes.yml` covers r730xd, tower-pc, dell-inspiron-15, optiplex, staging-vm with group structure (k8s_cluster, standalone, storage_servers, staging). All machines SSH-verified.**
+- [ ] Add Quanta to Ansible inventory (pending PXE boot / OS install)
 - [ ] Update Ansible inventory (`all-nodes.yml`) with final topology
 - [ ] Update `docs/ARCHITECTURE.md` with new cluster topology
 - [ ] Update `CLAUDE.md` with new node table, IPs, roles
