@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# Managed by Ansible — monitoring-checks role
+# Check systemd service health: required services + scan for unexpected failures
+set -euo pipefail
+
+source "{{ monitoring_lib_dir }}/lib/alert.sh"
+init_metrics "check_services"
+
+CHECK="check-services"
+
+write_metric "monitoring_services_check_time" "$(date +%s)" "Timestamp of last service check" "gauge"
+
+# Check required services (must be active)
+{% for service in monitoring_required_services %}
+if systemctl is-active --quiet "{{ service }}" 2>/dev/null; then
+    clear_alert "$CHECK" "{{ service }}"
+    write_metric_labeled "monitoring_service_up" "service=\"{{ service }}\"" "1"
+else
+    alert "critical" "$CHECK" "{{ service }}" "Required service {{ service }} is not running"
+    write_metric_labeled "monitoring_service_up" "service=\"{{ service }}\"" "0"
+fi
+{% endfor %}
+
+# Check optional services (only alert if they exist but are failed)
+{% for service in monitoring_optional_services %}
+if systemctl list-unit-files "{{ service }}.service" --no-legend 2>/dev/null | grep -q "{{ service }}"; then
+    if systemctl is-active --quiet "{{ service }}" 2>/dev/null; then
+        clear_alert "$CHECK" "{{ service }}"
+        write_metric_labeled "monitoring_service_up" "service=\"{{ service }}\"" "1"
+    else
+        alert "warning" "$CHECK" "{{ service }}" "Optional service {{ service }} is installed but not running"
+        write_metric_labeled "monitoring_service_up" "service=\"{{ service }}\"" "0"
+    fi
+fi
+{% endfor %}
+
+# Count total failed units
+failed_count=$(systemctl --failed --no-legend 2>/dev/null | wc -l)
+write_metric "monitoring_systemd_failed_units" "$failed_count" "Number of failed systemd units" "gauge"
+
+if (( failed_count > 0 )); then
+    failed_list=$(systemctl --failed --no-legend 2>/dev/null | awk '{print $2}' | tr '\n' ', ' | sed 's/,$//')
+    alert "warning" "$CHECK" "failed_units" "${failed_count} failed systemd unit(s): ${failed_list}"
+else
+    clear_alert "$CHECK" "failed_units"
+fi
+
+flush_metrics

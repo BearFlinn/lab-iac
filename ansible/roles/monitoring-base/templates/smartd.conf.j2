@@ -1,0 +1,8 @@
+# Managed by Ansible — monitoring-base role
+#
+# Monitor all drives: track all attributes, enable automatic offline
+# testing and attribute autosave, schedule self-tests.
+#
+# DEVICESCAN applies to all drives found on the system.
+
+DEVICESCAN {{ smartd_default_directives }} -s ({{ smartd_short_test_schedule }}|{{ smartd_long_test_schedule }}) -W 4,45,55 -m root -M exec /usr/share/smartmontools/smartd-runner

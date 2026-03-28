@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# Managed by Ansible — monitoring-checks role
+# Orchestrator: runs all health check scripts
+# Called by cron with tier argument: run-checks.sh [tier1|tier2|all]
+set -euo pipefail
+
+CHECKS_DIR="{{ monitoring_lib_dir }}/checks"
+TIER="${1:-all}"
+
+# Tier 1 checks (critical — every 5 minutes)
+TIER1_CHECKS=(
+    check-smart
+    check-disks
+    check-services
+    check-ipmi
+    check-nfs
+)
+
+# Tier 2 checks (warning — every 15 minutes)
+TIER2_CHECKS=(
+    check-snapraid
+)
+
+run_check() {
+    local script="${CHECKS_DIR}/${1}.sh"
+    if [[ -x "$script" ]]; then
+        "$script" 2>&1 || logger -t "monitoring" -p "user.err" "Check ${1} exited with error code $?"
+    fi
+}
+
+case "$TIER" in
+    tier1)
+        for check in "${TIER1_CHECKS[@]}"; do
+            run_check "$check"
+        done
+        ;;
+    tier2)
+        for check in "${TIER2_CHECKS[@]}"; do
+            run_check "$check"
+        done
+        ;;
+    all)
+        for check in "${TIER1_CHECKS[@]}" "${TIER2_CHECKS[@]}"; do
+            run_check "$check"
+        done
+        ;;
+    *)
+        echo "Usage: $0 [tier1|tier2|all]" >&2
+        exit 1
+        ;;
+esac

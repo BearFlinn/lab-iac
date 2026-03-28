@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+# Managed by Ansible — monitoring-checks role
+# Check hardware health via IPMI: PSU, ECC memory, CPU temperatures
+set -euo pipefail
+
+source "{{ monitoring_lib_dir }}/lib/alert.sh"
+init_metrics "check_ipmi"
+
+CHECK="check-ipmi"
+TEMP_WARN={{ monitoring_temp_warn_cpu }}
+TEMP_CRIT={{ monitoring_temp_crit_cpu }}
+
+write_metric "monitoring_ipmi_check_time" "$(date +%s)" "Timestamp of last IPMI check" "gauge"
+
+if ! command -v ipmitool &>/dev/null; then
+    logger -t "monitoring" "ipmitool not found, skipping IPMI checks"
+    exit 0
+fi
+
+# --- Power supply status ---
+# Look for PS sensors and check for failures
+ps_output=$(ipmitool sdr type "Power Supply" 2>/dev/null || true)
+if [[ -n "$ps_output" ]]; then
+    ps_count=0
+    ps_failed=0
+    while IFS= read -r line; do
+        [[ -z "$line" ]] && continue
+        ps_count=$((ps_count + 1))
+        if echo "$line" | grep -qi "fail\|absent\|lost\|fault"; then
+            ps_failed=$((ps_failed + 1))
+            ps_name=$(echo "$line" | cut -d'|' -f1 | xargs)
+            alert "critical" "$CHECK" "psu_${ps_count}" "Power supply issue: ${ps_name} — ${line}"
+        else
+            clear_alert "$CHECK" "psu_${ps_count}"
+        fi
+    done <<< "$ps_output"
+    write_metric "monitoring_ipmi_psu_total" "$ps_count" "Total power supplies detected" "gauge"
+    write_metric "monitoring_ipmi_psu_failed" "$ps_failed" "Power supplies in failed/absent state" "gauge"
+fi
+
+# --- CPU temperature ---
+temp_output=$(ipmitool sdr type "Temperature" 2>/dev/null || true)
+if [[ -n "$temp_output" ]]; then
+    while IFS= read -r line; do
+        [[ -z "$line" ]] && continue
+        sensor_name=$(echo "$line" | cut -d'|' -f1 | xargs)
+        # Extract temperature value (degrees C)
+        temp=$(echo "$line" | grep -oP '[0-9]+(?= degrees C)' || true)
+        [[ -z "$temp" ]] && continue
+
+        safe_name=$(echo "$sensor_name" | tr ' ' '_' | tr -cd '[:alnum:]_')
+        write_metric_labeled "monitoring_ipmi_temperature_celsius" "sensor=\"${sensor_name}\"" "$temp"
+
+        if (( temp >= TEMP_CRIT )); then
+            alert "critical" "$CHECK" "temp_${safe_name}" "IPMI sensor ${sensor_name} temperature CRITICAL: ${temp}°C"
+        elif (( temp >= TEMP_WARN )); then
+            alert "warning" "$CHECK" "temp_${safe_name}" "IPMI sensor ${sensor_name} temperature WARNING: ${temp}°C"
+        else
+            clear_alert "$CHECK" "temp_${safe_name}"
+        fi
+    done <<< "$temp_output"
+fi
+
+# --- ECC memory errors ---
+# Check for memory-related events in SEL (System Event Log)
+mem_errors=$(ipmitool sel list 2>/dev/null | grep -ci "memory\|ecc\|correctable\|uncorrectable" || true)
+write_metric "monitoring_ipmi_memory_errors_sel" "$mem_errors" "Memory-related entries in IPMI SEL" "gauge"
+
+if (( mem_errors > 0 )); then
+    # Check if any are uncorrectable (critical) vs correctable (warning)
+    uncorrectable=$(ipmitool sel list 2>/dev/null | grep -ci "uncorrectable" || true)
+    if (( uncorrectable > 0 )); then
+        alert "critical" "$CHECK" "ecc_uncorrectable" "Uncorrectable ECC memory errors detected in IPMI SEL (${uncorrectable} events)"
+    else
+        alert "warning" "$CHECK" "ecc_correctable" "Correctable ECC memory errors detected in IPMI SEL (${mem_errors} events)"
+    fi
+fi
+
+# --- EDAC check (OS-level ECC) ---
+if command -v edac-util &>/dev/null; then
+    edac_errors=$(edac-util -s 2>/dev/null | grep -ci "error" || true)
+    if (( edac_errors > 0 )); then
+        edac_detail=$(edac-util -s 2>/dev/null || true)
+        alert "warning" "$CHECK" "edac" "EDAC reports memory errors: ${edac_detail}"
+    else
+        clear_alert "$CHECK" "edac"
+    fi
+fi
+
+flush_metrics

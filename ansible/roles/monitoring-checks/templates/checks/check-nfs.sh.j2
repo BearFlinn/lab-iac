@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# Managed by Ansible — monitoring-checks role
+# Check NFS server status and exports
+# Gracefully exits if NFS is not installed
+set -euo pipefail
+
+source "{{ monitoring_lib_dir }}/lib/alert.sh"
+init_metrics "check_nfs"
+
+CHECK="check-nfs"
+
+# Skip if nfs-server is not installed
+if ! systemctl list-unit-files nfs-server.service --no-legend 2>/dev/null | grep -q "nfs-server"; then
+    write_metric "monitoring_nfs_installed" "0" "Whether NFS server is installed" "gauge"
+    flush_metrics
+    exit 0
+fi
+
+write_metric "monitoring_nfs_installed" "1" "Whether NFS server is installed" "gauge"
+write_metric "monitoring_nfs_check_time" "$(date +%s)" "Timestamp of last NFS check" "gauge"
+
+# Check service status
+if systemctl is-active --quiet nfs-server; then
+    clear_alert "$CHECK" "service"
+    write_metric "monitoring_nfs_service_up" "1" "NFS server service status" "gauge"
+else
+    alert "critical" "$CHECK" "service" "NFS server is not running — all K8s PVCs are affected"
+    write_metric "monitoring_nfs_service_up" "0" "NFS server service status" "gauge"
+    flush_metrics
+    exit 0
+fi
+
+# Check that exports exist and are active
+export_count=$(exportfs -s 2>/dev/null | wc -l || echo 0)
+write_metric "monitoring_nfs_export_count" "$export_count" "Number of active NFS exports" "gauge"
+
+if (( export_count == 0 )); then
+    alert "warning" "$CHECK" "no_exports" "NFS server is running but has no active exports"
+else
+    clear_alert "$CHECK" "no_exports"
+fi
+
+flush_metrics

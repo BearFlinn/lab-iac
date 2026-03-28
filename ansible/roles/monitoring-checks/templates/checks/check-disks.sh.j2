@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# Managed by Ansible — monitoring-checks role
+# Check disk space usage on all mounted filesystems
+set -euo pipefail
+
+source "{{ monitoring_lib_dir }}/lib/alert.sh"
+init_metrics "check_disks"
+
+CHECK="check-disks"
+WARN_PCT={{ monitoring_disk_warn_pct }}
+CRIT_PCT={{ monitoring_disk_crit_pct }}
+
+write_metric "monitoring_disk_check_time" "$(date +%s)" "Timestamp of last disk check" "gauge"
+
+# Check all real filesystems (exclude tmpfs, devtmpfs, etc.)
+while IFS= read -r line; do
+    filesystem=$(echo "$line" | awk '{print $1}')
+    usage_pct=$(echo "$line" | awk '{print $5}' | tr -d '%')
+    mountpoint=$(echo "$line" | awk '{print $6}')
+    avail_kb=$(echo "$line" | awk '{print $4}')
+
+    [[ -z "$usage_pct" || ! "$usage_pct" =~ ^[0-9]+$ ]] && continue
+
+    safe_mount=$(echo "$mountpoint" | tr '/' '_')
+    write_metric_labeled "monitoring_disk_usage_percent" "mountpoint=\"${mountpoint}\"" "$usage_pct"
+    write_metric_labeled "monitoring_disk_avail_kb" "mountpoint=\"${mountpoint}\"" "$avail_kb"
+
+    if (( usage_pct >= CRIT_PCT )); then
+        alert "critical" "$CHECK" "space${safe_mount}" "Disk ${mountpoint} is ${usage_pct}% full (critical threshold: ${CRIT_PCT}%)"
+    elif (( usage_pct >= WARN_PCT )); then
+        alert "warning" "$CHECK" "space${safe_mount}" "Disk ${mountpoint} is ${usage_pct}% full (warning threshold: ${WARN_PCT}%)"
+    else
+        clear_alert "$CHECK" "space${safe_mount}"
+    fi
+done < <(df -x tmpfs -x devtmpfs -x squashfs -x overlay --output=source,size,used,avail,pcent,target 2>/dev/null | tail -n +2)
+
+flush_metrics

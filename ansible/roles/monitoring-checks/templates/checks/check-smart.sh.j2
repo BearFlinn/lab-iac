@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# Managed by Ansible — monitoring-checks role
+# Check SMART health, temperatures, and reallocated sectors for all drives
+set -euo pipefail
+
+source "{{ monitoring_lib_dir }}/lib/alert.sh"
+init_metrics "check_smart"
+
+CHECK="check-smart"
+REALLOCATED_WARN={{ monitoring_smart_reallocated_warn }}
+TEMP_WARN={{ monitoring_temp_warn_drive }}
+TEMP_CRIT={{ monitoring_temp_crit_drive }}
+
+write_metric "monitoring_smart_check_time" "$(date +%s)" "Timestamp of last SMART check" "gauge"
+
+# Find all block devices that are physical disks (not partitions, not loop)
+for dev in /dev/sd? /dev/nvme?n?; do
+    [[ -b "$dev" ]] || continue
+
+    device_name=$(basename "$dev")
+
+    # Overall SMART health
+    if ! smartctl -H "$dev" 2>/dev/null | grep -q "PASSED\|OK"; then
+        alert "critical" "$CHECK" "health_${device_name}" "SMART health check FAILED for ${dev}"
+        write_metric_labeled "monitoring_smart_healthy" "device=\"${dev}\"" "0"
+    else
+        clear_alert "$CHECK" "health_${device_name}"
+        write_metric_labeled "monitoring_smart_healthy" "device=\"${dev}\"" "1"
+    fi
+
+    # Temperature (SATA drives use attribute 194, NVMe uses smartctl -A)
+    temp=""
+    if [[ "$dev" == /dev/nvme* ]]; then
+        temp=$(smartctl -A "$dev" 2>/dev/null | awk '/^Temperature:/{print $2}' || true)
+    else
+        temp=$(smartctl -A "$dev" 2>/dev/null | awk '/^194/{print $10}' || true)
+    fi
+
+    if [[ -n "$temp" && "$temp" =~ ^[0-9]+$ ]]; then
+        write_metric_labeled "monitoring_smart_temperature_celsius" "device=\"${dev}\"" "$temp"
+        if (( temp >= TEMP_CRIT )); then
+            alert "critical" "$CHECK" "temp_${device_name}" "Drive ${dev} temperature CRITICAL: ${temp}°C (threshold: ${TEMP_CRIT}°C)"
+        elif (( temp >= TEMP_WARN )); then
+            alert "warning" "$CHECK" "temp_${device_name}" "Drive ${dev} temperature WARNING: ${temp}°C (threshold: ${TEMP_WARN}°C)"
+        else
+            clear_alert "$CHECK" "temp_${device_name}"
+        fi
+    fi
+
+    # Reallocated sectors (SATA attribute 5)
+    if [[ "$dev" == /dev/sd* ]]; then
+        reallocated=$(smartctl -A "$dev" 2>/dev/null | awk '/^  5/{print $10}' || true)
+        if [[ -n "$reallocated" && "$reallocated" =~ ^[0-9]+$ ]]; then
+            write_metric_labeled "monitoring_smart_reallocated_sectors" "device=\"${dev}\"" "$reallocated"
+            if (( reallocated >= REALLOCATED_WARN )); then
+                alert "warning" "$CHECK" "reallocated_${device_name}" "Drive ${dev} has ${reallocated} reallocated sectors (threshold: ${REALLOCATED_WARN})"
+            else
+                clear_alert "$CHECK" "reallocated_${device_name}"
+            fi
+        fi
+    fi
+done
+
+flush_metrics

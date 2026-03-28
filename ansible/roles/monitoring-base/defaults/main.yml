@@ -1,0 +1,22 @@
+---
+# monitoring-base role defaults
+# Installs monitoring packages, Prometheus exporters, and configures smartd
+
+# --- Node Exporter ---
+node_exporter_port: 9100
+# Textfile collector directory — check scripts write .prom files here
+node_exporter_textfile_dir: "/var/lib/prometheus/node-exporter"
+
+# --- IPMI Exporter ---
+ipmi_exporter_enabled: true
+ipmi_exporter_version: "1.8.0"
+ipmi_exporter_port: 9290
+ipmi_exporter_arch: "amd64"
+ipmi_exporter_install_dir: "/usr/local/bin"
+
+# --- smartd ---
+# Run short self-test every Sunday at 01:00, long test first Sunday of month at 03:00
+smartd_short_test_schedule: "S/../../7/01"
+smartd_long_test_schedule: "L/../../1/03"
+# Monitor all attributes, log changes, alert on failure
+smartd_default_directives: "-a -o on -S on"

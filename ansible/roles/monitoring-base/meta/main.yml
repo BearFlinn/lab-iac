@@ -1,0 +1,10 @@
+---
+galaxy_info:
+  description: "Base monitoring packages, Prometheus exporters, and smartd configuration"
+  license: MIT
+  min_ansible_version: "2.14"
+  platforms:
+    - name: Debian
+      versions:
+        - trixie
+dependencies: []

@@ -1,0 +1,16 @@
+---
+- name: Restart node-exporter
+  ansible.builtin.systemd:
+    name: prometheus-node-exporter
+    state: restarted
+
+- name: Restart smartd
+  ansible.builtin.systemd:
+    name: smartd
+    state: restarted
+
+- name: Restart ipmi-exporter
+  ansible.builtin.systemd:
+    name: ipmi-exporter
+    state: restarted
+    daemon_reload: true

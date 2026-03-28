@@ -1,0 +1,129 @@
+---
+# monitoring-base: packages, exporters, smartd configuration
+
+- name: Install monitoring packages
+  ansible.builtin.apt:
+    name:
+      - ipmitool
+      - edac-utils
+      - prometheus-node-exporter
+    state: present
+  tags: [monitoring]
+
+- name: Create textfile collector directory
+  ansible.builtin.file:
+    path: "{{ node_exporter_textfile_dir }}"
+    state: directory
+    owner: prometheus
+    group: prometheus
+    mode: "0755"
+  tags: [monitoring]
+
+- name: Configure node-exporter with textfile collector
+  ansible.builtin.copy:
+    content: |
+      # Managed by Ansible — monitoring-base role
+      ARGS="--collector.textfile.directory={{ node_exporter_textfile_dir }} --collector.systemd --collector.processes"
+    dest: /etc/default/prometheus-node-exporter
+    mode: "0644"
+  notify: Restart node-exporter
+  tags: [monitoring]
+
+- name: Enable and start node-exporter
+  ansible.builtin.systemd:
+    name: prometheus-node-exporter
+    enabled: true
+    state: started
+  tags: [monitoring]
+
+# --- smartd configuration ---
+
+- name: Deploy smartd configuration
+  ansible.builtin.template:
+    src: smartd.conf.j2
+    dest: /etc/smartd.conf
+    mode: "0644"
+  notify: Restart smartd
+  tags: [monitoring]
+
+- name: Enable and start smartd
+  ansible.builtin.systemd:
+    name: smartd
+    enabled: true
+    state: started
+  tags: [monitoring]
+
+# --- IPMI Exporter ---
+
+- name: Install IPMI exporter
+  when: ipmi_exporter_enabled
+  tags: [monitoring]
+  block:
+    - name: Check if ipmi_exporter is already installed
+      ansible.builtin.stat:
+        path: "{{ ipmi_exporter_install_dir }}/ipmi_exporter"
+      register: ipmi_exporter_binary
+
+    - name: Check installed ipmi_exporter version
+      ansible.builtin.command: "{{ ipmi_exporter_install_dir }}/ipmi_exporter --version"
+      register: ipmi_exporter_installed_version
+      changed_when: false
+      failed_when: false
+      when: ipmi_exporter_binary.stat.exists
+
+    - name: Download ipmi_exporter
+      ansible.builtin.get_url:
+        url: "https://github.com/prometheus-community/ipmi_exporter/releases/download/v{{ ipmi_exporter_version }}/ipmi_exporter-{{ ipmi_exporter_version }}.linux-{{ ipmi_exporter_arch }}.tar.gz"
+        dest: "/tmp/ipmi_exporter-{{ ipmi_exporter_version }}.tar.gz"
+        mode: "0644"
+      when: >
+        not ipmi_exporter_binary.stat.exists or
+        (ipmi_exporter_installed_version.stdout is defined and
+         ipmi_exporter_version not in (ipmi_exporter_installed_version.stdout | default('')))
+
+    - name: Extract ipmi_exporter binary
+      ansible.builtin.unarchive:
+        src: "/tmp/ipmi_exporter-{{ ipmi_exporter_version }}.tar.gz"
+        dest: /tmp/
+        remote_src: true
+      when: >
+        not ipmi_exporter_binary.stat.exists or
+        (ipmi_exporter_installed_version.stdout is defined and
+         ipmi_exporter_version not in (ipmi_exporter_installed_version.stdout | default('')))
+
+    - name: Install ipmi_exporter binary
+      ansible.builtin.copy:
+        src: "/tmp/ipmi_exporter-{{ ipmi_exporter_version }}.linux-{{ ipmi_exporter_arch }}/ipmi_exporter"
+        dest: "{{ ipmi_exporter_install_dir }}/ipmi_exporter"
+        remote_src: true
+        mode: "0755"
+      notify: Restart ipmi-exporter
+
+    - name: Create ipmi_exporter system user
+      ansible.builtin.user:
+        name: ipmi_exporter
+        system: true
+        shell: /usr/sbin/nologin
+        create_home: false
+
+    - name: Deploy ipmi_exporter systemd unit
+      ansible.builtin.template:
+        src: ipmi-exporter.service.j2
+        dest: /etc/systemd/system/ipmi-exporter.service
+        mode: "0644"
+      notify: Restart ipmi-exporter
+
+    - name: Enable and start ipmi-exporter
+      ansible.builtin.systemd:
+        name: ipmi-exporter
+        enabled: true
+        state: started
+        daemon_reload: true
+
+    - name: Clean up download artifacts
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "/tmp/ipmi_exporter-{{ ipmi_exporter_version }}.tar.gz"
+        - "/tmp/ipmi_exporter-{{ ipmi_exporter_version }}.linux-{{ ipmi_exporter_arch }}"

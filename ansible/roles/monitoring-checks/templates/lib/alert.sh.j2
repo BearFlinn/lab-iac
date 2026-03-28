@@ -1,0 +1,101 @@
+#!/usr/bin/env bash
+# Managed by Ansible — monitoring-checks role
+# Alert dispatcher: syslog + optional webhook, with deduplication
+#
+# Usage: source this file, then call:
+#   alert "critical" "check-name" "alert-id" "Human-readable message"
+#   clear_alert "check-name" "alert-id"
+#   write_metric "metric_name" "value" "help text" "type"
+
+set -euo pipefail
+
+ALERT_WEBHOOK_URL="{{ monitoring_alert_webhook_url }}"
+ALERT_DEDUP_SECONDS="{{ monitoring_alert_dedup_seconds }}"
+STATE_DIR="{{ monitoring_state_dir }}"
+TEXTFILE_DIR="{{ monitoring_textfile_dir }}"
+HOSTNAME="$(hostname)"
+
+alert() {
+    local level="$1"    # critical, warning, info
+    local check="$2"    # check script name
+    local alert_id="$3" # unique identifier for dedup
+    local message="$4"
+
+    local state_file="${STATE_DIR}/${check}_${alert_id}.state"
+
+    # Deduplication: skip if we already fired this alert recently
+    if [[ -f "$state_file" ]]; then
+        local last_fired
+        last_fired=$(stat -c %Y "$state_file" 2>/dev/null || echo 0)
+        local now
+        now=$(date +%s)
+        if (( now - last_fired < ALERT_DEDUP_SECONDS )); then
+            return 0
+        fi
+    fi
+
+    # Log to syslog
+    logger -t "monitoring" -p "user.${level}" "[${level^^}] ${check}: ${message}"
+
+    # Webhook dispatch
+    if [[ -n "$ALERT_WEBHOOK_URL" ]]; then
+        local json
+        json=$(printf '{"level":"%s","check":"%s","alert_id":"%s","host":"%s","message":"%s","timestamp":"%s"}' \
+            "$level" "$check" "$alert_id" "$HOSTNAME" "$message" "$(date -Is)")
+        curl -sf -X POST -H "Content-Type: application/json" -d "$json" "$ALERT_WEBHOOK_URL" >/dev/null 2>&1 || \
+            logger -t "monitoring" -p "user.err" "Failed to send webhook for ${check}/${alert_id}"
+    fi
+
+    # Touch state file for dedup
+    mkdir -p "$STATE_DIR"
+    echo "$message" > "$state_file"
+}
+
+clear_alert() {
+    local check="$1"
+    local alert_id="$2"
+    local state_file="${STATE_DIR}/${check}_${alert_id}.state"
+
+    if [[ -f "$state_file" ]]; then
+        rm -f "$state_file"
+        logger -t "monitoring" -p "user.info" "[RESOLVED] ${check}/${alert_id}"
+    fi
+}
+
+# Write a Prometheus metric to the textfile collector directory.
+# Accumulates metrics in a temp file; call flush_metrics at the end.
+_METRIC_TMPFILE=""
+
+init_metrics() {
+    local check="$1"
+    _METRIC_TMPFILE=$(mktemp)
+    _METRIC_CHECK="$check"
+}
+
+write_metric() {
+    local name="$1"
+    local value="$2"
+    local help="${3:-}"
+    local type="${4:-gauge}"
+
+    if [[ -n "$help" ]]; then
+        echo "# HELP ${name} ${help}" >> "$_METRIC_TMPFILE"
+        echo "# TYPE ${name} ${type}" >> "$_METRIC_TMPFILE"
+    fi
+    echo "${name} ${value}" >> "$_METRIC_TMPFILE"
+}
+
+write_metric_labeled() {
+    local name="$1"
+    local labels="$2"   # e.g. device="/dev/sda"
+    local value="$3"
+
+    echo "${name}{${labels}} ${value}" >> "$_METRIC_TMPFILE"
+}
+
+flush_metrics() {
+    if [[ -n "$_METRIC_TMPFILE" && -f "$_METRIC_TMPFILE" ]]; then
+        mv "$_METRIC_TMPFILE" "${TEXTFILE_DIR}/${_METRIC_CHECK}.prom"
+        chmod 0644 "${TEXTFILE_DIR}/${_METRIC_CHECK}.prom"
+    fi
+}

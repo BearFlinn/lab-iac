@@ -1,0 +1,58 @@
+---
+# monitoring-checks: deploy health check scripts and cron jobs
+
+- name: Create monitoring directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ monitoring_lib_dir }}"
+    - "{{ monitoring_lib_dir }}/checks"
+    - "{{ monitoring_lib_dir }}/lib"
+    - "{{ monitoring_state_dir }}"
+  tags: [monitoring]
+
+- name: Deploy alert dispatcher library
+  ansible.builtin.template:
+    src: lib/alert.sh.j2
+    dest: "{{ monitoring_lib_dir }}/lib/alert.sh"
+    mode: "0644"
+  tags: [monitoring]
+
+- name: Deploy check scripts
+  ansible.builtin.template:
+    src: "checks/{{ item }}.sh.j2"
+    dest: "{{ monitoring_lib_dir }}/checks/{{ item }}.sh"
+    mode: "0755"
+  loop:
+    - check-smart
+    - check-disks
+    - check-services
+    - check-ipmi
+    - check-snapraid
+    - check-nfs
+  tags: [monitoring]
+
+- name: Deploy check orchestrator
+  ansible.builtin.template:
+    src: run-checks.sh.j2
+    dest: "{{ monitoring_lib_dir }}/run-checks.sh"
+    mode: "0755"
+  tags: [monitoring]
+
+- name: Create cron job for Tier 1 checks (critical, every 5 min)
+  ansible.builtin.cron:
+    name: "monitoring-tier1"
+    job: "{{ monitoring_lib_dir }}/run-checks.sh tier1"
+    minute: "*/5"
+    user: root
+  tags: [monitoring]
+
+- name: Create cron job for Tier 2 checks (warning, every 15 min)
+  ansible.builtin.cron:
+    name: "monitoring-tier2"
+    job: "{{ monitoring_lib_dir }}/run-checks.sh tier2"
+    minute: "*/15"
+    user: root
+  tags: [monitoring]

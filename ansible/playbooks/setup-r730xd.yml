@@ -160,3 +160,12 @@
           - "OS: {{ ansible_distribution }} {{ ansible_distribution_version }}"
           - "Kernel: {{ ansible_kernel }}"
           - "Swap: enabled (storage server — not a K8s node)"
+
+- name: R730xd monitoring setup
+  hosts: all
+  gather_facts: yes
+  become: yes
+  tags: [monitoring]
+  roles:
+    - monitoring-base
+    - monitoring-checks

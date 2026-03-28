@@ -1,0 +1,55 @@
+---
+# monitoring-checks role defaults
+# Cron-based health check scripts with pluggable alerting
+
+# --- Alert dispatch ---
+# Leave empty to log to syslog only. Set to a URL to POST JSON alerts.
+monitoring_alert_webhook_url: ""
+# How long (seconds) before re-firing the same alert (dedup window)
+monitoring_alert_dedup_seconds: 3600
+
+# --- Directories ---
+monitoring_lib_dir: "/usr/local/lib/monitoring"
+monitoring_state_dir: "/var/lib/monitoring"
+# Must match node_exporter_textfile_dir from monitoring-base
+monitoring_textfile_dir: "/var/lib/prometheus/node-exporter"
+
+# --- Cron schedules ---
+# Tier 1 (critical): every 5 minutes
+monitoring_tier1_cron: "*/5 * * * *"
+# Tier 2 (warning): every 15 minutes
+monitoring_tier2_cron: "*/15 * * * *"
+
+# --- Thresholds ---
+# Disk space: alert when usage exceeds this percentage
+monitoring_disk_warn_pct: 85
+monitoring_disk_crit_pct: 95
+
+# Temperature (Celsius) — CPU via IPMI
+monitoring_temp_warn_cpu: 75
+monitoring_temp_crit_cpu: 85
+# Temperature — drives via SMART
+monitoring_temp_warn_drive: 45
+monitoring_temp_crit_drive: 55
+
+# System load: alert when 5-min load average exceeds this
+# Default: 1.5x CPU thread count (set per-host if needed)
+monitoring_load_warn: 24
+monitoring_load_crit: 32
+
+# SMART: reallocated sector count warning threshold
+monitoring_smart_reallocated_warn: 5
+
+# SnapRAID: max days since last scrub before warning
+monitoring_snapraid_scrub_max_days: 7
+
+# --- Services to monitor ---
+# List of systemd units that must be active. Checks skip units that don't exist.
+monitoring_required_services:
+  - "smartd"
+  - "prometheus-node-exporter"
+
+# Optional services — only checked if installed
+monitoring_optional_services:
+  - "nfs-server"
+  - "ipmi-exporter"

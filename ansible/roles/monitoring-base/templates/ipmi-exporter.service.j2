@@ -1,0 +1,18 @@
+# Managed by Ansible — monitoring-base role
+[Unit]
+Description=Prometheus IPMI Exporter
+Documentation=https://github.com/prometheus-community/ipmi_exporter
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+ExecStart={{ ipmi_exporter_install_dir }}/ipmi_exporter --web.listen-address=:{{ ipmi_exporter_port }}
+Restart=on-failure
+RestartSec=5
+ProtectHome=yes
+NoNewPrivileges=no
+
+[Install]
+WantedBy=multi-user.target

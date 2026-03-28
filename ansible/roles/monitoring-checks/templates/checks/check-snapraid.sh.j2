@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+# Managed by Ansible — monitoring-checks role
+# Check SnapRAID sync status and scrub recency
+# Gracefully exits if SnapRAID is not installed
+set -euo pipefail
+
+source "{{ monitoring_lib_dir }}/lib/alert.sh"
+init_metrics "check_snapraid"
+
+CHECK="check-snapraid"
+SCRUB_MAX_DAYS={{ monitoring_snapraid_scrub_max_days }}
+
+# Skip if snapraid is not installed
+if ! command -v snapraid &>/dev/null; then
+    write_metric "monitoring_snapraid_installed" "0" "Whether SnapRAID is installed" "gauge"
+    flush_metrics
+    exit 0
+fi
+
+write_metric "monitoring_snapraid_installed" "1" "Whether SnapRAID is installed" "gauge"
+write_metric "monitoring_snapraid_check_time" "$(date +%s)" "Timestamp of last SnapRAID check" "gauge"
+
+# Check sync status
+status_output=$(snapraid status 2>&1 || true)
+
+# Check for sync errors
+if echo "$status_output" | grep -qi "error"; then
+    error_count=$(echo "$status_output" | grep -ci "error" || true)
+    alert "critical" "$CHECK" "sync_errors" "SnapRAID reports errors (${error_count} error lines in status output)"
+    write_metric "monitoring_snapraid_errors" "$error_count" "SnapRAID error count from status" "gauge"
+else
+    clear_alert "$CHECK" "sync_errors"
+    write_metric "monitoring_snapraid_errors" "0" "SnapRAID error count from status" "gauge"
+fi
+
+# Check if sync is needed (unsaved changes)
+if echo "$status_output" | grep -qi "you have unsaved changes"; then
+    alert "warning" "$CHECK" "sync_needed" "SnapRAID has unsaved changes — sync is needed"
+    write_metric "monitoring_snapraid_sync_needed" "1" "Whether SnapRAID needs sync" "gauge"
+else
+    clear_alert "$CHECK" "sync_needed"
+    write_metric "monitoring_snapraid_sync_needed" "0" "Whether SnapRAID needs sync" "gauge"
+fi
+
+# Check last scrub date
+scrub_date=$(echo "$status_output" | grep -oP 'scrubbed at \K[0-9-]+' | tail -1 || true)
+if [[ -n "$scrub_date" ]]; then
+    scrub_epoch=$(date -d "$scrub_date" +%s 2>/dev/null || echo 0)
+    now=$(date +%s)
+    days_since=$(( (now - scrub_epoch) / 86400 ))
+
+    write_metric "monitoring_snapraid_last_scrub_days" "$days_since" "Days since last SnapRAID scrub" "gauge"
+
+    if (( days_since > SCRUB_MAX_DAYS )); then
+        alert "warning" "$CHECK" "scrub_overdue" "SnapRAID scrub is ${days_since} days old (threshold: ${SCRUB_MAX_DAYS} days)"
+    else
+        clear_alert "$CHECK" "scrub_overdue"
+    fi
+fi
+
+flush_metrics
