@@ -24,6 +24,28 @@
   loop_control:
     label: "bay{{ item.bay }}"
 
+- name: Check for RAID or foreign filesystem signatures
+  ansible.builtin.command: "blkid -o value -s TYPE /dev/{{ item.device }}"
+  register: drive_signature_check
+  changed_when: false
+  failed_when: false
+  loop: "{{ resolved_drives }}"
+  loop_control:
+    label: "bay{{ item.bay }}"
+
+- name: Fail if drives have RAID or foreign signatures
+  ansible.builtin.fail:
+    msg: >
+      Bay {{ item.item.bay }} (/dev/{{ item.item.device }}) has signature type '{{ item.stdout | trim }}'.
+      Drives must be wiped before storage-prep can run.
+      Run: ./scripts/wipe-r730xd-bays.sh {{ resolved_drives | map(attribute='bay') | join(' ') }}
+  when:
+    - item.stdout | trim | length > 0
+    - item.stdout | trim != 'ext4'
+  loop: "{{ drive_signature_check.results }}"
+  loop_control:
+    label: "bay{{ item.item.bay }}"
+
 - name: Create GPT partition table on each drive
   community.general.parted:
     device: "/dev/{{ item.device }}"

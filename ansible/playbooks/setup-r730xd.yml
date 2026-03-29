@@ -55,6 +55,9 @@
           - nvme-cli
           - sysstat
           - iotop
+          - gdisk
+          - mdadm
+          - parted
         state: present
 
     - name: Set hostname

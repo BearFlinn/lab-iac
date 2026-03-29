@@ -13,7 +13,8 @@ nfs_export_network: "10.0.0.0/24"
 # sync             — write to disk before responding (data safety)
 # no_subtree_check — don't verify file is in exported subtree (performance)
 # no_root_squash   — allow root on client to act as root (required for K8s provisioner)
-nfs_export_options: "rw,sync,no_subtree_check,no_root_squash"
+# fsid=1           — required for FUSE-based filesystems (MergerFS) to be exportable via NFS
+nfs_export_options: "rw,sync,no_subtree_check,no_root_squash,fsid=1"
 
 # Additional exports (list of dicts with path, network, options)
 # Example:

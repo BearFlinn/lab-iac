@@ -23,4 +23,4 @@ mergerfs_options: "defaults,noatime,allow_other,use_ino,cache.files=partial,drop
 
 # Install from GitHub .deb release (more current than Debian repos)
 mergerfs_install_from_github: true
-mergerfs_github_version: "2.40.2"
+mergerfs_github_version: "2.41.1"

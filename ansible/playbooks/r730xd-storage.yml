@@ -58,9 +58,10 @@
               {%- if current_bay.value and current_serial.value -%}
                 {%- set _ = result.update({current_bay.value | int: current_serial.value}) -%}
               {%- endif -%}
-              {%- set bay_match = line | regex_search('Disk\.Bay\.(\d+):Enclosure', '\1') -%}
+              {%- set bay_match = line | regex_search('Disk\.Bay\.(\d+):Enclosure') -%}
               {%- if bay_match -%}
-                {%- set _ = current_bay.update({'value': bay_match[0]}) -%}
+                {%- set bay_num = line.split('Disk.Bay.')[1].split(':')[0] -%}
+                {%- set _ = current_bay.update({'value': bay_num}) -%}
                 {%- set _ = current_serial.update({'value': ''}) -%}
               {%- endif -%}
             {%- elif 'SerialNumber' in line and '=' in line -%}
@@ -82,11 +83,14 @@
       ansible.builtin.set_fact:
         serial_to_device: "{{ _serial_map }}"
       vars:
+        # Normalize serials: strip spaces and dashes, uppercase
+        # iDRAC reports "WD WCC4E6JPH3JT", lsblk reports "WD-WCC4E6JPH3JT"
         _serial_map: >-
           {%- set result = {} -%}
           {%- for dev in (lsblk_output.stdout | from_json).blockdevices -%}
             {%- if dev.type == 'disk' and dev.serial -%}
-              {%- set _ = result.update({dev.serial | trim: dev.name}) -%}
+              {%- set normalized = dev.serial | trim | replace(' ', '') | replace('-', '') | upper -%}
+              {%- set _ = result.update({normalized: dev.name}) -%}
             {%- endif -%}
           {%- endfor -%}
           {{ result }}
@@ -101,7 +105,8 @@
             {%- set bay_num = bay_def.bay | int -%}
             {%- set serial = idrac_bay_map.get(bay_num, '') -%}
             {%- if serial -%}
-              {%- set device = serial_to_device.get(serial, '') -%}
+              {%- set normalized = serial | replace(' ', '') | replace('-', '') | upper -%}
+              {%- set device = serial_to_device.get(normalized, '') -%}
               {%- if device -%}
                 {%- set _ = result.append({
                   'bay': bay_num,

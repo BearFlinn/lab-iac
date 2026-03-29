@@ -1,3 +1,3 @@
 ---
 - name: remount mergerfs
-  ansible.builtin.command: "mount -o remount {{ mergerfs_mount_point }}"
+  ansible.builtin.shell: "umount {{ mergerfs_mount_point }} 2>/dev/null; mount {{ mergerfs_mount_point }}"
