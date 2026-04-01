@@ -1,0 +1,41 @@
+# Managed by Ansible — r730xd-postgres role
+# Foundation PostgreSQL for homelab services
+# Data: {{ postgres_data_dir }}
+
+services:
+  postgres:
+    image: {{ postgres_image }}
+    container_name: foundation-postgres
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      POSTGRES_PASSWORD: "{{ postgres_password }}"
+    volumes:
+      - {{ postgres_data_dir }}:/var/lib/postgresql/data
+    command:
+      - "postgres"
+      - "-c"
+      - "shared_buffers={{ postgres_shared_buffers }}"
+      - "-c"
+      - "effective_cache_size={{ postgres_effective_cache_size }}"
+      - "-c"
+      - "work_mem={{ postgres_work_mem }}"
+      - "-c"
+      - "maintenance_work_mem={{ postgres_maintenance_work_mem }}"
+      - "-c"
+      - "max_connections={{ postgres_max_connections }}"
+      - "-c"
+      - "wal_buffers={{ postgres_wal_buffers }}"
+      - "-c"
+      - "max_wal_size={{ postgres_max_wal_size }}"
+      - "-c"
+      - "log_min_duration_statement={{ postgres_log_min_duration_statement }}"
+      - "-c"
+      - "listen_addresses=*"
+      - "-c"
+      - "port={{ postgres_port }}"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -p {{ postgres_port }}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5

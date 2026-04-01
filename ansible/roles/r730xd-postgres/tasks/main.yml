@@ -1,0 +1,75 @@
+---
+# r730xd-postgres: Deploy PostgreSQL as a Docker Compose service
+
+- name: Create Postgres directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - "{{ postgres_data_dir }}"
+    - "{{ postgres_backup_dir }}"
+    - "{{ postgres_compose_dir }}"
+
+- name: Deploy Postgres docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ postgres_compose_dir }}/docker-compose.yml"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  notify: restart foundation-postgres
+
+- name: Ensure Postgres is running
+  ansible.builtin.command: docker compose up -d
+  args:
+    chdir: "{{ postgres_compose_dir }}"
+  register: postgres_up
+  changed_when: "'Started' in postgres_up.stderr or 'Created' in postgres_up.stderr"
+
+- name: Wait for Postgres to accept connections
+  ansible.builtin.wait_for:
+    port: "{{ postgres_port }}"
+    delay: 3
+    timeout: 60
+
+- name: Verify Postgres health
+  ansible.builtin.command: docker exec foundation-postgres pg_isready -U postgres -p {{ postgres_port }}
+  register: pg_health
+  retries: 5
+  delay: 5
+  until: pg_health.rc == 0
+  changed_when: false
+
+- name: Deploy Postgres backup script
+  ansible.builtin.template:
+    src: pg-backup.sh.j2
+    dest: "{{ postgres_compose_dir }}/pg-backup.sh"
+    owner: root
+    group: root
+    mode: "0750"
+  when: postgres_backup_enabled | bool
+
+- name: Schedule daily Postgres backup
+  ansible.builtin.cron:
+    name: "foundation-postgres-backup"
+    job: "{{ postgres_compose_dir }}/pg-backup.sh >> /var/log/pg-backup.log 2>&1"
+    hour: "{{ postgres_backup_cron_hour }}"
+    minute: "{{ postgres_backup_cron_minute }}"
+    user: root
+  when: postgres_backup_enabled | bool
+
+- name: Display Postgres summary
+  ansible.builtin.debug:
+    msg:
+      - "=== PostgreSQL {{ postgres_version }} ==="
+      - ""
+      - "Connection: postgresql://postgres:<password>@{{ ansible_facts['default_ipv4']['address'] | default('10.0.0.200') }}:{{ postgres_port }}/"
+      - "Data: {{ postgres_data_dir }}"
+      - "Compose: {{ postgres_compose_dir }}"
+      - "Backup: {{ 'daily at ' ~ postgres_backup_cron_hour ~ ':' ~ postgres_backup_cron_minute ~ ' → ' ~ postgres_backup_dir if postgres_backup_enabled | bool else 'disabled' }}"
+      - ""
+      - "Tuning: shared_buffers={{ postgres_shared_buffers }}, work_mem={{ postgres_work_mem }}, max_connections={{ postgres_max_connections }}"

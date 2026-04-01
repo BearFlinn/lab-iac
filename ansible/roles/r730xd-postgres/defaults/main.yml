@@ -1,0 +1,39 @@
+---
+# r730xd-postgres: PostgreSQL on Docker for foundation data store
+# Data persisted on MergerFS pool, consumed by K8s workloads and staging services
+#
+# Connection: postgresql://<user>:<password>@10.0.0.200:5432/<database>
+
+# Image
+postgres_version: "16"
+postgres_image: "postgres:{{ postgres_version }}"
+
+# Networking (host network mode — binds directly to host interface)
+postgres_port: 5432
+
+# Directories
+postgres_data_dir: "/mnt/pool/foundation/postgres/data"
+postgres_backup_dir: "/mnt/pool/foundation/postgres/backup"
+postgres_compose_dir: "/opt/foundation/postgres"
+
+# Superuser password (set via vault — see group_vars/all/vars.yml)
+# postgres_password: "{{ vault_postgres_password }}"
+# (inherited from group_vars/all/vars.yml)
+
+# Tuning — conservative for 32GB RAM shared with other services
+postgres_shared_buffers: "2GB"
+postgres_effective_cache_size: "6GB"
+postgres_work_mem: "64MB"
+postgres_maintenance_work_mem: "512MB"
+postgres_max_connections: 100
+postgres_wal_buffers: "64MB"
+postgres_max_wal_size: "2GB"
+
+# Logging
+postgres_log_min_duration_statement: 1000  # log queries slower than 1s
+
+# Backup
+postgres_backup_enabled: true
+postgres_backup_retention_days: 7
+postgres_backup_cron_hour: "2"
+postgres_backup_cron_minute: "0"

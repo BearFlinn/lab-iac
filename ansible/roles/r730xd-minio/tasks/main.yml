@@ -1,0 +1,55 @@
+---
+# r730xd-minio: Deploy MinIO as a Docker Compose service
+
+- name: Create MinIO directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - "{{ minio_data_dir }}"
+    - "{{ minio_compose_dir }}"
+
+- name: Deploy MinIO docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ minio_compose_dir }}/docker-compose.yml"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  notify: restart foundation-minio
+
+- name: Ensure MinIO is running
+  ansible.builtin.command: docker compose up -d
+  args:
+    chdir: "{{ minio_compose_dir }}"
+  register: minio_up
+  changed_when: "'Started' in minio_up.stderr or 'Created' in minio_up.stderr"
+
+- name: Wait for MinIO API to accept connections
+  ansible.builtin.wait_for:
+    port: "{{ minio_api_port }}"
+    delay: 3
+    timeout: 60
+
+- name: Verify MinIO health
+  ansible.builtin.uri:
+    url: "http://localhost:{{ minio_api_port }}/minio/health/live"
+    status_code: 200
+  retries: 5
+  delay: 5
+  register: minio_health
+  until: minio_health.status == 200
+
+- name: Display MinIO summary
+  ansible.builtin.debug:
+    msg:
+      - "=== MinIO S3 ==="
+      - ""
+      - "API: http://{{ ansible_facts['default_ipv4']['address'] | default('10.0.0.200') }}:{{ minio_api_port }}"
+      - "Console: http://{{ ansible_facts['default_ipv4']['address'] | default('10.0.0.200') }}:{{ minio_console_port }}"
+      - "Data: {{ minio_data_dir }}"
+      - "Compose: {{ minio_compose_dir }}"

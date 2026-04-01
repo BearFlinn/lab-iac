@@ -1,0 +1,74 @@
+---
+# deploy-foundation-stores.yml — Deploy foundation data stores to R730xd
+#
+# Deploys PostgreSQL, Redis, and MinIO as Docker Compose services on the
+# R730xd storage server. Data persisted on MergerFS pool at /mnt/pool.
+#
+# These services are consumed by K8s workloads (via 10.0.0.200:<port>)
+# and staging VM services. They run on R730xd because stateful workloads
+# belong on the storage server, not in K8s (diskless nodes).
+#
+# See ADR-003 for design decisions.
+#
+# Prerequisites:
+#   - R730xd baseline applied (setup-r730xd.yml — installs Docker)
+#   - R730xd storage stack deployed (r730xd-storage.yml)
+#   - MergerFS pool active at /mnt/pool
+#   - Vault secrets configured (see vault.yml.example)
+#
+# Usage:
+#   ansible-playbook -i ansible/inventory/r730xd.yml \
+#     ansible/playbooks/deploy-foundation-stores.yml \
+#     --vault-password-file .vault_pass -v
+#
+# Deploy individual services:
+#   ... --tags postgres
+#   ... --tags redis
+#   ... --tags minio
+#
+# Endpoints (after deploy):
+#   PostgreSQL: postgresql://postgres:<password>@10.0.0.200:5432/
+#   Redis:      redis://:<password>@10.0.0.200:6379
+#   MinIO API:  http://10.0.0.200:9000
+#   MinIO Console: http://10.0.0.200:9001
+
+- name: Deploy foundation data stores
+  hosts: r730xd
+  become: yes
+  gather_facts: yes
+
+  pre_tasks:
+    - name: Verify MergerFS pool is mounted
+      ansible.builtin.command: findmnt /mnt/pool
+      changed_when: false
+      failed_when: pool_check.rc != 0
+      register: pool_check
+      tags: [always]
+
+    - name: Verify Docker is installed
+      ansible.builtin.command: docker --version
+      changed_when: false
+      failed_when: docker_installed.rc != 0
+      register: docker_installed
+      tags: [always]
+
+    - name: Verify Docker is running
+      ansible.builtin.service_facts:
+      tags: [always]
+
+    - name: Fail if Docker service is not running
+      ansible.builtin.fail:
+        msg: >
+          Docker is not running. Run setup-r730xd.yml first to install and
+          enable Docker.
+      when: "'docker.service' not in ansible_facts.services or
+             ansible_facts.services['docker.service'].state != 'running'"
+      tags: [always]
+
+  roles:
+    - role: r730xd-postgres
+      tags: [foundation, postgres]
+    - role: r730xd-redis
+      tags: [foundation, redis]
+    - role: r730xd-minio
+      tags: [foundation, minio]

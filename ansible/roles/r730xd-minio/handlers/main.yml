@@ -1,0 +1,5 @@
+---
+- name: restart foundation-minio
+  ansible.builtin.command: docker compose up -d --force-recreate
+  args:
+    chdir: "{{ minio_compose_dir }}"

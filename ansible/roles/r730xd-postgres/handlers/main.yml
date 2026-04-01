@@ -1,0 +1,5 @@
+---
+- name: restart foundation-postgres
+  ansible.builtin.command: docker compose up -d --force-recreate
+  args:
+    chdir: "{{ postgres_compose_dir }}"
