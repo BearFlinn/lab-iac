@@ -1,0 +1,28 @@
+# Managed by Ansible — r730xd-prometheus role
+# Alertmanager configuration
+
+route:
+  group_by: ['alertname', 'severity']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  receiver: 'default'
+  routes:
+    # Watchdog alert — silence it (used for dead-man's-switch only)
+    - match:
+        alertname: PrometheusWatchdog
+      receiver: 'null'
+
+receivers:
+  - name: 'null'
+
+{% if monitoring_alert_webhook_url is defined %}
+  - name: 'default'
+    webhook_configs:
+      - url: '{{ monitoring_alert_webhook_url }}'
+        send_resolved: true
+{% else %}
+  # No webhook URL configured — alerts visible in Alertmanager UI only.
+  # Set monitoring_alert_webhook_url in group_vars to enable dispatch.
+  - name: 'default'
+{% endif %}

@@ -1,0 +1,17 @@
+---
+# r730xd-alloy: Grafana Alloy log collector on Docker
+# Collects Docker container logs via socket, pushes to Loki
+#
+# No published ports — Alloy pushes to Loki, doesn't need to be scraped
+
+# Image (pinned version)
+alloy_image: "grafana/alloy:v1.9.0"
+
+# Directories
+alloy_compose_dir: "/opt/observability/alloy"
+
+# Memory limit
+alloy_memory_limit: "256m"
+
+# Loki endpoint
+alloy_loki_url: "http://10.0.0.200:3100/loki/api/v1/push"

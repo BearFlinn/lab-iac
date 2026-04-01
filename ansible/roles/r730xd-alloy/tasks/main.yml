@@ -1,0 +1,55 @@
+---
+# r730xd-alloy: Deploy Grafana Alloy as a Docker Compose service
+
+- name: Create Alloy config directory
+  ansible.builtin.file:
+    path: "{{ alloy_compose_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Deploy Alloy configuration
+  ansible.builtin.template:
+    src: config.alloy.j2
+    dest: "{{ alloy_compose_dir }}/config.alloy"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: restart observability-alloy
+
+- name: Deploy Alloy docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ alloy_compose_dir }}/docker-compose.yml"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: restart observability-alloy
+
+- name: Ensure Alloy is running
+  ansible.builtin.command: docker compose up -d
+  args:
+    chdir: "{{ alloy_compose_dir }}"
+  register: alloy_up
+  changed_when: "'Started' in alloy_up.stderr or 'Created' in alloy_up.stderr"
+
+- name: Wait for Alloy to start
+  ansible.builtin.pause:
+    seconds: 10
+
+- name: Verify Alloy is running
+  ansible.builtin.command: docker inspect --format '{{ '{{' }}.State.Running{{ '}}' }}' observability-alloy
+  register: alloy_running
+  changed_when: false
+  failed_when: "'true' not in alloy_running.stdout"
+
+- name: Display Alloy summary
+  ansible.builtin.debug:
+    msg:
+      - "=== Grafana Alloy ==="
+      - ""
+      - "Status: running"
+      - "Config: {{ alloy_compose_dir }}/config.alloy"
+      - "Loki target: {{ alloy_loki_url }}"
+      - "Collecting: Docker container logs via socket"

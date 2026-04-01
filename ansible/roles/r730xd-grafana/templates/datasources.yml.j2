@@ -1,0 +1,46 @@
+# Managed by Ansible — r730xd-grafana role
+# Grafana data source provisioning
+
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: {{ grafana_prometheus_url }}
+    isDefault: true
+    uid: prometheus
+    jsonData:
+      httpMethod: POST
+      exemplarTraceIdDestinations:
+        - name: traceID
+          datasourceUid: tempo
+
+  - name: Loki
+    type: loki
+    access: proxy
+    url: {{ grafana_loki_url }}
+    uid: loki
+    jsonData:
+      derivedFields:
+        - name: TraceID
+          matcherRegex: '"traceID":"(\w+)"'
+          url: "$${__value.raw}"
+          datasourceUid: tempo
+          urlDisplayLabel: View Trace
+
+  - name: Tempo
+    type: tempo
+    access: proxy
+    url: {{ grafana_tempo_url }}
+    uid: tempo
+    jsonData:
+      tracesToLogsV2:
+        datasourceUid: loki
+        filterByTraceID: true
+      tracesToMetrics:
+        datasourceUid: prometheus
+      nodeGraph:
+        enabled: true
+      lokiSearch:
+        datasourceUid: loki

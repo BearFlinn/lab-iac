@@ -1,0 +1,52 @@
+# Managed by Ansible — r730xd-prometheus role
+# Prometheus + Alertmanager for homelab observability
+# Data: {{ prometheus_data_dir }}
+
+services:
+  prometheus:
+    image: {{ prometheus_image }}
+    container_name: observability-prometheus
+    restart: unless-stopped
+    ports:
+      - "{{ prometheus_port }}:9090"
+    volumes:
+      - {{ prometheus_data_dir }}:/prometheus
+      - {{ prometheus_compose_dir }}/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - {{ prometheus_compose_dir }}/rules:/etc/prometheus/rules:ro
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time={{ prometheus_retention_time }}"
+      - "--storage.tsdb.retention.size={{ prometheus_retention_size }}"
+      - "--web.enable-lifecycle"
+    deploy:
+      resources:
+        limits:
+          memory: {{ prometheus_memory_limit }}
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9090/-/healthy || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  alertmanager:
+    image: {{ alertmanager_image }}
+    container_name: observability-alertmanager
+    restart: unless-stopped
+    ports:
+      - "{{ alertmanager_port }}:9093"
+    volumes:
+      - {{ alertmanager_data_dir }}:/alertmanager
+      - {{ prometheus_compose_dir }}/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+      - "--storage.path=/alertmanager"
+    deploy:
+      resources:
+        limits:
+          memory: {{ alertmanager_memory_limit }}
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9093/-/healthy || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5

@@ -9,7 +9,9 @@ The monitoring system uses two Ansible roles applied to each monitored machine:
 - **`monitoring-base`** — installs packages and Prometheus exporters (node\_exporter on `:9100`, ipmi\_exporter on `:9290`), configures smartd for SMART health monitoring and self-tests
 - **`monitoring-checks`** — deploys cron-based health check scripts that alert on critical conditions and write Prometheus-compatible metrics to the node\_exporter textfile collector
 
-There is **no central collector** (Prometheus/Grafana) yet. Each machine monitors itself via cron and dispatches alerts independently. Exporters are running and ready to be scraped when a collector is stood up.
+The central observability stack (Prometheus, Loki, Tempo, Grafana, Alloy) is deployed on the R730xd via `deploy-observability.yml`. See [ADR-004](decisions/004-observability-stack-on-r730xd.md) for design decisions. Prometheus scrapes all exporters; Alloy collects Docker container logs and ships to Loki; Grafana provides dashboards and cross-linked data sources.
+
+Cron-based health checks continue to run as a belt-and-suspenders layer alongside Prometheus alerting.
 
 ### What runs where
 

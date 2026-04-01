@@ -1,0 +1,60 @@
+# Managed by Ansible — r730xd-loki role
+# Loki single-binary mode with S3 (MinIO) backend
+
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+  grpc_listen_port: 9096
+
+common:
+  path_prefix: /loki
+  replication_factor: 1
+  ring:
+    kvstore:
+      store: inmemory
+
+schema_config:
+  configs:
+    - from: "2024-04-01"
+      store: tsdb
+      object_store: s3
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+storage_config:
+  tsdb_shipper:
+    active_index_directory: /loki/tsdb-index
+    cache_location: /loki/tsdb-cache
+    cache_ttl: 24h
+  aws:
+    endpoint: http://{{ loki_s3_endpoint }}
+    bucketnames: {{ loki_s3_bucket }}
+    access_key_id: {{ minio_observability_access_key }}
+    secret_access_key: {{ minio_observability_secret_key }}
+    s3forcepathstyle: true
+    insecure: true
+    region: {{ loki_s3_region }}
+
+limits_config:
+  retention_period: {{ loki_retention_period }}
+
+compactor:
+  working_directory: /loki/compactor
+  compaction_interval: 10m
+  retention_enabled: true
+  delete_request_store: s3
+
+ingester:
+  chunk_idle_period: 3m
+  chunk_retain_period: 1m
+  max_chunk_age: 1h
+  lifecycler:
+    ring:
+      kvstore:
+        store: inmemory
+
+querier:
+  max_concurrent: 10

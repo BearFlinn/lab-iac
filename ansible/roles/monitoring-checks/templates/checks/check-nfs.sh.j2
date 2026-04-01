@@ -31,7 +31,7 @@ else
 fi
 
 # Check that exports exist and are active
-export_count=$(exportfs -s 2>/dev/null | wc -l || echo 0)
+export_count=$(exportfs -s 2>/dev/null | grep -c '/' || true)
 write_metric "monitoring_nfs_export_count" "$export_count" "Number of active NFS exports" "gauge"
 
 if (( export_count == 0 )); then

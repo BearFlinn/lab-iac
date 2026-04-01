@@ -1,0 +1,34 @@
+# Managed by Ansible — r730xd-grafana role
+# Grafana dashboards with PostgreSQL backend
+# Data: {{ grafana_data_dir }}
+
+services:
+  grafana:
+    image: {{ grafana_image }}
+    container_name: observability-grafana
+    restart: unless-stopped
+    ports:
+      - "{{ grafana_port }}:3000"
+    environment:
+      GF_DATABASE_TYPE: "{{ grafana_database_type }}"
+      GF_DATABASE_HOST: "{{ grafana_database_host }}"
+      GF_DATABASE_NAME: "{{ grafana_database_name }}"
+      GF_DATABASE_USER: "{{ grafana_database_user }}"
+      GF_DATABASE_PASSWORD: "{{ postgres_password }}"
+      GF_DATABASE_SSL_MODE: "disable"
+      GF_SECURITY_ADMIN_USER: "{{ grafana_admin_user }}"
+      GF_SECURITY_ADMIN_PASSWORD: "{{ grafana_admin_password }}"
+    volumes:
+      - {{ grafana_data_dir }}:/var/lib/grafana
+      - {{ grafana_compose_dir }}/provisioning:/etc/grafana/provisioning:ro
+      - {{ grafana_compose_dir }}/dashboards:/var/lib/grafana/dashboards:ro
+    deploy:
+      resources:
+        limits:
+          memory: {{ grafana_memory_limit }}
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s

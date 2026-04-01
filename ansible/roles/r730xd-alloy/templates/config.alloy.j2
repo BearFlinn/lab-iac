@@ -1,0 +1,80 @@
+// Managed by Ansible — r730xd-alloy role
+// Collects Docker container logs and ships to Loki
+
+// Discover all Docker containers
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+}
+
+// Tail logs from discovered containers
+loki.source.docker "docker_logs" {
+  host    = "unix:///var/run/docker.sock"
+  targets = discovery.docker.containers.targets
+
+  labels = {
+    "job" = "docker",
+  }
+
+  relabel_rules = loki.relabel.docker_labels.rules
+
+  forward_to = [loki.write.loki.receiver]
+}
+
+// Extract useful labels from Docker metadata
+loki.relabel "docker_labels" {
+  forward_to = []
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    action        = "replace"
+    target_label  = "container"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+    action        = "replace"
+    target_label  = "compose_project"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    action        = "replace"
+    target_label  = "compose_service"
+  }
+}
+
+// --- Systemd journal collection ---
+
+loki.source.journal "journal" {
+  path          = "/var/log/journal"
+  relabel_rules = loki.relabel.journal_labels.rules
+  forward_to    = [loki.write.loki.receiver]
+  labels        = { "job" = "journal" }
+}
+
+loki.relabel "journal_labels" {
+  forward_to = []
+
+  rule {
+    source_labels = ["__journal__systemd_unit"]
+    target_label  = "unit"
+  }
+
+  rule {
+    source_labels = ["__journal__hostname"]
+    target_label  = "hostname"
+  }
+
+  rule {
+    source_labels = ["__journal_priority_keyword"]
+    target_label  = "level"
+  }
+}
+
+// Push logs to Loki
+loki.write "loki" {
+  endpoint {
+    url = "{{ alloy_loki_url }}"
+  }
+}

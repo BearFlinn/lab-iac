@@ -1,0 +1,25 @@
+# Managed by Ansible — r730xd-loki role
+# Loki log aggregation with S3 backend
+# Data: {{ loki_data_dir }}
+
+services:
+  loki:
+    image: {{ loki_image }}
+    container_name: observability-loki
+    restart: unless-stopped
+    ports:
+      - "{{ loki_port }}:3100"
+    volumes:
+      - {{ loki_data_dir }}:/loki
+      - {{ loki_compose_dir }}/loki-config.yml:/etc/loki/local-config.yaml:ro
+    command: -config.file=/etc/loki/local-config.yaml
+    deploy:
+      resources:
+        limits:
+          memory: {{ loki_memory_limit }}
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3100/ready || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s

@@ -1,0 +1,25 @@
+# Managed by Ansible — r730xd-alloy role
+# Grafana Alloy log collector — Docker socket → Loki
+
+services:
+  alloy:
+    image: {{ alloy_image }}
+    container_name: observability-alloy
+    restart: unless-stopped
+    volumes:
+      - {{ alloy_compose_dir }}/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/log/journal:/var/log/journal:ro
+      - /run/log/journal:/run/log/journal:ro
+      - /etc/machine-id:/etc/machine-id:ro
+    command:
+      - "run"
+      - "/etc/alloy/config.alloy"
+      - "--server.http.listen-addr=0.0.0.0:12345"
+    deploy:
+      resources:
+        limits:
+          memory: {{ alloy_memory_limit }}
+    # Note: Alloy uses a minimal image without wget/curl.
+    # Health is monitored externally via Prometheus scraping.
+    # Docker restart policy handles container-level recovery.

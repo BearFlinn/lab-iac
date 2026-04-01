@@ -10,3 +10,14 @@ cloudflare_api_token: "{{ vault_cloudflare_api_token }}"
 # Used when composing the claude-user role into other playbooks.
 # The standalone setup-claude-user.yml generates a key automatically.
 claude_ssh_public_key: "{{ vault_claude_ssh_public_key }}"
+
+# Foundation data stores (R730xd)
+postgres_password: "{{ vault_postgres_password }}"
+redis_password: "{{ vault_redis_password }}"
+minio_root_user: "{{ vault_minio_root_user }}"
+minio_root_password: "{{ vault_minio_root_password }}"
+
+# Observability stack (R730xd)
+grafana_admin_password: "{{ vault_grafana_admin_password }}"
+minio_observability_access_key: "{{ vault_minio_observability_access_key }}"
+minio_observability_secret_key: "{{ vault_minio_observability_secret_key }}"

@@ -1,0 +1,72 @@
+---
+# r730xd-tempo: Deploy Tempo as a Docker Compose service
+
+- name: Create Tempo directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "10001"
+    group: "10001"
+    mode: "0755"
+  loop:
+    - "{{ tempo_data_dir }}"
+
+- name: Create Tempo config directory
+  ansible.builtin.file:
+    path: "{{ tempo_compose_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Deploy Tempo configuration
+  ansible.builtin.template:
+    src: tempo-config.yml.j2
+    dest: "{{ tempo_compose_dir }}/tempo-config.yml"
+    owner: root
+    group: root
+    mode: "0644"
+  no_log: true
+  notify: restart observability-tempo
+
+- name: Deploy Tempo docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ tempo_compose_dir }}/docker-compose.yml"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: restart observability-tempo
+
+- name: Ensure Tempo is running
+  ansible.builtin.command: docker compose up -d
+  args:
+    chdir: "{{ tempo_compose_dir }}"
+  register: tempo_up
+  changed_when: "'Started' in tempo_up.stderr or 'Created' in tempo_up.stderr"
+
+- name: Wait for Tempo to accept connections
+  ansible.builtin.wait_for:
+    port: "{{ tempo_api_port }}"
+    delay: 5
+    timeout: 90
+
+- name: Verify Tempo health
+  ansible.builtin.uri:
+    url: "http://localhost:{{ tempo_api_port }}/ready"
+    status_code: 200
+  retries: 10
+  delay: 5
+  register: tempo_health
+  until: tempo_health.status == 200
+
+- name: Display Tempo summary
+  ansible.builtin.debug:
+    msg:
+      - "=== Tempo ==="
+      - ""
+      - "API: http://{{ ansible_facts['default_ipv4']['address'] | default('10.0.0.200') }}:{{ tempo_api_port }}"
+      - "OTLP gRPC: {{ ansible_facts['default_ipv4']['address'] | default('10.0.0.200') }}:{{ tempo_otlp_grpc_port }}"
+      - "OTLP HTTP: {{ ansible_facts['default_ipv4']['address'] | default('10.0.0.200') }}:{{ tempo_otlp_http_port }}"
+      - "Data: {{ tempo_data_dir }}"
+      - "S3 bucket: {{ tempo_s3_bucket }}"

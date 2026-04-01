@@ -1,0 +1,75 @@
+---
+# r730xd-prometheus: Prometheus + Alertmanager on Docker
+# Scrapes node_exporter, ipmi_exporter, and observability services
+#
+# Prometheus: http://10.0.0.200:9090
+# Alertmanager: http://10.0.0.200:9093
+
+# Images (pinned versions)
+prometheus_image: "prom/prometheus:v3.4.0"
+alertmanager_image: "prom/alertmanager:v0.28.1"
+
+# Networking (published ports)
+prometheus_port: 9090
+alertmanager_port: 9093
+
+# Directories
+prometheus_data_dir: "/mnt/pool/observability/prometheus/data"
+alertmanager_data_dir: "/mnt/pool/observability/prometheus/alertmanager"
+prometheus_compose_dir: "/opt/observability/prometheus"
+
+# Retention
+prometheus_retention_time: "30d"
+prometheus_retention_size: "10GB"
+
+# Memory limits
+prometheus_memory_limit: "1536m"
+alertmanager_memory_limit: "128m"
+
+# Scrape configuration
+prometheus_scrape_interval: "15s"
+prometheus_evaluation_interval: "15s"
+
+# Scrape targets — node_exporter
+prometheus_node_targets:
+  - target: "10.0.0.200:9100"
+    labels:
+      instance: "r730xd"
+
+# Scrape targets — ipmi_exporter
+prometheus_ipmi_targets:
+  - target: "10.0.0.200:9290"
+    labels:
+      instance: "r730xd"
+
+# Scrape targets — observability services (self + stack)
+prometheus_observability_targets:
+  - job: "prometheus"
+    target: "localhost:9090"
+  - job: "loki"
+    target: "10.0.0.200:3100"
+  - job: "tempo"
+    target: "10.0.0.200:3200"
+  - job: "grafana"
+    target: "10.0.0.200:3000"
+  - job: "minio"
+    target: "10.0.0.200:9000"
+    metrics_path: "/minio/v2/metrics/cluster"
+  - job: "postgres-exporter"
+    target: "10.0.0.200:9187"
+  - job: "redis-exporter"
+    target: "10.0.0.200:9121"
+  - job: "cadvisor"
+    target: "10.0.0.200:8080"
+
+# Scrape targets — blackbox probes (external endpoints)
+prometheus_blackbox_targets:
+  - "https://landing.bearflinn.com"
+  - "https://pennydreadfulsfx.com"
+  - "https://resume.bearflinn.com"
+
+prometheus_blackbox_exporter: "10.0.0.200:9115"
+
+# Alertmanager — webhook receiver (optional)
+# Set monitoring_alert_webhook_url in group_vars to enable
+# monitoring_alert_webhook_url: "https://ntfy.example.com/homelab-alerts"

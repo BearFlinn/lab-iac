@@ -1,0 +1,5 @@
+---
+- name: restart observability-alloy
+  ansible.builtin.command: docker compose up -d --force-recreate
+  args:
+    chdir: "{{ alloy_compose_dir }}"

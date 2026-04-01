@@ -1,0 +1,29 @@
+---
+# r730xd-loki: Loki log aggregation on Docker
+# S3 backend via MinIO, single-binary mode
+#
+# Loki API: http://10.0.0.200:3100
+
+# Image (pinned version)
+loki_image: "grafana/loki:3.4.2"
+
+# Networking (published port)
+loki_port: 3100
+
+# Directories
+loki_data_dir: "/mnt/pool/observability/loki/data"
+loki_compose_dir: "/opt/observability/loki"
+
+# Memory limit
+loki_memory_limit: "512m"
+
+# S3 backend (MinIO)
+loki_s3_endpoint: "10.0.0.200:9000"
+loki_s3_bucket: "observability-loki"
+loki_s3_region: "us-east-1"
+# Access keys from group_vars (vault-backed)
+# loki_s3_access_key: "{{ minio_observability_access_key }}"
+# loki_s3_secret_key: "{{ minio_observability_secret_key }}"
+
+# Retention
+loki_retention_period: "720h"  # 30 days

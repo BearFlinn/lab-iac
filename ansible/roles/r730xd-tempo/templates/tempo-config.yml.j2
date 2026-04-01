@@ -1,0 +1,42 @@
+# Managed by Ansible — r730xd-tempo role
+# Tempo single-binary mode with S3 (MinIO) backend
+
+server:
+  http_listen_port: 3200
+  grpc_listen_port: 9095
+
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317
+        http:
+          endpoint: 0.0.0.0:4318
+
+ingester:
+  max_block_duration: 5m
+
+compactor:
+  compaction:
+    block_retention: {{ tempo_block_retention }}
+
+storage:
+  trace:
+    backend: s3
+    s3:
+      bucket: {{ tempo_s3_bucket }}
+      endpoint: {{ tempo_s3_endpoint }}
+      access_key: {{ minio_observability_access_key }}
+      secret_key: {{ minio_observability_secret_key }}
+      insecure: true
+      forcepathstyle: true
+    wal:
+      path: /var/tempo/wal
+    local:
+      path: /var/tempo/blocks
+
+overrides:
+  defaults:
+    global:
+      max_bytes_per_trace: 5000000

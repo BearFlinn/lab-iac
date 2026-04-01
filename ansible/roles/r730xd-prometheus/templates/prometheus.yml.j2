@@ -1,0 +1,72 @@
+# Managed by Ansible — r730xd-prometheus role
+# Prometheus scrape configuration for homelab observability
+
+global:
+  scrape_interval: {{ prometheus_scrape_interval }}
+  evaluation_interval: {{ prometheus_evaluation_interval }}
+
+rule_files:
+  - "rules/*.yml"
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - "localhost:{{ alertmanager_port }}"
+
+scrape_configs:
+  - job_name: "node"
+    static_configs:
+{% for target in prometheus_node_targets %}
+      - targets:
+          - "{{ target.target }}"
+        labels:
+          env: "homelab"
+{% for key, value in target.labels.items() %}
+          {{ key }}: "{{ value }}"
+{% endfor %}
+{% endfor %}
+
+  - job_name: "ipmi"
+    scrape_interval: 30s
+    static_configs:
+{% for target in prometheus_ipmi_targets %}
+      - targets:
+          - "{{ target.target }}"
+        labels:
+          env: "homelab"
+{% for key, value in target.labels.items() %}
+          {{ key }}: "{{ value }}"
+{% endfor %}
+{% endfor %}
+
+{% for svc in prometheus_observability_targets %}
+  - job_name: "{{ svc.job }}"
+{% if svc.metrics_path is defined %}
+    metrics_path: "{{ svc.metrics_path }}"
+{% endif %}
+    static_configs:
+      - targets:
+          - "{{ svc.target }}"
+        labels:
+          env: "homelab"
+
+{% endfor %}
+{% if prometheus_blackbox_targets is defined and prometheus_blackbox_targets | length > 0 %}
+  - job_name: "blackbox"
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets:
+{% for target in prometheus_blackbox_targets %}
+          - "{{ target }}"
+{% endfor %}
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: "{{ prometheus_blackbox_exporter }}"
+{% endif %}

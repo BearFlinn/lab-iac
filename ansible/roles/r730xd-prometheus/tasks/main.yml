@@ -1,0 +1,108 @@
+---
+# r730xd-prometheus: Deploy Prometheus + Alertmanager as a Docker Compose service
+
+- name: Create Prometheus directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: nobody
+    group: nogroup
+    mode: "0755"
+  loop:
+    - "{{ prometheus_data_dir }}"
+    - "{{ alertmanager_data_dir }}"
+
+- name: Create Prometheus config directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - "{{ prometheus_compose_dir }}"
+    - "{{ prometheus_compose_dir }}/rules"
+
+- name: Deploy Prometheus configuration
+  ansible.builtin.template:
+    src: prometheus.yml.j2
+    dest: "{{ prometheus_compose_dir }}/prometheus.yml"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: restart observability-prometheus
+
+- name: Deploy Prometheus alert rules
+  ansible.builtin.template:
+    src: rules/homelab.yml.j2
+    dest: "{{ prometheus_compose_dir }}/rules/homelab.yml"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: restart observability-prometheus
+
+- name: Deploy Alertmanager configuration
+  ansible.builtin.template:
+    src: alertmanager.yml.j2
+    dest: "{{ prometheus_compose_dir }}/alertmanager.yml"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: restart observability-prometheus
+
+- name: Deploy Prometheus docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ prometheus_compose_dir }}/docker-compose.yml"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: restart observability-prometheus
+
+- name: Ensure Prometheus stack is running
+  ansible.builtin.command: docker compose up -d
+  args:
+    chdir: "{{ prometheus_compose_dir }}"
+  register: prometheus_up
+  changed_when: "'Started' in prometheus_up.stderr or 'Created' in prometheus_up.stderr"
+
+- name: Wait for Prometheus to accept connections
+  ansible.builtin.wait_for:
+    port: "{{ prometheus_port }}"
+    delay: 3
+    timeout: 60
+
+- name: Verify Prometheus health
+  ansible.builtin.uri:
+    url: "http://localhost:{{ prometheus_port }}/-/healthy"
+    status_code: 200
+  retries: 5
+  delay: 5
+  register: prometheus_health
+  until: prometheus_health.status == 200
+
+- name: Wait for Alertmanager to accept connections
+  ansible.builtin.wait_for:
+    port: "{{ alertmanager_port }}"
+    delay: 3
+    timeout: 60
+
+- name: Verify Alertmanager health
+  ansible.builtin.uri:
+    url: "http://localhost:{{ alertmanager_port }}/-/healthy"
+    status_code: 200
+  retries: 5
+  delay: 5
+  register: alertmanager_health
+  until: alertmanager_health.status == 200
+
+- name: Display Prometheus summary
+  ansible.builtin.debug:
+    msg:
+      - "=== Prometheus + Alertmanager ==="
+      - ""
+      - "Prometheus: http://{{ ansible_facts['default_ipv4']['address'] | default('10.0.0.200') }}:{{ prometheus_port }}"
+      - "Alertmanager: http://{{ ansible_facts['default_ipv4']['address'] | default('10.0.0.200') }}:{{ alertmanager_port }}"
+      - "Data: {{ prometheus_data_dir }}"
+      - "Config: {{ prometheus_compose_dir }}"
+      - "Retention: {{ prometheus_retention_time }} / {{ prometheus_retention_size }}"

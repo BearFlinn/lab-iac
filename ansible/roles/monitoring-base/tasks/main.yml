@@ -24,7 +24,8 @@
   ansible.builtin.copy:
     content: |
       # Managed by Ansible — monitoring-base role
-      ARGS="--collector.textfile.directory={{ node_exporter_textfile_dir }} --collector.systemd --collector.processes"
+      # Override default filesystem excludes to include MergerFS (fuse.mergerfs) and /mnt/* mounts
+      ARGS="--collector.textfile.directory={{ node_exporter_textfile_dir }} --collector.systemd --collector.processes --collector.filesystem.fs-types-exclude=^(autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|hugetlbfs|iso9660|mqueue|nsfs|overlay|proc|procfs|pstore|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tracefs)$ --collector.filesystem.mount-points-exclude=^/(dev|proc|run/credentials/.+|sys|var/lib/docker/.+)($|/)"
     dest: /etc/default/prometheus-node-exporter
     mode: "0644"
   notify: Restart node-exporter

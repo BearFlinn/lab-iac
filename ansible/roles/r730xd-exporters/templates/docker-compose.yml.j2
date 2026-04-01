@@ -1,0 +1,82 @@
+# Managed by Ansible — r730xd-exporters role
+# Prometheus exporters for foundation stores + infrastructure
+
+services:
+  postgres-exporter:
+    image: {{ postgres_exporter_image }}
+    container_name: observability-postgres-exporter
+    restart: unless-stopped
+    ports:
+      - "{{ postgres_exporter_port }}:9187"
+    environment:
+      DATA_SOURCE_NAME: "postgresql://postgres:{{ postgres_password }}@10.0.0.200:5432/postgres?sslmode=disable"
+    deploy:
+      resources:
+        limits:
+          memory: {{ postgres_exporter_memory_limit }}
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9187/metrics || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  redis-exporter:
+    image: {{ redis_exporter_image }}
+    container_name: observability-redis-exporter
+    restart: unless-stopped
+    ports:
+      - "{{ redis_exporter_port }}:9121"
+    environment:
+      REDIS_ADDR: "10.0.0.200:6379"
+      REDIS_PASSWORD: "{{ redis_password }}"
+    deploy:
+      resources:
+        limits:
+          memory: {{ redis_exporter_memory_limit }}
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9121/metrics || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  blackbox-exporter:
+    image: {{ blackbox_exporter_image }}
+    container_name: observability-blackbox-exporter
+    restart: unless-stopped
+    ports:
+      - "{{ blackbox_exporter_port }}:9115"
+    volumes:
+      - {{ exporters_compose_dir }}/blackbox.yml:/etc/blackbox_exporter/config.yml:ro
+    deploy:
+      resources:
+        limits:
+          memory: {{ blackbox_exporter_memory_limit }}
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9115/-/healthy || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  cadvisor:
+    image: {{ cadvisor_image }}
+    container_name: observability-cadvisor
+    restart: unless-stopped
+    ports:
+      - "{{ cadvisor_port }}:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    privileged: true
+    command:
+      - "--docker_only=true"
+      - "--store_container_labels=true"
+      - "--housekeeping_interval=15s"
+    deploy:
+      resources:
+        limits:
+          memory: {{ cadvisor_memory_limit }}
+

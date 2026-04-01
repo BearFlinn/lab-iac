@@ -1,0 +1,24 @@
+# Managed by Ansible — r730xd-tempo role
+# Tempo distributed tracing with S3 backend
+# Data: {{ tempo_data_dir }}
+
+services:
+  tempo:
+    image: {{ tempo_image }}
+    container_name: observability-tempo
+    restart: unless-stopped
+    ports:
+      - "{{ tempo_api_port }}:3200"
+      - "{{ tempo_otlp_grpc_port }}:4317"
+      - "{{ tempo_otlp_http_port }}:4318"
+    volumes:
+      - {{ tempo_data_dir }}:/var/tempo
+      - {{ tempo_compose_dir }}/tempo-config.yml:/etc/tempo/tempo.yaml:ro
+    command: -config.file=/etc/tempo/tempo.yaml
+    deploy:
+      resources:
+        limits:
+          memory: {{ tempo_memory_limit }}
+    # Note: Tempo uses distroless images (no wget/curl/shell).
+    # Health is monitored externally via Prometheus scraping :3200/ready.
+    # Docker restart policy handles container-level recovery.

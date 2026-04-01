@@ -1,6 +1,6 @@
 # Migration Plan
 
-Last updated: 2026-03-28
+Last updated: 2026-04-01
 
 ## Guiding Principles
 
@@ -145,12 +145,14 @@ This is the big move. The current cluster goes down, everything gets relocated.
   - Initial data drives: start with some 4TB drives, get online, back up 3TB drive
   - Remaining drives after backup: rest of 4TBs + 3TBs + optionally tower-pc's 3×2TB ZFS drives
 - [x] ~~Install OS~~ — **Debian 13.4 (Trixie) installed 2026-03-26 via preseeded USB (fully scripted: `scripts/build-r730xd-iso.sh`). UEFI boot, static IP 10.0.0.200, SSH key auth, baseline playbook applied (`ansible/playbooks/setup-r730xd.yml`).**
-- [ ] Configure storage:
+- [x] ~~Configure storage~~ — **done 2026-03-31. MergerFS pool at `/mnt/pool` (2× data drives), SnapRAID parity (1× 4TB). Deployed via `ansible/playbooks/r730xd-storage.yml`.**
   - MergerFS pool across all data drives (supports mismatched sizes)
   - SnapRAID for parity protection
-  - bcache SSD for read acceleration
-- [ ] Set up NFS exports for K8s PVCs
-- [ ] Set up S3-compatible storage if needed (Garage or MinIO)
+  - bcache SSD for read acceleration — **deferred, not blocking**
+- [x] ~~Set up NFS exports for K8s PVCs~~ — **done 2026-03-31. `/mnt/pool` exported to 10.0.0.0/24 via `r730xd-nfs-server` role.**
+- [x] ~~Set up S3-compatible storage~~ — **done 2026-04-01. MinIO deployed at 10.0.0.200:9000 (API) / :9001 (console). Data on MergerFS pool. Deployed via `ansible/playbooks/deploy-foundation-stores.yml`. See ADR-003.**
+- [x] ~~Set up foundation data stores~~ — **done 2026-04-01. PostgreSQL 16 (:5432), Redis 7 (:6379), MinIO (:9000/:9001) running as Docker Compose services on R730xd. Data persisted on MergerFS pool at `/mnt/pool/foundation/`. Daily Postgres backup via pg_dumpall. See ADR-003 and `ansible/README.md` for connection details.**
+- [x] ~~Set up observability stack~~ — **done 2026-04-01. Prometheus (:9090), Alertmanager (:9093), Loki (:3100), Tempo (:3200), Grafana (:3000), Alloy deployed as Docker Compose services. Data on MergerFS pool at `/mnt/pool/observability/`. Loki/Tempo use MinIO S3 backend, Grafana uses Postgres backend. Deployed via `ansible/playbooks/deploy-observability.yml`. See ADR-004.**
 - [ ] Set up PXE boot server (TFTP/DHCP) for diskless K8s nodes (Inspiron, Optiplex, Quanta)
 - [ ] Configure R730 NIC:
   - Port 1: VLAN 1 (general/management + internet)

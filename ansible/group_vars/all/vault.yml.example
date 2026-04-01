@@ -16,3 +16,14 @@ vault_cloudflare_api_token: "your-cloudflare-api-token-here"
 # iDRAC root password for R730xd remote management
 # Used by r730xd-storage.yml to resolve drive bays at runtime
 vault_idrac_password: "your-idrac-password-here"
+
+# Foundation data stores (R730xd)
+vault_postgres_password: "your-postgres-superuser-password-here"
+vault_redis_password: "your-redis-password-here"
+vault_minio_root_user: "your-minio-root-user-here"
+vault_minio_root_password: "your-minio-root-password-here"
+
+# Observability stack (R730xd)
+vault_grafana_admin_password: "your-grafana-admin-password-here"
+vault_minio_observability_access_key: "your-minio-observability-access-key-here"
+vault_minio_observability_secret_key: "your-minio-observability-secret-key-here"

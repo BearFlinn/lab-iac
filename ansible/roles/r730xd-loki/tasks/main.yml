@@ -1,0 +1,71 @@
+---
+# r730xd-loki: Deploy Loki as a Docker Compose service
+
+- name: Create Loki directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "10001"
+    group: "10001"
+    mode: "0755"
+  loop:
+    - "{{ loki_data_dir }}"
+
+- name: Create Loki config directory
+  ansible.builtin.file:
+    path: "{{ loki_compose_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Deploy Loki configuration
+  ansible.builtin.template:
+    src: loki-config.yml.j2
+    dest: "{{ loki_compose_dir }}/loki-config.yml"
+    owner: root
+    group: root
+    mode: "0644"
+  no_log: true
+  notify: restart observability-loki
+
+- name: Deploy Loki docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ loki_compose_dir }}/docker-compose.yml"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: restart observability-loki
+
+- name: Ensure Loki is running
+  ansible.builtin.command: docker compose up -d
+  args:
+    chdir: "{{ loki_compose_dir }}"
+  register: loki_up
+  changed_when: "'Started' in loki_up.stderr or 'Created' in loki_up.stderr"
+
+- name: Wait for Loki to accept connections
+  ansible.builtin.wait_for:
+    port: "{{ loki_port }}"
+    delay: 5
+    timeout: 90
+
+- name: Verify Loki health
+  ansible.builtin.uri:
+    url: "http://localhost:{{ loki_port }}/ready"
+    status_code: 200
+  retries: 10
+  delay: 5
+  register: loki_health
+  until: loki_health.status == 200
+
+- name: Display Loki summary
+  ansible.builtin.debug:
+    msg:
+      - "=== Loki ==="
+      - ""
+      - "API: http://{{ ansible_facts['default_ipv4']['address'] | default('10.0.0.200') }}:{{ loki_port }}"
+      - "Data: {{ loki_data_dir }}"
+      - "S3 bucket: {{ loki_s3_bucket }}"
+      - "Retention: {{ loki_retention_period }}"

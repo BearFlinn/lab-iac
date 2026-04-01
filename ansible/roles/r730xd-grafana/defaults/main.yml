@@ -1,0 +1,34 @@
+---
+# r730xd-grafana: Grafana dashboards on Docker
+# PostgreSQL backend, provisioned data sources and dashboards
+#
+# Grafana: http://10.0.0.200:3000
+
+# Image (pinned version)
+grafana_image: "grafana/grafana:11.6.0"
+
+# Networking (published port)
+grafana_port: 3000
+
+# Directories
+grafana_data_dir: "/mnt/pool/observability/grafana/data"
+grafana_compose_dir: "/opt/observability/grafana"
+
+# Memory limit
+grafana_memory_limit: "256m"
+
+# Admin credentials (set via vault — see group_vars/all/vars.yml)
+grafana_admin_user: "admin"
+# grafana_admin_password: "{{ vault_grafana_admin_password }}"
+
+# Database — uses foundation PostgreSQL
+grafana_database_type: "postgres"
+grafana_database_host: "10.0.0.200:5432"
+grafana_database_name: "grafana"
+grafana_database_user: "grafana"
+# grafana_database_password: "{{ postgres_password }}"
+
+# Data source endpoints
+grafana_prometheus_url: "http://10.0.0.200:9090"
+grafana_loki_url: "http://10.0.0.200:3100"
+grafana_tempo_url: "http://10.0.0.200:3200"

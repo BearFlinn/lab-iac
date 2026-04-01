@@ -1,0 +1,130 @@
+# Managed by Ansible — r730xd-grafana role
+# Grafana unified alerting provisioning
+
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: Log Alerts
+    folder: Homelab
+    interval: 1m
+    rules:
+      - uid: log-error-spike
+        title: High error rate in container logs
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: loki
+            model:
+              expr: 'sum(count_over_time({job="docker"} |= "error" [5m]))'
+              queryType: range
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [50]
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "More than 50 error log lines across containers in the last 5 minutes"
+
+      - uid: log-oom-kill
+        title: OOM kill detected
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: loki
+            model:
+              expr: 'count_over_time({job="journal"} |= "Out of memory" [5m])'
+              queryType: range
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0]
+        for: 0s
+        labels:
+          severity: critical
+        annotations:
+          summary: "OOM kill detected in system journal"
+
+      - uid: log-foundation-errors
+        title: Foundation store errors
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: loki
+            model:
+              expr: 'sum(count_over_time({container=~"foundation-.*"} |~ "(?i)error|fatal|panic" [5m]))'
+              queryType: range
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [10]
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Foundation store containers logging errors"
+
+      - uid: log-ssh-brute-force
+        title: SSH authentication failures
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: loki
+            model:
+              expr: 'count_over_time({job="journal", unit="sshd.service"} |= "Failed password" [5m])'
+              queryType: range
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [10]
+        for: 0s
+        labels:
+          severity: warning
+        annotations:
+          summary: "More than 10 SSH authentication failures in 5 minutes"
