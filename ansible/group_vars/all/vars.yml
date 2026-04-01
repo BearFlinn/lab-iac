@@ -5,3 +5,8 @@
 # Cloudflare API token for DNS-01 challenge
 # The actual token is stored in vault.yml (encrypted)
 cloudflare_api_token: "{{ vault_cloudflare_api_token }}"
+
+# Claude Code SSH key for read-only troubleshooting access
+# Used when composing the claude-user role into other playbooks.
+# The standalone setup-claude-user.yml generates a key automatically.
+claude_ssh_public_key: "{{ vault_claude_ssh_public_key }}"

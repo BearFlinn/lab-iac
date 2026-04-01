@@ -1,0 +1,90 @@
+---
+# claude-user role defaults
+# Restricted read-only user for Claude Code SSH troubleshooting access
+
+# --- User ---
+claude_user: "claude"
+claude_user_shell: "/bin/bash"
+claude_user_comment: "Claude Code - read-only troubleshooting access"
+
+# --- SSH ---
+# Set this via vault: vault_claude_ssh_public_key in vault.yml,
+# then claude_ssh_public_key: "{{ vault_claude_ssh_public_key }}" in vars.yml
+# The standalone playbook generates a key automatically if not set.
+claude_ssh_public_key: ""
+
+# --- Groups ---
+# Base groups for read access (always added)
+claude_user_groups:
+  - adm               # /var/log/syslog, /var/log/auth.log
+  - systemd-journal   # journalctl without sudo
+
+# --- Sudo (NOPASSWD) ---
+# Read-only commands whitelisted for troubleshooting.
+# Override or extend per-host via host_vars if needed.
+claude_sudo_commands:
+  # systemd
+  - "/usr/bin/systemctl status *"
+  - "/usr/bin/systemctl list-units *"
+  - "/usr/bin/systemctl list-timers *"
+  - "/usr/bin/systemctl show *"
+  - "/usr/bin/systemctl is-active *"
+  - "/usr/bin/systemctl is-enabled *"
+  - "/usr/bin/systemctl cat *"
+  # logs
+  - "/usr/bin/journalctl *"
+  # file inspection
+  - "/usr/bin/cat /etc/*"
+  - "/usr/bin/cat /var/log/*"
+  - "/usr/bin/less /etc/*"
+  - "/usr/bin/less /var/log/*"
+  - "/usr/bin/ls /etc/*"
+  - "/usr/bin/ls /var/log/*"
+  - "/usr/bin/ls /root/*"
+  - "/usr/bin/find /etc -type f *"
+  - "/usr/bin/find /var/log -type f *"
+  # networking
+  - "/usr/bin/ss -tlnp"
+  - "/usr/bin/ss -ulnp"
+  - "/usr/bin/ss -tunlp"
+  - "/usr/sbin/ip addr *"
+  - "/usr/sbin/ip route *"
+  - "/usr/sbin/ip link *"
+  # disk / storage
+  - "/usr/bin/df -h"
+  - "/usr/bin/lsblk *"
+  - "/usr/sbin/fdisk -l"
+  - "/usr/sbin/lvs"
+  - "/usr/sbin/pvs"
+  - "/usr/sbin/vgs"
+  # system info
+  - "/usr/bin/free -h"
+  - "/usr/bin/uptime"
+  - "/usr/sbin/dmidecode *"
+  - "/usr/bin/lscpu"
+  - "/usr/sbin/lshw *"
+  # firewall
+  - "/usr/bin/ufw status *"
+  - "/usr/sbin/iptables -L *"
+  - "/usr/sbin/iptables -S *"
+  # docker (read-only commands only — no group membership)
+  - "/usr/bin/docker ps *"
+  - "/usr/bin/docker logs *"
+  - "/usr/bin/docker inspect *"
+  - "/usr/bin/docker images *"
+  - "/usr/bin/docker network ls"
+  - "/usr/bin/docker network inspect *"
+  - "/usr/bin/docker volume ls"
+  - "/usr/bin/docker volume inspect *"
+  - "/usr/bin/docker compose ps *"
+  - "/usr/bin/docker compose logs *"
+  - "/usr/bin/docker stats --no-stream *"
+  # hardware monitoring
+  - "/usr/sbin/smartctl -a *"
+  - "/usr/bin/sensors"
+  - "/usr/sbin/ipmitool sensor list"
+  - "/usr/sbin/ipmitool sdr list"
+  # virtualization
+  - "/usr/bin/virsh list *"
+  - "/usr/bin/virsh dominfo *"
+  - "/usr/bin/virsh domifaddr *"

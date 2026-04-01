@@ -1,0 +1,59 @@
+---
+# Setup Claude User
+# Provisions a restricted read-only "claude" user on target hosts.
+# Generates an SSH keypair on the control machine if one doesn't exist.
+#
+# Usage:
+#   # Against a specific inventory:
+#   ansible-playbook -i ansible/inventory/r730xd.yml \
+#     ansible/playbooks/setup-claude-user.yml -v
+#
+#   # Against all lab nodes:
+#   ansible-playbook -i ansible/inventory/lab-nodes.yml \
+#     ansible/playbooks/setup-claude-user.yml -v
+#
+#   # Limit to a single host:
+#   ansible-playbook -i ansible/inventory/lab-nodes.yml \
+#     ansible/playbooks/setup-claude-user.yml -l r730xd -v
+
+- name: Setup Claude Code user
+  hosts: all
+  gather_facts: yes
+  become: yes
+
+  pre_tasks:
+    - name: Generate SSH keypair for claude user (control machine)
+      delegate_to: localhost
+      become: no
+      run_once: true
+      block:
+        - name: Check if claude SSH key exists
+          ansible.builtin.stat:
+            path: "~/.ssh/claude_lab_ed25519"
+          register: claude_key_stat
+
+        - name: Generate ed25519 keypair
+          community.crypto.openssh_keypair:
+            path: "~/.ssh/claude_lab_ed25519"
+            type: ed25519
+            comment: "claude@lab-iac"
+          when: not claude_key_stat.stat.exists
+
+        - name: Read public key
+          ansible.builtin.slurp:
+            src: "~/.ssh/claude_lab_ed25519.pub"
+          register: claude_pubkey_content
+
+        - name: Set SSH public key fact
+          ansible.builtin.set_fact:
+            claude_ssh_public_key: "{{ claude_pubkey_content.content | b64decode | trim }}"
+
+  roles:
+    - claude-user
+
+  post_tasks:
+    - name: Display connection info
+      ansible.builtin.debug:
+        msg:
+          - "Claude user provisioned on {{ inventory_hostname }}"
+          - "Connect: ssh -i ~/.ssh/claude_lab_ed25519 {{ claude_user }}@{{ ansible_host | default(inventory_hostname) }}"

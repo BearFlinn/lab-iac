@@ -1,0 +1,38 @@
+---
+# claude-user: Provision a restricted read-only user for Claude Code SSH access
+
+- name: Validate SSH public key is provided
+  ansible.builtin.assert:
+    that:
+      - claude_ssh_public_key | length > 0
+    fail_msg: >-
+      claude_ssh_public_key must be set. Either run the standalone
+      setup-claude-user.yml playbook (which generates a key) or set
+      vault_claude_ssh_public_key in vault.yml.
+    success_msg: "SSH public key is configured"
+
+- name: Create claude user
+  ansible.builtin.user:
+    name: "{{ claude_user }}"
+    shell: "{{ claude_user_shell }}"
+    comment: "{{ claude_user_comment }}"
+    create_home: true
+    password: "!"
+    groups: "{{ claude_user_groups }}"
+    append: true
+
+- name: Set authorized SSH key for claude user
+  ansible.posix.authorized_key:
+    user: "{{ claude_user }}"
+    key: "{{ claude_ssh_public_key }}"
+    state: present
+    exclusive: true
+
+- name: Deploy sudoers rules for claude user
+  ansible.builtin.template:
+    src: sudoers-claude.j2
+    dest: "/etc/sudoers.d/claude"
+    mode: "0440"
+    owner: root
+    group: root
+    validate: "visudo -cf %s"

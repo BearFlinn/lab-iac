@@ -1,0 +1,12 @@
+# Managed by Ansible — claude-user role
+# Read-only system access for Claude Code troubleshooting
+# DO NOT edit manually — changes will be overwritten
+
+Cmnd_Alias CLAUDE_READONLY = \
+{% for cmd in claude_sudo_commands -%}
+    {{ cmd }}
+{%- if not loop.last %}, \
+{% endif %}
+{%- endfor %}
+
+{{ claude_user }} ALL=(ALL) NOPASSWD: CLAUDE_READONLY
