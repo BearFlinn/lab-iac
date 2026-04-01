@@ -48,6 +48,17 @@
           ansible.builtin.set_fact:
             claude_ssh_public_key: "{{ claude_pubkey_content.content | b64decode | trim }}"
 
+        - name: Ensure SSH config uses claude key for claude user
+          ansible.builtin.blockinfile:
+            path: "~/.ssh/config"
+            marker: "# {mark} lab-iac claude-user"
+            block: |
+              Match user claude
+                  IdentityFile ~/.ssh/claude_lab_ed25519
+                  IdentitiesOnly yes
+            create: true
+            mode: "0600"
+
   roles:
     - claude-user
 
