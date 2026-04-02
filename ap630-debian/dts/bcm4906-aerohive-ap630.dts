@@ -1,0 +1,124 @@
+// SPDX-License-Identifier: GPL-2.0-or-later OR MIT
+// Aerohive AP630 - BCM4906 based enterprise access point
+//
+// Place this file in arch/arm64/boot/dts/broadcom/bcmbca/ in the kernel tree.
+// Build with: make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- broadcom/bcmbca/bcm4906-aerohive-ap630.dtb
+
+#include "bcm4906.dtsi"
+
+/ {
+	compatible = "aerohive,ap630", "brcm,bcm4906", "brcm,bcm4908", "brcm,bcmbca";
+	model = "Aerohive AP630";
+
+	memory@0 {
+		device_type = "memory";
+		reg = <0x00 0x00 0x00 0x40000000>; /* 1 GiB */
+	};
+
+	chosen {
+		stdout-path = "serial0:9600n8";
+	};
+
+	reserved-memory {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		/* First 128 KiB: U-Boot secondary CPU spin-table stub.
+		 * cpu-release-addr is at 0xfff8 (within this range).
+		 * Without this, Linux overwrites the stub before SMP bring-up. */
+		uboot-smp-stub@0 {
+			reg = <0x00 0x00 0x00 0x20000>;
+			no-map;
+		};
+
+		/* Broadcom Runner Data Path engine DMA regions */
+		/* Must match U-Boot's RDP memory allocation */
+		/* Without these, U-Boot's RDP DMA corrupts kernel memory on boot */
+		rdp1@6000000 {
+			reg = <0x00 0x06000000 0x00 0x02000000>; /* 32 MB at 96 MB */
+			no-map;
+		};
+
+		rdp2@3400000 {
+			reg = <0x00 0x03400000 0x00 0x02c00000>; /* 44 MB at 52 MB */
+			no-map;
+		};
+	};
+};
+
+/*
+ * CRITICAL: Remove spin-table from the boot CPU.
+ * The mainline bcm4908.dtsi sets enable-method = "spin-table" on ALL CPUs
+ * including cpu@0. This is wrong for the boot CPU — it's already running.
+ * The kernel hangs immediately if it tries to use spin-table on cpu@0.
+ * The HiveOS DTB correctly omits enable-method from cpu@0.
+ */
+/*
+ * CRITICAL: Remove spin-table from the boot CPU.
+ * The mainline bcm4908.dtsi sets enable-method = "spin-table" on ALL CPUs
+ * including cpu@0. This is wrong for the boot CPU — it's already running.
+ * The kernel hangs immediately if it tries to use spin-table on cpu@0.
+ * The HiveOS DTB correctly omits enable-method from cpu@0.
+ */
+&cpu0 {
+	/delete-property/ enable-method;
+	/delete-property/ cpu-release-addr;
+};
+
+&enet {
+	status = "okay";
+	power-domains = <&pmb BCM_PMB_GMAC>;
+};
+
+&usb_phy {
+	brcm,ioc = <1>;
+	status = "okay";
+};
+
+&ehci {
+	status = "okay";
+};
+
+&ohci {
+	status = "okay";
+};
+
+&xhci {
+	status = "okay";
+};
+
+/*
+ * AP630 physical port wiring (confirmed by carrier detection):
+ *   Physical jack "eth0" (PoE) → switch port 3 (ExtSw P3)
+ *   Physical jack "eth1"       → switch port 1 (ExtSw P1)
+ * Ports 0 and 2 have no physical connection.
+ */
+&ports {
+	port@0 {
+		status = "disabled";
+	};
+
+	port@1 {
+		label = "lan";
+	};
+
+	port@2 {
+		status = "disabled";
+	};
+
+	port@3 {
+		label = "wan";
+	};
+};
+
+&nand_controller {
+	brcm,wp-not-connected;
+	status = "okay";
+};
+
+&nandcs {
+	nand-ecc-strength = <8>;
+	nand-ecc-step-size = <512>;
+	nand-on-flash-bbt;
+};
