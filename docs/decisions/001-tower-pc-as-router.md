@@ -1,7 +1,7 @@
 # ADR-001: Tower PC as Lab Router
 
 **Date:** 2026-03-27
-**Status:** Accepted
+**Status:** Superseded by ADR-003
 
 ## Context
 

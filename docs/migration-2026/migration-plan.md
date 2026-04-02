@@ -1,11 +1,11 @@
 # Migration Plan
 
-Last updated: 2026-04-01
+Last updated: 2026-04-02
 
 ## Guiding Principles
 
 - **Current cluster stays functional** until new infrastructure is ready to take over
-- **Data safety first** — back up the 3TB drive before touching any storage
+- **Data safety first** — ~~back up the 3TB drive before touching any storage~~ (resolved — [ADR-007](../decisions/007-3tb-data-drive-direct-to-pool.md))
 - **Network before compute** — machines need connectivity before they can be configured
 - **One role at a time** — don't drain a machine from K8s until its replacement is confirmed working
 
@@ -35,16 +35,16 @@ Do all of this before touching the physical setup. Can be done in parallel.
 - [x] ~~Configure Quanta BMC/IPMI~~ — **static IP set, dedicated NIC port**
 - [ ] **Verify Quanta sine wave tolerance** — will it run on the APC UPS or does it need pure sine? **Deferred — will test when physically setting up in closet.**
 - [ ] **Audit Tower PC PSU** — wattage, available PCIe power connectors (6-pin, 8-pin), number of PCIe x16 slots. **Blocked until Phase 3** — tower is currently primary K8s worker (handles majority of workload post-MSI drain)
-- [ ] **Test SR2024 switch** — power on, access management interface, confirm VLAN support, test ports
+- [x] ~~Test SR2024 switch~~ — **fully operational. VLANs, LACP, PoE all confirmed. Currently in use powering APs and providing lab connectivity.**
 - [x] ~~Check Aerohive AP + switch firmware~~ — **confirmed standalone capable, no cloud dependency (per previous owner)**
 - [ ] **Check UPS** — APC RJ45-to-USB data cable still needed for NUT monitoring. **Deferred — not blocking migration.**
 
 ### 0B: Data Safety
 
-- [ ] **Back up critical data before migration:**
-  - 3TB drive (removed from mini PC 2026-03-26) — migrate data once R730 is online
-  - Palworld server data (deb-web) — save files, config
-  - Residuum files (deb-web)
+- [x] ~~Back up critical data before migration:~~
+  - ~~3TB drive (removed from mini PC 2026-03-26)~~ — **mounted directly into R730xd MergerFS pool (bay 8). Data preserved in-place, no separate backup needed. See [ADR-007](../decisions/007-3tb-data-drive-direct-to-pool.md).**
+  - [ ] Palworld server data (deb-web) — save files, config
+  - [ ] Residuum files (deb-web)
   - Everything else is stale or expendable (tower-pc ZFS pool ~9MB, deb-web duplicate apps)
 
 ### 0C: Inventory Current Services
@@ -64,7 +64,8 @@ Document everything that's running so nothing gets lost in the migration:
 
 - [x] ~~Ethernet cable~~ — **~300ft cat6 on hand**
 - [x] ~~PoE for APs~~ — **switch has 12 PoE ports, no injectors needed**
-- [ ] APC RJ45-to-USB data cable (940-0127 or compatible) — **deferred, not blocking migration**
+- [ ] APC RJ45-to-USB data cable (940-0127 or compatible) — **deferred, UPS batteries dead anyway**
+- [ ] Replacement UPS batteries — **needed before UPS can be used**
 - [x] ~~Power strips~~ — **on hand**
 - [x] ~~Closet power~~ — **dedicated 20A circuit**
 - [x] ~~RJ45-to-USB console cable for Aerohive AP/switch configuration~~ — **received, used to factory reset all 3 APs (2026-03-27)**
@@ -78,25 +79,19 @@ This is the big move. The current cluster goes down, everything gets relocated.
 
 ### 1A: Prepare the Closet
 
-- [ ] Install shelving or rack (even a basic wire rack works)
-- [ ] Run power to closet (verify circuit capacity — R730 + Quanta + tower could pull 1kW+)
-- [ ] Position UPS on bottom shelf
-- [ ] Plan physical layout:
-  - UPS (bottom)
-  - R730 + Quanta (heaviest, lowest possible)
-  - SR2024 switch (accessible for patching)
-  - Optiplex + Inspiron (lighter, higher shelf)
-  - Tower PC (nearby or in closet depending on noise/heat)
+- [x] ~~Install shelving~~ — **done**
+- [x] ~~Run power to closet~~ — **2× 15A circuits available. Note: closet has 12 AWG wire and 20A outlet but is on a 15A breaker. Load balanced across both circuits.**
+- [x] ~~Plan physical layout~~ — **R730 + Quanta on lower shelves, SR2024 accessible, lighter machines higher**
 
 ### 1B: Run Cable
 
-- [ ] Closet ↔ Xfinity gateway (living room) — uplink
-- [ ] Closet ↔ Master bedroom — sibling's drop
-- [ ] Closet ↔ Garage/workshop
-- [ ] Closet ↔ AP locations (×3, or start with 1 and expand)
-- [ ] Test every run with a cable tester before connecting
+- Non-lab network (bedroom, garage) staying on existing switch chain for now. See [ADR-008](../decisions/008-keep-existing-switch-chain-for-home.md).
+- [ ] Closet ↔ AP230 location (starting with AP230 only — see [ADR-009](../decisions/009-start-with-ap230-only.md))
+- [ ] Closet ↔ Xfinity gateway (living room) — uplink (if not already routed through switch chain)
 
 ### 1C: Set Up Switch & Network
+
+**Blocked by AP630 Debian router project** — AP630 will replace Tower PC as the router ([ADR-003](../decisions/003-ap630-as-router.md)). VLANs and final switch config depend on the router being ready. See `docs/ap630-debian-project.md` for status.
 
 - [x] ~~Initial closet networking~~ — **5-port managed switch relocated to closet (2026-03-26). Current K8s machines + desktop on 8-port unmanaged switch.**
 - [ ] Mount SR2024 in closet (replaces temporary 5-port managed switch)
@@ -104,13 +99,8 @@ This is the big move. The current cluster goes down, everything gets relocated.
 - [ ] Configure VLANs on SR2024:
   - VLAN 1 (default/untagged): Home network — Xfinity DHCP, bedroom, garage, APs
   - VLAN 10 (tagged): Lab — all lab machines
-  - VLAN 20 (tagged, optional): Storage — R730 ↔ K8s nodes dedicated NFS traffic
-- [ ] Assign switch ports:
-  - Uplink to Xfinity: VLAN 1 untagged
-  - Bedroom/Garage drops: VLAN 1 untagged
-  - AP ports: VLAN 1 untagged (upgrade to trunk later when router arrives)
-  - Lab machines: trunk ports (VLAN 1 untagged + VLAN 10 tagged)
-  - R730 storage port(s): VLAN 20 access (if using storage VLAN)
+  - VLAN 20 (tagged, optional): Storage — R730 ↔ K8s nodes dedicated iSCSI/NFS traffic
+- [ ] Assign switch ports
 - [ ] Test connectivity: machine on switch can reach internet via Xfinity gateway
 
 ### 1D: Move Existing Machines
@@ -126,12 +116,10 @@ This is the big move. The current cluster goes down, everything gets relocated.
 
 ### 1E: UPS Setup
 
-- [ ] Connect UPS in closet
-- [ ] Plug in: Inspiron, Optiplex, SR2024 switch (battery-backed outlets)
-- [ ] Plug in: R730, Quanta, Tower PC on surge-only outlets (or separate power strip)
-- [ ] Connect UPS data cable to Inspiron or Optiplex (whichever is most stable)
-- [ ] Install and configure NUT server on the connected machine
-- [ ] Test: pull power, verify UPS kicks in and NUT reports status
+~~Skipped — APC RS 1500 batteries are dead and need replacement. Proceeding without UPS for now. See [ADR-006](../decisions/006-proceed-without-ups.md).~~
+
+- [ ] Replace UPS batteries (deferred — not blocking migration)
+- [ ] Revisit UPS + NUT setup after battery replacement
 
 ---
 
@@ -140,20 +128,17 @@ This is the big move. The current cluster goes down, everything gets relocated.
 ### 2A: R730 — Storage Server + PXE Server
 
 - [x] ~~Install boot drive~~ — **Samsung SSD 850 EVO 250GB in rear bay 12 (non-RAID mode)**
-- [ ] Install data drives:
-  - Cache: 1× SSD as bcache for the data pool
-  - Initial data drives: start with some 4TB drives, get online, back up 3TB drive
-  - Remaining drives after backup: rest of 4TBs + 3TBs + optionally tower-pc's 3×2TB ZFS drives
+- [x] ~~Install data drives~~ — **7 drives installed: 2×4TB (parity, bays 0+3) + 5×3TB (data, bays 1+2+4+5+8). Bay 8 contains the original 3TB with existing data, mounted directly into pool.**
 - [x] ~~Install OS~~ — **Debian 13.4 (Trixie) installed 2026-03-26 via preseeded USB (fully scripted: `scripts/build-r730xd-iso.sh`). UEFI boot, static IP 10.0.0.200, SSH key auth, baseline playbook applied (`ansible/playbooks/setup-r730xd.yml`).**
-- [x] ~~Configure storage~~ — **done 2026-03-31. MergerFS pool at `/mnt/pool` (2× data drives), SnapRAID parity (1× 4TB). Deployed via `ansible/playbooks/r730xd-storage.yml`.**
-  - MergerFS pool across all data drives (supports mismatched sizes)
-  - SnapRAID for parity protection
-  - bcache SSD for read acceleration — **deferred, not blocking**
+- [x] ~~Configure storage~~ — **done 2026-03-31. MergerFS pool at `/mnt/pool` (5×3TB data), SnapRAID parity (2×4TB). Deployed via `ansible/playbooks/r730xd-storage.yml`.**
+  - [ ] bcache SSD for read acceleration (deferred — not blocking)
 - [x] ~~Set up NFS exports for K8s PVCs~~ — **done 2026-03-31. `/mnt/pool` exported to 10.0.0.0/24 via `r730xd-nfs-server` role.**
+- [ ] Set up ZFS pool on 3×2TB drives (migrated from tower-pc) for latency-sensitive workloads — see [ADR-004](../decisions/004-zfs-iscsi-for-k8s-storage.md)
+- [ ] Set up iSCSI off ZFS for K8s cluster storage (replacing NFS for performance) — see [ADR-004](../decisions/004-zfs-iscsi-for-k8s-storage.md)
 - [x] ~~Set up S3-compatible storage~~ — **done 2026-04-01. MinIO deployed at 10.0.0.200:9000 (API) / :9001 (console). Data on MergerFS pool. Deployed via `ansible/playbooks/deploy-foundation-stores.yml`. See ADR-003.**
 - [x] ~~Set up foundation data stores~~ — **done 2026-04-01. PostgreSQL 16 (:5432), Redis 7 (:6379), MinIO (:9000/:9001) running as Docker Compose services on R730xd. Data persisted on MergerFS pool at `/mnt/pool/foundation/`. Daily Postgres backup via pg_dumpall. See ADR-003 and `ansible/README.md` for connection details.**
 - [x] ~~Set up observability stack~~ — **done 2026-04-01. Prometheus (:9090), Alertmanager (:9093), Loki (:3100), Tempo (:3200), Grafana (:3000), Alloy deployed as Docker Compose services. Data on MergerFS pool at `/mnt/pool/observability/`. Loki/Tempo use MinIO S3 backend, Grafana uses Postgres backend. Deployed via `ansible/playbooks/deploy-observability.yml`. See ADR-004.**
-- [ ] Set up PXE boot server (TFTP/DHCP) for diskless K8s nodes (Inspiron, Optiplex, Quanta)
+- [ ] Set up PXE boot server (TFTP/DHCP) for diskless K8s nodes (Inspiron, Optiplex, Quanta) — NFS-root off ZFS, see [ADR-005](../decisions/005-nfs-root-for-pxe-nodes.md)
 - [ ] Configure R730 NIC:
   - Port 1: VLAN 1 (general/management + internet)
   - Port 2: VLAN 10 (lab network)
@@ -161,7 +146,7 @@ This is the big move. The current cluster goes down, everything gets relocated.
 - [x] ~~Set up iDRAC remote management~~ — **SSH racadm working at 10.0.0.203. Note: no Enterprise license, so no virtual media. HTTPS web UI works for basic monitoring.**
 - [ ] Install NetBird for VPN access
 - [ ] Verify NFS is accessible from K8s nodes
-- [x] ~~**Stand up staging VM**~~ — **done 2026-03-28. Debian 13 VM on libvirt NAT network (192.168.122.191), 4 vCPU / 8GB RAM. KVM/libvirt installed via `ansible/roles/r730xd-vm-host`, VM provisioned via `ansible/playbooks/create-staging-vm.yml`. Uses Debian generic cloud image + cloud-init + UEFI boot. Docker, gh CLI, and NetBird (100.96.220.249) installed. Critical services deployed via `ansible/playbooks/deploy-staging-services.yml`:**
+- [x] ~~**Stand up staging VM**~~ ([ADR-002](../decisions/002-r730-staging-vm-for-migration.md)) — **done 2026-03-28. Debian 13 VM on libvirt NAT network (192.168.122.191), 4 vCPU / 8GB RAM. KVM/libvirt installed via `ansible/roles/r730xd-vm-host`, VM provisioned via `ansible/playbooks/create-staging-vm.yml`. Uses Debian generic cloud image + cloud-init + UEFI boot. Docker, gh CLI, and NetBird (100.96.220.249) installed. Critical services deployed via `ansible/playbooks/deploy-staging-services.yml`:**
   - **landing-page** (nginx) — landing.bearflinn.com
   - **caz-portfolio** (Rust) — pennydreadfulsfx.com
   - **resume-site** (FastAPI + pgvector/pg16) — resume.bearflinn.com
@@ -188,10 +173,15 @@ This is the big move. The current cluster goes down, everything gets relocated.
 
 ### 3A: Storage Cutover
 
-- [ ] Update K8s NFS provisioner to point to R730 instead of tower-pc
-- [ ] Migrate existing PV data from tower-pc NFS to R730 NFS
+See [ADR-004](../decisions/004-zfs-iscsi-for-k8s-storage.md) and [ADR-005](../decisions/005-nfs-root-for-pxe-nodes.md) for storage architecture decisions.
+
+- [ ] Set up ZFS pool on R730 (3×2TB drives from tower-pc) for latency-sensitive storage
+- [ ] Set up iSCSI target on R730 (off ZFS) for K8s block storage
+- [ ] Configure K8s iSCSI CSI driver / provisioner
+- [ ] Migrate existing PV data from tower-pc NFS to R730
 - [ ] Update any hardcoded NFS references in manifests/Helm values
 - [ ] Verify PVCs are healthy and pods can read/write
+- [ ] NFS on MergerFS remains available for bulk/non-latency-sensitive storage
 
 ### 3B: Migrate deb-web Services to K8s
 
@@ -235,30 +225,39 @@ Before the Optiplex can be wiped and joined to K8s, its services need new homes:
 
 ## Phase 4: Standalone Machines
 
-### 4A: Tower PC — Router + GPU Inference Workstation
+### 4A: Tower PC — GPU Inference Workstation
 
-Tower PC takes on the router role because its CPU will be largely unused by inference workloads, it's already outside the cluster, and its other workloads are non-critical.
+Router role moved to AP630 ([ADR-003](../decisions/003-ap630-as-router.md)). Tower PC is now purely a GPU inference workstation.
 
 - [ ] Shut down tower-pc (critical workloads already on R730 staging VM from Phase 2A)
-- [ ] Migrate ZFS drives to R730 (if not done in Phase 2A)
+- [ ] Migrate 3×2TB ZFS drives to R730 (for latency-sensitive ZFS/iSCSI pool)
 - [ ] Install GPUs: 1080 Ti + 1050 Ti (keep existing 1060)
   - Verify PSU can handle the load (1080 Ti alone is ~250W)
   - Verify PCIe slot spacing for triple GPU
 - [ ] Reinstall OS (or repurpose existing install)
 - [ ] Install NVIDIA drivers
 - [ ] Install inference stack (Ollama, vLLM, or text-generation-inference)
-- [ ] Configure routing:
-  - Connect WAN (Xfinity gateway) and LAN interfaces
-  - Set up NAT, firewall rules, DHCP
-  - Replace Xfinity gateway's routing role
 - [ ] Configure API access from other machines on the lab VLAN
-- [ ] Connect to UPS (battery-backed outlet)
+
+### 4D: AP630 — Router
+
+Aerohive AP630 repurposed as a Debian arm64 router ([ADR-003](../decisions/003-ap630-as-router.md)). 2× GbE, no WiFi — using existing AP230/AP130 for that. See `docs/ap630-debian-project.md` for full technical details.
+
+- [x] ~~Root access~~ — **CVE-2025-27229 shell injection**
+- [x] ~~U-Boot access~~ — **bootdelay=5 written to NAND env, password confirmed**
+- [x] ~~Kernel boots~~ — **Linux 6.12.0 on custom DTS, boots to initramfs**
+- [x] ~~Ethernet working~~ — **ENET DMA + SF2 switch + DSA, both ports operational**
+- [ ] Flash fixed kernel + DTB to NAND for standalone boot with networking
+- [ ] Install full Debian rootfs to NAND
+- [ ] Configure routing: nftables NAT, DHCP (dnsmasq), DNS
+- [ ] Connect WAN (Xfinity gateway) + LAN (SR2024) on eth0/eth1
+- [ ] Replace Xfinity gateway's routing role
 
 ### 4B: WiFi APs
 
 - [x] ~~Flash/configure Aerohive APs for standalone mode~~ — **confirmed standalone via `no capwap client enable`. All 3 APs factory reset and CAPWAP disabled (2026-03-27).**
-- [ ] Mount AP230 in central location
-- [ ] Mount AP130(s) for coverage extension
+- [ ] Mount AP230 in central location (starting with AP230 only — [ADR-009](../decisions/009-start-with-ap230-only.md))
+- [ ] Mount AP130(s) if coverage is insufficient
 - [ ] Connect to SR2024 (PoE from switch, no injectors needed)
 - [ ] Configure SSID + password
 - [ ] Test coverage throughout house
@@ -294,7 +293,7 @@ Tower PC takes on the router role because its CPU will be largely unused by infe
 ```
 Phase 0 (all parallel, no downtime)
   ├── 0A: Hardware assessment
-  ├── 0B: Back up 3TB drive ──────────── HARD BLOCKER for any drive work
+  ├── 0B: Back up 3TB drive ──────────── DONE (mounted directly into pool)
   ├── 0C: Inventory services
   └── 0D: Gather supplies
          │
@@ -328,12 +327,12 @@ Phase 3D: Remove old workers (incl. tower-pc)
          v
 Phase 3E: Verify cluster
          │
-         ├──────────────────────┐
-         v                      v
-Phase 4A: Tower PC →       Phase 4B: WiFi APs
-  Router + GPU inference        │
-         │                      │
-         v                      v
+         ├──────────────────────┬──────────────────┐
+         v                      v                  v
+Phase 4A: Tower PC →       Phase 4B: WiFi APs  Phase 4D: AP630 →
+  GPU inference only            │                Router (Debian)
+         │                      │                  │
+         v                      v                  v
 Phase 5: Cleanup & documentation (tear down staging VM)
 ```
 
@@ -343,7 +342,7 @@ Phase 5: Cleanup & documentation (tear down staging VM)
 
 | Risk | Impact | Mitigation |
 |------|--------|------------|
-| 3TB drive data lost | High | Back up FIRST in Phase 0B, verify backup before proceeding |
+| ~~3TB drive data lost~~ | ~~High~~ | ~~Resolved: drive mounted directly into MergerFS pool ([ADR-007](../decisions/007-3tb-data-drive-direct-to-pool.md)). SnapRAID parity protects it.~~ |
 | R730 won't POST / dead hardware | Medium | Test in Phase 0A before planning around it |
 | Quanta won't POST | High | Test in Phase 0A — if dead, need to restructure (tower stays as K8s worker?) |
 | ~~SR2024 VLAN issues~~ | ~~Medium~~ | ~~Resolved: VLANs, LACP, PoE all confirmed working (2026-03-27)~~ |

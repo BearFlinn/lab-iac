@@ -39,6 +39,14 @@ all:
           role: data         # 3TB
         - bay: 2
           role: data         # 3TB
+        - bay: 3
+          role: parity       # 4TB
+        - bay: 4
+          role: data         # 3TB
+        - bay: 5
+          role: data         # 3TB
+        - bay: 8
+          role: data         # 3TB (existing data — not wiped)
 
   vars:
     network_dns:

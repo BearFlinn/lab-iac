@@ -1,6 +1,6 @@
 # New Setup Planning
 
-Last updated: 2026-03-26
+Last updated: 2026-04-02
 
 ## Target Architecture
 
@@ -49,9 +49,10 @@ Last updated: 2026-03-26
   - Long-term: occasional, light use — cybersec experimentation, provisioning hardware for friends, etc. Spin up when needed, shut down when not.
 - **Storage software:** MergerFS + SnapRAID — chosen for mismatched drive support without licensing cost
 - **Boot cache:** One SSD as bcache for the data pool
+- **Storage status:** MergerFS pool operational (5×3TB data + 2×4TB parity). SnapRAID configured. Deployed via `r730xd-storage.yml`.
 - **Open questions:**
   - NFS? S3 (Garage/MinIO)? Both?
-  - Back up the 3TB drive with important data first
+  - bcache SSD for read acceleration (deferred)
 
 ### Quanta QSSC-2ML → Primary K8s Worker
 
@@ -172,8 +173,8 @@ Compared to current cluster: more than 3× the compute cores, 50% more RAM, on f
 - [ ] **Network topology** — needs full discussion
 - [ ] **Tower-pc PSU/PCIe audit** — can it actually hold 3 GPUs?
 - [x] ~~R730 storage software~~ — **MergerFS + SnapRAID** (mismatched drives, no license cost)
-- [ ] **R730 drive layout** — which drives go where
-- [ ] **3TB data backup** — must happen before any drive reformatting
+- [x] ~~R730 drive layout~~ — **2×4TB parity (bays 0+3), 5×3TB data (bays 1+2+4+5+8). See `ansible/inventory/r730xd.yml`.**
+- [x] ~~3TB data backup~~ — **drive mounted directly into MergerFS pool (bay 8), data preserved in-place**
 - [x] ~~R730 CPU identification~~ — **Xeon E5-2630 v3, 8C/16T**
 - [ ] **Quanta CPU identification** — check BMC/IPMI/BIOS
 - [ ] **Power assessment** — R730 + Quanta + tower with 3 GPUs could pull 1kW+ combined

@@ -1,6 +1,6 @@
 # Current Hardware Inventory
 
-Last updated: 2026-03-26
+Last updated: 2026-04-02
 
 ---
 
@@ -101,7 +101,8 @@ Last updated: 2026-03-26
 | OS IP | 10.0.0.200 on eno1 (static) |
 | Boot drive | Samsung SSD 850 EVO 250GB in bay 12 (rear 2.5" slot), non-RAID mode |
 | Status | **Online.** OS installed 2026-03-26 via preseeded USB. Baseline playbook applied. |
-| TODO | Install data drives, configure MergerFS + SnapRAID, set up NFS exports, enroll in NetBird |
+| Storage | MergerFS pool: 5×3TB data + 2×4TB parity (SnapRAID). 15TB usable. Deployed via `r730xd-storage.yml`. |
+| TODO | Set up NFS exports, bcache SSD acceleration, enroll in NetBird |
 
 #### Quanta QSSC-2ML
 
@@ -171,13 +172,15 @@ Last updated: 2026-03-26
 | NVIDIA GTX 1050 Ti | 4 GB | x16 Gen3 | Low power (~75W, no external power connector on most models) |
 | NVIDIA GTX 760 | 2 GB | x16 Gen3 | Oldest card, limited utility — basic display/compute only |
 
-### Spare Hard Drives
+### Hard Drives (All Installed in R730xd)
 
-| Drives | Capacity | Type | Notes |
-|--------|----------|------|-------|
-| 2× 4 TB | 8 TB total | HDD | Available for storage pool (1× 4TB dead, discarded) |
-| 5× 3 TB | 15 TB total | HDD | **1 drive has data that needs to be preserved before reuse** |
-| **Total spare** | **23 TB raw** | | |
+| Drives | Capacity | Type | Role | R730xd Bays |
+|--------|----------|------|------|-------------|
+| 2× 4 TB | 8 TB total | HDD | SnapRAID parity | Bays 0, 3 |
+| 5× 3 TB | 15 TB total | HDD | MergerFS data pool | Bays 1, 2, 4, 5, 8 |
+| **Total installed** | **23 TB raw (15 TB usable)** | | | |
+
+Note: 1× 4TB was dead on arrival and discarded. Bay 8 drive had existing data, mounted directly into pool.
 
 ---
 
@@ -258,7 +261,7 @@ Last updated: 2026-03-26
 - [x] ~~Verify iDRAC (R730) and BMC/IPMI (Quanta) remote management access~~ — **iDRAC SSH racadm working (no Enterprise license — no virtual media). Quanta BMC/IPMI at 10.0.0.201.**
 - [x] ~~Test all 24 ports on the SR2024 switch~~ — **ports 1–4 confirmed working (APs on 1–3, laptop on 4). Full port test pending but switch responds correctly. VLANs, LACP, PoE all confirmed (2026-03-27).**
 - [x] ~~Determine Aerohive AP firmware situation~~ — **all 3 APs run standalone via `no capwap client enable`. Factory reset and CAPWAP disabled on all devices (2026-03-27). See docs/aerohive-serial-interface.md for details.**
-- [ ] Back up the data on the one 3 TB drive before repurposing
+- [x] ~~Back up the data on the one 3 TB drive~~ — **mounted directly into R730xd MergerFS pool (bay 8), data preserved in-place**
 - [x] ~~Determine which spare HDDs go into which machines~~ — **All data HDDs go in R730xd (MergerFS pool). SSDs: 1 → jumpbox, 1 → tower PC (LLM storage), 1 → R730 bcache**
 - [ ] Determine GPU placement across machines
 - [ ] Plan power and rack/shelf layout for the new room
