@@ -60,6 +60,13 @@ all:
           ansible_host: 192.168.122.191
           ansible_ssh_common_args: '-o ProxyJump=bearf@10.0.0.200'
           node_roles: ["staging"]
+          # Monitoring — VM has no IPMI/BMC or SMART-capable disks
+          ipmi_exporter_enabled: false
+          smartd_enabled: false
+          monitoring_required_services:
+            - "prometheus-node-exporter"
+            - "docker"
+          monitoring_optional_services: []
 
   vars:
     ansible_user: bearf

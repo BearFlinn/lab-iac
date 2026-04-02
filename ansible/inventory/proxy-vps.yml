@@ -25,6 +25,9 @@ all:
       # K8s proxy mode - routes traffic to K8s ingress via NetBird tunnel
       enable_k8s_proxy: true
 
+      # Caddy Prometheus metrics (scraped by R730xd Prometheus over NetBird)
+      caddy_metrics_port: 2019
+
       # K8s ingress endpoint (NetBird IP + NodePort)
       # All *.bearflinn.com subdomains not matched by caddy_services
       # are proxied here - K8s ingress handles routing and 404s
@@ -81,6 +84,19 @@ all:
   vars:
     # Timezone
     timezone: "UTC"
+
+    # Monitoring — VPS has no IPMI/BMC or SMART-capable disks
+    ipmi_exporter_enabled: false
+    smartd_enabled: false
+    monitoring_required_services:
+      - "prometheus-node-exporter"
+      - "caddy"
+    monitoring_optional_services: []
+
+    # Home network public IP for monitoring firewall rules
+    # R730xd Prometheus scrapes VPS over the internet (no NetBird on R730xd)
+    # Update this if ISP assigns a new IP
+    monitoring_home_ip: "98.251.87.200"
 
     # Firewall configuration
     enable_firewall: true

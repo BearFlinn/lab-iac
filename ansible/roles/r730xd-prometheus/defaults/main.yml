@@ -35,6 +35,12 @@ prometheus_node_targets:
   - target: "10.0.0.200:9100"
     labels:
       instance: "r730xd"
+  - target: "178.156.217.91:9100"
+    labels:
+      instance: "proxy-vps"
+  - target: "192.168.122.191:9100"
+    labels:
+      instance: "staging-vm"
 
 # Scrape targets — ipmi_exporter
 prometheus_ipmi_targets:
@@ -61,6 +67,8 @@ prometheus_observability_targets:
     target: "10.0.0.200:9121"
   - job: "cadvisor"
     target: "10.0.0.200:8080"
+  - job: "caddy"
+    target: "178.156.217.91:2019"
 
 # Scrape targets — blackbox probes (external endpoints)
 prometheus_blackbox_targets:

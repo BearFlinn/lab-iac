@@ -21,3 +21,6 @@ minio_root_password: "{{ vault_minio_root_password }}"
 grafana_admin_password: "{{ vault_grafana_admin_password }}"
 minio_observability_access_key: "{{ vault_minio_observability_access_key }}"
 minio_observability_secret_key: "{{ vault_minio_observability_secret_key }}"
+
+# Alerting — Discord webhook for Alertmanager notifications
+monitoring_discord_webhook_url: "{{ vault_monitoring_discord_webhook_url }}"

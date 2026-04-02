@@ -4,11 +4,18 @@
 - name: Install monitoring packages
   ansible.builtin.apt:
     name:
+      - prometheus-node-exporter
+    state: present
+  tags: [monitoring]
+
+- name: Install IPMI/hardware monitoring packages
+  ansible.builtin.apt:
+    name:
       - ipmitool
       - freeipmi-tools
       - edac-utils
-      - prometheus-node-exporter
     state: present
+  when: ipmi_exporter_enabled
   tags: [monitoring]
 
 - name: Create textfile collector directory
@@ -25,7 +32,7 @@
     content: |
       # Managed by Ansible — monitoring-base role
       # Override default filesystem excludes to include MergerFS (fuse.mergerfs) and /mnt/* mounts
-      ARGS="--collector.textfile.directory={{ node_exporter_textfile_dir }} --collector.systemd --collector.processes --collector.filesystem.fs-types-exclude=^(autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|hugetlbfs|iso9660|mqueue|nsfs|overlay|proc|procfs|pstore|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tracefs)$ --collector.filesystem.mount-points-exclude=^/(dev|proc|run/credentials/.+|sys|var/lib/docker/.+)($|/)"
+      ARGS="--collector.textfile.directory={{ node_exporter_textfile_dir }} --collector.systemd --collector.processes --collector.filesystem.fs-types-exclude=^(autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|hugetlbfs|iso9660|mqueue|nsfs|overlay|proc|procfs|pstore|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tracefs)$ --collector.filesystem.mount-points-exclude=^/(dev|proc|run/credentials/.+|sys|var/lib/docker/.+)($|/){% if node_exporter_nfsd_enabled %} --collector.nfsd{% endif %}"
     dest: /etc/default/prometheus-node-exporter
     mode: "0644"
   notify: Restart node-exporter
@@ -38,7 +45,14 @@
     state: started
   tags: [monitoring]
 
-# --- smartd configuration ---
+# --- smartd configuration (physical hosts only) ---
+
+- name: Install smartmontools
+  ansible.builtin.apt:
+    name: smartmontools
+    state: present
+  when: smartd_enabled
+  tags: [monitoring]
 
 - name: Deploy smartd configuration
   ansible.builtin.template:
@@ -46,6 +60,7 @@
     dest: /etc/smartd.conf
     mode: "0644"
   notify: Restart smartd
+  when: smartd_enabled
   tags: [monitoring]
 
 - name: Enable and start smartd
@@ -53,6 +68,7 @@
     name: smartd
     enabled: true
     state: started
+  when: smartd_enabled
   tags: [monitoring]
 
 # --- IPMI Exporter ---

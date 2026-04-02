@@ -1,6 +1,12 @@
 ---
 # monitoring-checks: deploy health check scripts and cron jobs
 
+- name: Ensure cron is installed
+  ansible.builtin.apt:
+    name: cron
+    state: present
+  tags: [monitoring]
+
 - name: Create monitoring directories
   ansible.builtin.file:
     path: "{{ item }}"

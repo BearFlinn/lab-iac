@@ -71,6 +71,18 @@
     resume_db_password: "resume_staging"
     resume_db_name: "resume"
 
+  pre_tasks:
+    # --- Monitoring ---
+    - name: Install monitoring base (node-exporter)
+      ansible.builtin.include_role:
+        name: monitoring-base
+      tags: [monitoring]
+
+    - name: Deploy health check scripts
+      ansible.builtin.include_role:
+        name: monitoring-checks
+      tags: [monitoring]
+
   tasks:
     # =======================================================================
     # Setup

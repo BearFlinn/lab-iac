@@ -146,6 +146,32 @@
           ansible.builtin.include_role:
             name: caddy
 
+    # --- Monitoring ---
+    - name: Install monitoring base (node-exporter)
+      ansible.builtin.include_role:
+        name: monitoring-base
+      tags: [monitoring]
+
+    - name: Deploy health check scripts
+      ansible.builtin.include_role:
+        name: monitoring-checks
+      tags: [monitoring]
+
+    - name: Allow monitoring ports from trusted networks
+      community.general.ufw:
+        rule: allow
+        port: "{{ item.port }}"
+        proto: tcp
+        from_ip: "{{ item.from }}"
+        comment: "{{ item.comment }}"
+      loop:
+        - { port: '9100', from: '100.96.0.0/11', comment: 'node-exporter (NetBird)' }
+        - { port: '2019', from: '100.96.0.0/11', comment: 'Caddy metrics (NetBird)' }
+        - { port: '9100', from: '{{ monitoring_home_ip }}', comment: 'node-exporter (home network)' }
+        - { port: '2019', from: '{{ monitoring_home_ip }}', comment: 'Caddy metrics (home network)' }
+      when: enable_firewall | default(true) | bool and monitoring_home_ip is defined
+      tags: [monitoring]
+
   post_tasks:
     - name: Final connectivity check
       ansible.builtin.wait_for:

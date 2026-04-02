@@ -32,6 +32,11 @@
     # Admin endpoint (local only)
     admin localhost:2019
 
+    # Prometheus metrics on admin endpoint
+    servers {
+        metrics
+    }
+
     # Log settings
     log {
         output file {{ caddy_log_dir }}/caddy.log
@@ -40,6 +45,17 @@
     }
 }
 
+{% if caddy_metrics_port | default(false) %}
+# =============================================================================
+# PROMETHEUS METRICS ENDPOINT
+# =============================================================================
+
+:{{ caddy_metrics_port }} {
+    metrics /metrics
+    respond /healthz 200
+}
+
+{% endif %}
 # =============================================================================
 # STATIC/PROXY SERVICES
 # =============================================================================

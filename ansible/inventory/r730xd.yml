@@ -23,6 +23,9 @@ all:
       model: "Dell PowerEdge R730xd"
       node_roles: ["storage"]
 
+      # NFS server metrics — enables nfsd collector in node-exporter
+      node_exporter_nfsd_enabled: true
+
       # iDRAC connection (used by r730xd-storage.yml to resolve drive bays)
       idrac_host: "10.0.0.203"
 

@@ -7,6 +7,10 @@ node_exporter_port: 9100
 # Textfile collector directory — check scripts write .prom files here
 node_exporter_textfile_dir: "/var/lib/prometheus/node-exporter"
 
+# --- NFS metrics ---
+# Enable nfsd collector for NFS server hosts (exposes RPC stats, client connections)
+node_exporter_nfsd_enabled: false
+
 # --- IPMI Exporter ---
 ipmi_exporter_enabled: true
 ipmi_exporter_version: "1.8.0"
@@ -15,6 +19,8 @@ ipmi_exporter_arch: "amd64"
 ipmi_exporter_install_dir: "/usr/local/bin"
 
 # --- smartd ---
+# Set to false on VMs/VPS where virtual disks don't support SMART
+smartd_enabled: true
 # Run short self-test every Sunday at 01:00, long test first Sunday of month at 03:00
 smartd_short_test_schedule: "S/../../7/01"
 smartd_long_test_schedule: "L/../../1/03"

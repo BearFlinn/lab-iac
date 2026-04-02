@@ -119,6 +119,16 @@ groups:
         annotations:
           summary: "NFS server is down on {{ '{{' }} $labels.instance {{ '}}' }} — K8s PVCs affected"
 
+      - alert: NFSRPCErrors
+        expr: rate(node_nfsd_rpc_errors_total[5m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: >-
+            NFS RPC errors on {{ '{{' }} $labels.instance {{ '}}' }}
+            ({{ '{{' }} $value | printf "%.2f" {{ '}}' }}/s)
+
   - name: snapraid
     rules:
       - alert: SnapRAIDErrors

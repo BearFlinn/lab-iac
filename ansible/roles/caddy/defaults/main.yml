@@ -24,6 +24,9 @@ caddy_dns_provider: ""
 caddy_service_enabled: true
 caddy_service_state: "started"
 
+# Prometheus metrics port (set to enable a /metrics endpoint)
+# caddy_metrics_port: 2019
+
 # =============================================================================
 # Template Selection
 # =============================================================================
