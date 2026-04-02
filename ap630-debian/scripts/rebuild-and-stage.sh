@@ -30,6 +30,14 @@ if [[ ! -d "$KDIR" ]]; then
     exit 1
 fi
 
+# Sync local patches into kernel tree
+PATCHES_DIR="$REPO_DIR/kernel/patches"
+if [[ -d "$PATCHES_DIR" ]]; then
+    cp "$PATCHES_DIR/bcm4908_enet.c" "$KDIR/drivers/net/ethernet/broadcom/bcm4908_enet.c"
+    cp "$PATCHES_DIR/bcm-pmb.c"      "$KDIR/drivers/pmdomain/bcm/bcm-pmb.c"
+    cp "$PATCHES_DIR/bcm-pmb.h"      "$KDIR/include/dt-bindings/soc/bcm-pmb.h"
+fi
+
 # Sync DTS into kernel tree and ensure it's in the Makefile
 BCMBCA_DIR="$KDIR/arch/$ARCH/boot/dts/broadcom/bcmbca"
 cp "$DTS_SRC" "$BCMBCA_DIR/$(basename "$DTS_SRC")"

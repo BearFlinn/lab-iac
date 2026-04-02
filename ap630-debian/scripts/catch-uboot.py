@@ -69,11 +69,25 @@ def main():
         read_and_print()
 
         if b"assword:" in buf[-200:]:
+            # Stop spamming! Drain any buffered spaces from the serial line,
+            # then send the real password on a clean line.
             print("\n>>> Password prompt!", file=sys.stderr)
-            time.sleep(0.5)
-            ser.write(f"{UBOOT_PW}\r".encode())
             time.sleep(1)
+            ser.reset_input_buffer()
+            # Send CR to clear any spaces in the password field, then password
+            ser.write(b"\r")
+            time.sleep(0.5)
             read_and_print()
+            ser.write(f"{UBOOT_PW}\r".encode())
+            time.sleep(2)
+            read_and_print()
+            # If wrong password re-prompted, try once more on clean line
+            if b"assword:" in buf[-200:]:
+                print(">>> Retrying password...", file=sys.stderr)
+                time.sleep(0.3)
+                ser.write(f"{UBOOT_PW}\r".encode())
+                time.sleep(2)
+                read_and_print()
             caught = True
             break
         if b"u-boot>" in buf[-100:]:

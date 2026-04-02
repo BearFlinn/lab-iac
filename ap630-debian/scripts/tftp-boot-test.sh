@@ -32,6 +32,7 @@ INITRAMFS="test-initramfs.uboot"
 BOOT_TIMEOUT=90
 DO_REBOOT=1
 RAW_LOG=""
+DEBIAN_MODE=0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -40,6 +41,7 @@ while [[ $# -gt 0 ]]; do
         -i|--initramfs) INITRAMFS="$2"; shift 2 ;;
         -t|--timeout)   BOOT_TIMEOUT="$2"; shift 2 ;;
         --no-reboot)    DO_REBOOT=0; shift ;;
+        --debian)       DEBIAN_MODE=1; INITRAMFS="debian-rootfs.uboot"; BOOT_TIMEOUT=180; shift ;;
         --log)          RAW_LOG="$2"; shift 2 ;;
         -h|--help)      sed -n '2,/^$/p' "$0" | sed 's/^# \?//'; exit 0 ;;
         *)              echo "Unknown arg: $1" >&2; exit 3 ;;
@@ -89,6 +91,7 @@ set do_reboot   @@DO_REBOOT@@
 set raw_log     "@@RAW_OUTFILE@@"
 set uboot_user  "@@UBOOT_USER@@"
 set uboot_hiveos_pw "@@UBOOT_HIVEOS_PW@@"
+set debian_mode @@DEBIAN_MODE@@
 
 log_user 0
 set timeout 30
@@ -282,8 +285,18 @@ expect {
 expect "u-boot>"
 puts stdout ">>> Kernel loaded <<<"
 
+if {$debian_mode} {
+    set dtb_addr "0x08000000"
+    set bootargs "earlycon=bcm63xx_uart,mmio32,0xff800640,9600 coherent_pool=4M console=ttyS0,9600 rdinit=/sbin/init"
+    set tftp_timeout 120
+} else {
+    set dtb_addr "0x05005000"
+    set bootargs "coherent_pool=4M cpuidle_sysfs_switch pci=pcie_bus_safe root=/dev/ram console=ttyS0,9600 ramdisk_size=70000 cache-sram-size=0x10000"
+    set tftp_timeout 30
+}
+
 puts stdout ">>> Loading DTB: $dtb <<<"
-send "tftpboot 0x05005000 $dtb\r"
+send "tftpboot $dtb_addr $dtb\r"
 expect {
     timeout { puts stdout ">>> TFTP timeout loading DTB <<<"; exit 2 }
     "TFTP error*" { puts stdout ">>> TFTP error loading DTB <<<"; exit 2 }
@@ -293,6 +306,7 @@ expect "u-boot>"
 
 puts stdout ">>> Loading initramfs: $initramfs <<<"
 send "tftpboot 0x02005000 $initramfs\r"
+set timeout $tftp_timeout
 expect {
     timeout { puts stdout ">>> TFTP timeout loading initramfs <<<"; exit 2 }
     "TFTP error*" { puts stdout ">>> TFTP error loading initramfs <<<"; exit 2 }
@@ -302,10 +316,10 @@ expect "u-boot>"
 puts stdout ">>> All files loaded, booting <<<"
 
 # --- Set bootargs and boot ---
-send "setenv bootargs coherent_pool=4M cpuidle_sysfs_switch pci=pcie_bus_safe root=/dev/ram console=ttyS0,9600 ramdisk_size=70000 cache-sram-size=0x10000\r"
+send "setenv bootargs $bootargs\r"
 expect "u-boot>"
 
-send "bootm 0x01005000 0x02005000 0x05005000\r"
+send "bootm 0x01005000 0x02005000 $dtb_addr\r"
 
 # --- Capture boot output ---
 set timeout $boot_timeout
@@ -314,7 +328,8 @@ expect {
         set line $expect_out(1,string)
         emit $line
 
-        if {[string match "*TEST BOOT SUCCESSFUL*" $line]} {
+        if {[string match "*TEST BOOT SUCCESSFUL*" $line] ||
+            ($debian_mode && [string match "*login:*" $line])} {
             # Success! Let a few more lines print
             sleep 3
             close $raw_fd
@@ -367,6 +382,7 @@ sed -i \
     -e "s|@@RAW_OUTFILE@@|$RAW_OUTFILE|g" \
     -e "s|@@UBOOT_USER@@|$HIVEOS_USER|g" \
     -e "s|@@UBOOT_HIVEOS_PW@@|$HIVEOS_PW|g" \
+    -e "s|@@DEBIAN_MODE@@|$DEBIAN_MODE|g" \
     -e "s|@@SCRIPT_DIR@@|$(cd "$(dirname "$0")" && pwd)|g" \
     "$EXPECT_SCRIPT"
 

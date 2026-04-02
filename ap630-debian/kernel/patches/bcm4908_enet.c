@@ -251,13 +251,6 @@ static void bcm4908_enet_dma_reset(struct bcm4908_enet *enet)
 	int i;
 
 	ctrl = enet_read(enet, ENET_DMA_CONTROLLER_CFG);
-	dev_info(enet->dev, "DMA reset: CONTROLLER_CFG=0x%08x\n", ctrl);
-
-	for (i = 0; i < ARRAY_SIZE(rings); i++) {
-		cfg = enet_read(enet, rings[i]->cfg_block + ENET_DMA_CH_CFG);
-		dev_info(enet->dev, "DMA reset: CH%d CFG=0x%08x (pre-quiesce)\n",
-			 i, cfg);
-	}
 
 	/* Halt DMA channels gracefully before disabling.
 	 * On devices where U-Boot's RDP engine initialized the DMA,
@@ -316,7 +309,6 @@ static void bcm4908_enet_dma_reset(struct bcm4908_enet *enet)
 	}
 
 	ctrl = enet_read(enet, ENET_DMA_CONTROLLER_CFG);
-	dev_info(enet->dev, "DMA reset complete: CONTROLLER_CFG=0x%08x\n", ctrl);
 }
 
 static int bcm4908_enet_dma_alloc_rx_buf(struct bcm4908_enet *enet, unsigned int idx)
@@ -515,13 +507,8 @@ static int bcm4908_enet_open(struct net_device *netdev)
 	 * the handler fires immediately into uninitialized DMA, causing an
 	 * RCU stall on single-CPU systems.
 	 */
-	dev_info(dev, "open: gmac_init\n");
 	bcm4908_enet_gmac_init(enet);
-
-	dev_info(dev, "open: dma_reset\n");
 	bcm4908_enet_dma_reset(enet);
-
-	dev_info(dev, "open: dma_init\n");
 	bcm4908_enet_dma_init(enet);
 
 	/* Now safe to register IRQs — DMA interrupts are masked and acked */
@@ -544,10 +531,8 @@ static int bcm4908_enet_open(struct net_device *netdev)
 		}
 	}
 
-	dev_info(dev, "open: enabling UMAC TX/RX\n");
 	enet_umac_set(enet, UMAC_CMD, CMD_TX_EN | CMD_RX_EN);
 
-	dev_info(dev, "open: enabling DMA master\n");
 	enet_set(enet, ENET_DMA_CONTROLLER_CFG, ENET_DMA_CTRL_CFG_MASTER_EN);
 	enet_maskset(enet, ENET_DMA_CONTROLLER_CFG, ENET_DMA_CTRL_CFG_FLOWC_CH1_EN, 0);
 
@@ -557,16 +542,12 @@ static int bcm4908_enet_open(struct net_device *netdev)
 		bcm4908_enet_dma_ring_intrs_on(enet, tx_ring);
 	}
 
-	dev_info(dev, "open: enabling RX ring\n");
 	bcm4908_enet_dma_rx_ring_enable(enet, rx_ring);
 	napi_enable(&rx_ring->napi);
 	netif_carrier_on(netdev);
 	netif_start_queue(netdev);
 	bcm4908_enet_dma_ring_intrs_ack(enet, rx_ring);
 	bcm4908_enet_dma_ring_intrs_on(enet, rx_ring);
-
-	dev_info(dev, "open: complete, DMA_CFG=0x%08x\n",
-		 enet_read(enet, ENET_DMA_CONTROLLER_CFG));
 
 	return 0;
 }
@@ -705,7 +686,7 @@ static int bcm4908_enet_poll_rx(struct napi_struct *napi, int weight)
 		skb_put(skb, len - ETH_FCS_LEN);
 		skb->protocol = eth_type_trans(skb, enet->netdev);
 
-		netif_receive_skb(skb);
+		napi_gro_receive(napi, skb);
 
 		enet->netdev->stats.rx_packets++;
 		enet->netdev->stats.rx_bytes += len;
@@ -718,7 +699,7 @@ static int bcm4908_enet_poll_rx(struct napi_struct *napi, int weight)
 		bcm4908_enet_dma_ring_intrs_on(enet, rx_ring);
 	}
 
-	/* Hardware could disable ring if it run out of descriptors */
+	/* Hardware could disable ring if it ran out of descriptors */
 	bcm4908_enet_dma_rx_ring_enable(enet, &enet->rx_ring);
 
 	return handled;
@@ -803,8 +784,6 @@ static int bcm4908_enet_probe(struct platform_device *pdev)
 		return PTR_ERR(enet->base);
 	}
 
-	dev_info(dev, "probe: base=%pa\n", &pdev->resource[0].start);
-
 	/* Keep the power domain active — on BCM4908, the ENET block is
 	 * managed by the PMB and will be powered off during late_initcall
 	 * PM cleanup if no one holds a runtime PM reference.
@@ -821,8 +800,6 @@ static int bcm4908_enet_probe(struct platform_device *pdev)
 		return netdev->irq;
 
 	enet->irq_tx = platform_get_irq_byname(pdev, "tx");
-	dev_info(dev, "probe: irq_rx=%d irq_tx=%d\n", netdev->irq, enet->irq_tx);
-
 	err = dma_set_coherent_mask(dev, DMA_BIT_MASK(32));
 	if (err)
 		return err;

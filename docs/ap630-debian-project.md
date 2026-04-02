@@ -370,20 +370,33 @@ bootm 0x01005000 0x02005000 0x08000000
 
 **BTRM autoboot issue:** The BCM4908 BTRM outputs at 115200 baud before U-Boot switches to 9600. This garbage is interpreted as keypresses at 9600, interrupting the autoboot countdown every time. Manual boot from U-Boot prompt is required until a workaround is found.
 
-### Bandwidth Issue (2026-04-02)
+### Bandwidth Issue (2026-04-02) — HARDWARE LIMITATION
 
-**iperf3 throughput: ~10 Mbps** on a 1Gbps link. Root cause: per-packet interrupts.
+**RX throughput: ~10 Mbps.** This is an iuDMA hardware limitation, not a driver bug.
 
-```
-enet IRQ:  130,712 (1:1 ratio with RX packets)
-tx IRQ:    113,875 (1:1 ratio with TX packets)
-```
+**TX throughput: ~700 Mbps** (UDP flood). This proves the DMA hardware, UMAC, SF2 switch, and PHY all operate at 1 Gbps. TCP TX is limited to ~10 Mbps because ACKs flow through the 10 Mbps RX path.
 
-The `bcm4908_enet` DMA interrupt handler fires for every single packet instead of coalescing via NAPI. Each interrupt cycle costs ~1.2ms, limiting throughput to ~830 packets/second = ~10 Mbps.
+**Root cause:** The BCM4908's iuDMA is a slow management path. The data-plane throughput comes from the Runner Data Path (RDP) hardware packet accelerator, which has no mainline Linux driver. The iuDMA RX path (wire→switch→DMA→CPU) is hardware-limited to ~800 packets/sec regardless of driver configuration. The CPU is 98% idle during iperf3 — the bottleneck is purely in the hardware DMA receive path.
 
-**What works fine:** latency (0.5ms idle, 0.6ms under CPU load), packet processing (0% loss), link negotiation (1Gbps/Full).
+**Ruled out (2026-04-02 exhaustive investigation):**
+- Interrupt coalescing (ack-in-ISR vs ack-in-NAPI — no difference)
+- NAPI scheduling latency (`time_squeeze=0`, ksoftirqd idle)
+- DMA flow control (`FLOWC_CH1_EN`, `FLOWCTL_CH1_ALLOC` — no difference with or without)
+- DMA burst length (8 vs 32 — no difference)
+- Ring buffer sizes (200 vs 512 — no difference)
+- IOMMU overhead (`iommu.passthrough=1` — no difference)
+- GMAC speed config (UMAC_CMD confirms 1000 Mbps, GMAC_STATUS confirms 1000 Mbps)
+- SF2 switch IMP port (`CORE_STS_OVERRIDE_IMP=0xcb` = 1Gbps/FD/LinkUp/Override)
+- `ENET_DMA_RX_OK_TO_SEND_COUNT` (default 7, tried 15 — no difference)
+- Per-descriptor DMA re-enable in NAPI poll — no difference
+- GRO (`napi_gro_receive`) — no throughput difference (kept for protocol efficiency)
 
-**Fix needed:** DMA interrupt coalescing — configure the ENET DMA to batch interrupts, or fix the NAPI mask/unmask so the IRQ stays masked while NAPI is polling. This is the same class of driver work as the IRQ reorder and DMA quiesce fixes already done.
+**What works fine:** latency (0.5ms), packet processing (0% loss at 10 Mbps), link negotiation (1Gbps/Full), TX throughput (700 Mbps UDP).
+
+**To exceed 10 Mbps RX**, one of:
+- Port the proprietary RDP/Runner driver to mainline Linux (major effort, requires Broadcom NDA documentation)
+- Implement XDP or hardware NAT offload in the SF2 switch (would bypass the iuDMA for forwarded traffic)
+- Accept 10 Mbps as the iuDMA ceiling — sufficient for a management-plane router (DNS, DHCP, NTP, SSH) with WiFi APs handling bulk traffic
 
 ### SMP Investigation (2026-04-02)
 
@@ -408,14 +421,16 @@ The `bcm4908_enet` DMA interrupt handler fires for every single packet instead o
 - [x] Add GMAC to Linux PMB driver — `BCM_PMB_GMAC`, verified working
 - [x] Ethernet working — ENET DMA, SF2 switch, DSA, ping confirmed
 - [x] Flash kernel + DTB + rootfs to NAND
-- [ ] **HIGH PRIORITY:** Fix enet DMA interrupt coalescing (~10 Mbps → target: 500+ Mbps)
+- [x] Investigate enet bandwidth — **hardware limitation** of iuDMA RX path (~10 Mbps), TX works at 700 Mbps
+- [x] Clean up enet debug prints — removed from non-error paths, added GRO
 - [ ] Fix autoboot interruption (BTRM 115200 baud garbage at U-Boot 9600)
 - [ ] Fix SF2 crossbar warning (`Invalid port mode` at bcm_sf2_crossbar_setup)
 - [ ] Add NAND MTD partition definitions to DTS (for persistent storage on mtd10)
 - [ ] Enable USB_STORAGE=y in kernel (currently =m, modules not available in initramfs)
-- [ ] Clean up enet debug prints before upstream submission
+- [ ] Fix sshd in initramfs (needs `sshd` user, host keys, sshd_config baked in)
 - [ ] Port DQM PMC interface for SMP (CPU1)
 - [ ] Submit AP630 DTS + driver patches to Linux kernel mailing list
+- [ ] Investigate RDP/Runner hardware accelerator for line-rate forwarding
 
 ### Open Questions
 
