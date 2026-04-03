@@ -88,7 +88,7 @@
       changed_when: false
       failed_when: false
       register: mc_check
-      tags: [always]
+      tags: [loki, tempo]
 
     - name: Configure MinIO client alias
       ansible.builtin.command: >
@@ -99,7 +99,7 @@
       changed_when: false
       no_log: true
       when: mc_check.rc == 0
-      tags: [always]
+      tags: [loki, tempo]
 
     - name: Create Loki S3 bucket
       ansible.builtin.command: >
@@ -107,7 +107,7 @@
       register: loki_bucket
       changed_when: "'Bucket created' in loki_bucket.stdout"
       when: mc_check.rc == 0
-      tags: [always]
+      tags: [loki]
 
     - name: Create Tempo S3 bucket
       ansible.builtin.command: >
@@ -115,7 +115,7 @@
       register: tempo_bucket
       changed_when: "'Bucket created' in tempo_bucket.stdout"
       when: mc_check.rc == 0
-      tags: [always]
+      tags: [tempo]
 
     - name: Check if observability MinIO user exists
       ansible.builtin.command: >
@@ -124,7 +124,7 @@
       failed_when: false
       register: minio_user_check
       when: mc_check.rc == 0
-      tags: [always]
+      tags: [loki, tempo]
 
     - name: Create observability MinIO user
       ansible.builtin.command: >
@@ -133,7 +133,7 @@
         {{ minio_observability_secret_key }}
       no_log: true
       when: mc_check.rc == 0 and minio_user_check.rc != 0
-      tags: [always]
+      tags: [loki, tempo]
 
     - name: Grant observability user readwrite access to Loki bucket
       ansible.builtin.command: >
@@ -141,19 +141,11 @@
         --user {{ minio_observability_access_key }}
       changed_when: false
       when: mc_check.rc == 0
-      tags: [always]
+      tags: [loki, tempo]
 
     # --- Grafana PostgreSQL database provisioning ---
 
-    - name: Check if Grafana database exists
-      ansible.builtin.command: >
-        docker exec foundation-postgres psql -U postgres -tAc
-        "SELECT 1 FROM pg_database WHERE datname='grafana'"
-      register: grafana_db_check
-      changed_when: false
-      tags: [grafana]
-
-    - name: Create Grafana database user
+    - name: Ensure Grafana database user exists
       ansible.builtin.command: >
         docker exec foundation-postgres psql -U postgres -c
         "DO $$ BEGIN
@@ -163,7 +155,14 @@
         END $$;"
       changed_when: false
       no_log: true
-      when: grafana_db_check.stdout != '1'
+      tags: [grafana]
+
+    - name: Check if Grafana database exists
+      ansible.builtin.command: >
+        docker exec foundation-postgres psql -U postgres -tAc
+        "SELECT 1 FROM pg_database WHERE datname='grafana'"
+      register: grafana_db_check
+      changed_when: false
       tags: [grafana]
 
     - name: Create Grafana database
