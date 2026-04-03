@@ -19,8 +19,14 @@
 #include <linux/io.h>
 #include <linux/types.h>
 
-/* U-Boot compat — function replacements */
-#define printf		pr_info
+/* U-Boot compat — function replacements.
+ * Can't #define printf because it conflicts with kernel headers.
+ * Instead, provide a wrapper function. */
+static inline int printf(const char *fmt, ...)
+{
+	/* Suppress vendor debug output — too verbose */
+	return 0;
+}
 #define malloc(sz)	kmalloc(sz, GFP_KERNEL)
 #define free		kfree
 
@@ -63,9 +69,45 @@
 /* SOC_BASE_ADDRESS macro used by some code paths in access_macros.h */
 #define USE_SOC_BASE_ADDR
 
-/* rdp_mm memory operations are defined in rdp_mm.h from the vendor source.
- * We provide noncached_alloc/noncached_free stubs since we don't need
- * U-Boot's non-cached memory allocator. */
+/* Override rdp_mm memory operations with writel-based versions.
+ * The vendor rdp_mm.h uses raw pointer dereferences (*dst = val) which
+ * don't work on ARM64 ioremap'd memory. We define our versions BEFORE
+ * rdp_mm.h is included, and guard rdp_mm.h from redefining them. */
+#define _RDP_MM_H_  /* prevent rdp_mm.h from being included */
+static inline void rdp_mm_setl(void *__to, unsigned int __val, unsigned int __n)
+{
+	volatile uint32_t *d = (volatile uint32_t *)__to;
+	unsigned int i;
+	for (i = 0; i < __n / 4; i++)
+		__raw_writel(__val, (void __iomem *)&d[i]);
+}
+static inline void rdp_mm_setl_context(void *__to, unsigned int __val, unsigned int __n)
+{
+	volatile uint32_t *d = (volatile uint32_t *)__to;
+	unsigned int i;
+	for (i = 0; i < __n / 4; i++) {
+		if ((i & 0x3) == 3) continue; /* skip 4th word per context entry */
+		__raw_writel(__val, (void __iomem *)&d[i]);
+	}
+}
+static inline void rdp_mm_cpyl_context(void *__to, void *__from, unsigned int __n)
+{
+	volatile uint32_t *d = (volatile uint32_t *)__to;
+	uint32_t *s = (uint32_t *)__from;
+	unsigned int i;
+	for (i = 0; i < __n / 4; i++)
+		__raw_writel(s[i], (void __iomem *)&d[i]);
+}
+/* memcpyl_prediction: uint16 source -> uint32 MMIO dest */
+static inline void memcpyl_prediction(void *__to, void *__from, unsigned int __n)
+{
+	volatile uint32_t *d = (volatile uint32_t *)__to;
+	uint16_t *s = (uint16_t *)__from;
+	unsigned int i;
+	for (i = 0; i < __n / 2; i++)
+		__raw_writel((uint32_t)s[i], (void __iomem *)&d[i]);
+}
+/* Provide noncached_alloc/noncached_free stubs. */
 static inline void *noncached_alloc(size_t sz, unsigned long align) { return kmalloc(sz, GFP_KERNEL); }
 static inline void noncached_free(size_t sz, void *p) { kfree(p); }
 static inline void *memalign(size_t align, size_t sz) { return kmalloc(sz, GFP_KERNEL); }
@@ -119,6 +161,12 @@ static inline void *memalign(size_t align, size_t sz) { return kmalloc(sz, GFP_K
 /* Should be defined in auto header */
 #endif
 /* RDD_CONTEXT_TABLE_DTS now comes from auto headers with WL4908 */
+
+static inline void *rdp_mm_aligned_alloc(unsigned int sz, unsigned int *phy)
+{
+	if (phy) *phy = 0;
+	return kmalloc(sz, GFP_KERNEL);
+}
 
 #else
 #error "This shim is for kernel module compilation only"

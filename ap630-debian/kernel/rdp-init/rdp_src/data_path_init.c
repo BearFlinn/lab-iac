@@ -22,7 +22,7 @@
 
 
 #ifdef __UBOOT__
-/* replaced by uboot_shim.h */
+/* common.h replaced by uboot_shim.h */
 #endif
 #include "data_path_init.h"
 #include "rdpa_types.h"

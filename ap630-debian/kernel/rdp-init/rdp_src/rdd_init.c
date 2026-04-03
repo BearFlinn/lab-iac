@@ -161,6 +161,7 @@ BL_LILAC_RDD_ERROR_DTE rdd_load_microcode ( uint8_t  *xi_runer_A_microcode_ptr,
 }
 
 
+#if 0
 static void memcpyl_prediction ( void *  __to, void *  __from, unsigned int __n )
 {
     uint8_t *src = (uint8_t *)__from;
@@ -177,6 +178,7 @@ static void memcpyl_prediction ( void *  __to, void *  __from, unsigned int __n 
     }
 }
 
+#endif
 
 BL_LILAC_RDD_ERROR_DTE rdd_load_prediction ( uint8_t  *xi_runer_A_prediction_ptr,
                                              uint8_t  *xi_runer_B_prediction_ptr,
