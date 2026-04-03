@@ -71,6 +71,22 @@
 	power-domains = <&pmb BCM_PMB_GMAC>;
 };
 
+/* Power on RDP and FPM for Runner data path access.
+ * Uses a minimal platform device that holds pm_runtime references. */
+/ {
+	rdp_power: rdp-power {
+		compatible = "brcm,bcm4908-rdp-power";
+		power-domains = <&pmb BCM_PMB_RDP>;
+		status = "okay";
+	};
+
+	fpm_power: fpm-power {
+		compatible = "brcm,bcm4908-rdp-power";
+		power-domains = <&pmb BCM_PMB_FPM>;
+		status = "okay";
+	};
+};
+
 &usb_phy {
 	brcm,ioc = <1>;
 	status = "okay";

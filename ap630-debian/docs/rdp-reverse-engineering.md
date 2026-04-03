@@ -99,14 +99,44 @@ They must NOT overlap with Linux kernel memory.
 ## Next Steps for RE
 
 1. **Extract firmware binaries** from rdpa.ko data section for offline analysis
-2. **Check asuswrt-merlin.ng GPL source** for `rdd_*` and `fi_bl_drv_*` implementations
-   - Path: `release/src-rt-5.04axhnd.675x/rdp/`
-   - Some RDD functions may be open source (GPL obligation from kernel module)
+2. **Check asuswrt-merlin.ng GPL source** — **CHECKED (2026-04-03)**
+   The situation is layered — RDPA/BDMF are binary blobs, but the hardware
+   drivers beneath them are **full GPL source**:
+   - `rdp/drivers/rdp_subsystem/BCM4908/data_path_init.c` — full init sequence
+   - `rdp/drivers/rdp_subsystem/BCM4908/rdp_drv_bbh.c` (362 KB) — BBH RX/TX config
+   - `rdp/drivers/rdp_subsystem/BCM4908/rdp_drv_bpm.c` — BPM init, full source
+   - `rdp/drivers/rdp_subsystem/BCM4908/rdp_drv_sbpm.c` — SBPM init
+   - `rdp/drivers/rdp_subsystem/BCM4908/rdp_drv_ih.c` — Ingress Handler
+   - `rdp_bbh_arrays.c`, `rdp_dma_arrays.c`, `rdp_runner_arrays.c` — HW config tables
+   - Full register headers: `rdp_bbh.h`, `rdp_bpm.h`, `rdp_dma.h`, `rdp_map.h`, etc.
+   - RDD layer: `rdp/projects/DSL_63138/drivers/rdd/rdd_init.c` (143 KB), 30+ files
+     with WL4908-specific `#ifdef` paths
+   - Runner firmware: `runner_fw_a.c`–`runner_fw_d.c` as loadable `uint32_t` C arrays
+   Binary-only: BDMF (`bdmf.o`), RDPA core (`rdpa.o`).
+   **Strategy:** bypass BDMF/RDPA, write a minimal kernel module using the
+   register-level drivers to init BBH+BPM+DMA and load Runner firmware directly.
 3. **Boot stock HiveOS and dump Runner register state** while traffic flows
    - Use root shell (CVE-2025-27229) to read MMIO registers
-   - Compare with register arrays in rdpa.ko
+   - Compare with config arrays in GPL source
 4. **Focus on minimal viable path**: just configure BBH + BPM + DMA for
    CPU-to-switch forwarding, skip flow cache and WiFi offload
+   - `data_path_init.c` has the exact init sequence
+   - Runner firmware C arrays can be loaded directly onto the Runner cores
+   - No need for BDMF/RDPA if we only need basic forwarding
 5. **Alternative**: try loading the stock rdpa.ko stack on our kernel
    - Would need kernel 4.1.52 ABI compatibility or symbol shimming
    - Stock modules are for aarch64 Linux 4.1.52 SMP PREEMPT
+
+## iuDMA Tuning Results (2026-04-03)
+
+Confirmed that the ~10 Mbps limit is a **hardware property** of the iuDMA engine,
+not a software or configuration issue. Tested via live register writes on running system:
+
+- OK_TO_SEND (0x80002040): 7→15, no throughput change
+- DMA burst length (0x80002a0c): 8→16, no change; 32 crashes DMA
+- Flow control enable (0x80002800 bit 1): breaks networking
+- All switch ports and UMAC confirmed at 1000 Mbps
+- Overflow counter stays 0 — no drops at the ENET block level
+- ~844 IRQs/sec during load (~1 packet per interrupt, no NAPI batching benefit)
+- Throughput is byte-rate limited (scales 5→9.5 Mbps from 64→1400 byte packets)
+- The "700 Mbps UDP TX" was sender-side only; receiver gets 9.4 Mbps with 99% loss

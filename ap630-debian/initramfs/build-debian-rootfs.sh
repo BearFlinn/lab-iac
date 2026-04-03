@@ -56,22 +56,6 @@ ln -sf /lib/systemd/system/getty@.service \
 # Root password: "debian" (change on first login)
 chroot "$ROOTFS" sh -c 'echo "root:debian" | chpasswd'
 
-# SSH config
-cat > "$ROOTFS/etc/ssh/sshd_config" << EOF
-Port 22
-PermitRootLogin yes
-PasswordAuthentication yes
-UsePAM yes
-Subsystem sftp /usr/lib/openssh/sftp-server
-EOF
-
-# Create sshd privilege separation user
-chroot "$ROOTFS" useradd -r -d /run/sshd -s /usr/sbin/nologin sshd 2>/dev/null || true
-mkdir -p "$ROOTFS/run/sshd"
-
-# Pre-generate host keys so SSH works on first boot
-chroot "$ROOTFS" ssh-keygen -A
-
 # Network: systemd-networkd config
 mkdir -p "$ROOTFS/etc/systemd/network"
 
@@ -116,6 +100,24 @@ chroot "$ROOTFS" apt-get install -y --no-install-recommends \
     ca-certificates \
     2>&1 | grep -E "^(Setting up|Unpacking)" | head -30
 echo "  ..."
+
+# SSH config (AFTER openssh-server install so postinst doesn't overwrite)
+cat > "$ROOTFS/etc/ssh/sshd_config" << EOF
+Port 22
+PermitRootLogin yes
+PasswordAuthentication yes
+UsePAM yes
+Subsystem sftp /usr/lib/openssh/sftp-server
+EOF
+
+# Ensure sshd privilege separation user exists (openssh-server postinst usually creates
+# this, but it may fail in a debootstrap chroot without a running init system)
+chroot "$ROOTFS" useradd -r -d /run/sshd -s /usr/sbin/nologin sshd 2>/dev/null || true
+mkdir -p "$ROOTFS/run/sshd"
+
+# Re-generate host keys (postinst may have failed to generate them in chroot)
+rm -f "$ROOTFS"/etc/ssh/ssh_host_*
+chroot "$ROOTFS" ssh-keygen -A
 
 # Clean up to save space
 chroot "$ROOTFS" apt-get clean

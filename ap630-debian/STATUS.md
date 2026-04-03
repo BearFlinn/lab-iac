@@ -27,13 +27,44 @@ at 1.8 GHz, 1 GB RAM. Kernel 6.12 with custom DTS and local driver patches.
 | Test | Result | Notes |
 |------|--------|-------|
 | Ping latency | 0.5 ms | Sub-ms, excellent |
-| TCP TX | 10 Mbps | Limited by RX ACK path |
-| TCP RX | 10 Mbps | iuDMA hardware ceiling |
-| UDP TX flood | 700 Mbps | Near wire speed |
-| UDP RX flood | 10 Mbps | Same iuDMA bottleneck |
+| TCP TX | 10 Mbps | End-to-end throughput, iuDMA bottleneck |
+| TCP RX | 9.4 Mbps | iuDMA hardware ceiling |
+| UDP TX flood | 9.4 Mbps delivered | Sender reports 668 Mbps, **99% packet loss** at receiver |
+| UDP RX flood | 9.5 Mbps | Same iuDMA bottleneck |
 | WAN download | 868 Mbps | Laptop direct (benchmark) |
 
-The 10 Mbps RX limit is a hardware property of the BCM4908's iuDMA path.
+**CORRECTION (2026-04-03):** The previously reported "700 Mbps UDP TX" was the *sender*
+rate, not actual delivered throughput. The receiver only gets ~9.4 Mbps with 99% loss.
+The bottleneck is **bidirectional** — ~10 Mbps in both TX and RX.
+
+### Packet-size sweep (UDP RX)
+
+| Packet size | Delivered Mbps | Loss |
+|-------------|---------------|------|
+| 64 bytes    | 4.9           | 1.3% |
+| 128 bytes   | 6.6           | 1.9% |
+| 256 bytes   | 8.0           | 3.2% |
+| 512 bytes   | 8.9           | 5.5% |
+| 1024 bytes  | 9.4           | 9.8% |
+| 1400 bytes  | 9.5           | 13%  |
+
+The limit is primarily **byte-rate** (scales with packet size), not packet-rate.
+
+### DMA register tuning results (2026-04-03)
+
+All switch ports and the IMP/CPU port confirmed at 1000 Mbps.
+UMAC confirmed at CMD_SPEED_1000. No speed misconfiguration.
+
+| Experiment | TCP RX result | Notes |
+|-----------|---------------|-------|
+| Baseline | 9.41 Mbps | — |
+| OK_TO_SEND = 15 (was 7) | 9.41 Mbps | No effect |
+| Burst length = 16 (was 8) | 9.41 Mbps | No effect |
+| Burst length = 32 | DMA crash | Unsafe hot write |
+| Flow control enable | Network broken | FLOWC_CH1_EN disrupts DMA |
+
+Conclusion: the ~10 Mbps iuDMA throughput is a **hardware limitation** of the
+BCM4908 slow-path DMA engine. No register tuning can change it.
 Line-rate forwarding requires the Runner Data Path (RDP) accelerator.
 
 ## Next Steps (by priority)
@@ -49,11 +80,15 @@ Line-rate forwarding requires the Runner Data Path (RDP) accelerator.
 6. **Submit AP630 DTS** to linux-arm-kernel mailing list
 7. **Submit enet driver fixes** (IRQ reorder, DMA quiesce, GMAC power domain) to netdev
 
-### Performance (Major Effort)
+### Performance (Major Effort — BLOCKER for router use)
 8. **RDP/Runner reverse engineering** — stock firmware extracted, see `docs/rdp-reverse-engineering.md`
    - rdpa.ko has full symbols (2449), 4 firmware binaries (~32 KB each)
-   - GPL source likely available in asuswrt-merlin.ng `rdp/` directory
-   - Next: check GPL source, dump live registers from stock HiveOS, attempt minimal init
+   - **Checked (2026-04-03):** RDPA/BDMF are binary blobs, BUT the register-level
+     hardware drivers (`data_path_init.c`, `rdp_drv_bbh.c`, `rdp_drv_bpm.c`, etc.)
+     and RDD layer are **full GPL source** in asuswrt-merlin.ng. Runner firmware
+     available as loadable `uint32_t` C arrays. See `docs/rdp-reverse-engineering.md`.
+   - Next: write minimal kernel module using GPL hardware drivers to init
+     BBH+BPM+DMA, load Runner firmware, bypass BDMF/RDPA entirely
 9. **SMP** — port DQM PMC `pmc_cpu_core_power_up()` from bcm63xx ATF
 
 ## Files

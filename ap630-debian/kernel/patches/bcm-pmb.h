@@ -10,5 +10,7 @@
 #define BCM_PMB_SATA				0x05
 #define BCM_PMB_SWITCH				0x06
 #define BCM_PMB_GMAC				0x07
+#define BCM_PMB_RDP				0x08
+#define BCM_PMB_FPM				0x09
 
 #endif

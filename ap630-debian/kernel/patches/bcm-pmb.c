@@ -245,6 +245,8 @@ static int bcm_pmb_power_on(struct generic_pm_domain *genpd)
 		return bcm_pmb_power_on_device(pmb, data->bus, data->device);
 	case BCM_PMB_SWITCH:
 	case BCM_PMB_GMAC:
+	case BCM_PMB_RDP:
+	case BCM_PMB_FPM:
 		return bcm_pmb_power_on_device(pmb, data->bus, data->device);
 	case BCM_PMB_SATA:
 		return bcm_pmb_power_on_sata(pmb, data->bus, data->device);
@@ -268,6 +270,8 @@ static int bcm_pmb_power_off(struct generic_pm_domain *genpd)
 	case BCM_PMB_HOST_USB:
 	case BCM_PMB_SWITCH:
 	case BCM_PMB_GMAC:
+	case BCM_PMB_RDP:
+	case BCM_PMB_FPM:
 		return bcm_pmb_power_off_device(pmb, data->bus, data->device);
 	default:
 		dev_err(pmb->dev, "unsupported device id: %d\n", data->id);
@@ -344,6 +348,8 @@ static const struct bcm_pmb_pd_data bcm_pmb_bcm4908_data[] = {
 	{ .name = "usb", .id = BCM_PMB_HOST_USB, .bus = 1, .device = 17, },
 	{ .name = "switch", .id = BCM_PMB_SWITCH, .bus = 1, .device = 10, },
 	{ .name = "gmac", .id = BCM_PMB_GMAC, .bus = 1, .device = 21, },
+	{ .name = "rdp", .id = BCM_PMB_RDP, .bus = 0, .device = 3, },
+	{ .name = "fpm", .id = BCM_PMB_FPM, .bus = 0, .device = 4, },
 	{ },
 };
 
