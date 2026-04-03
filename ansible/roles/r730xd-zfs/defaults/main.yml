@@ -1,0 +1,32 @@
+---
+# r730xd-zfs: Create and configure a ZFS raidz1 pool
+#
+# Requires: zfs_drives fact set by r730xd-zfs.yml pre_tasks
+#   Each entry: {bay: N, role: "zfs", serial: "...", device: "sdX"}
+
+# Pool name
+zfs_pool_name: "tank"
+
+# Pool type (raidz1 for 3-drive single parity)
+zfs_pool_type: "raidz1"
+
+# Mount point for the pool root dataset
+zfs_mount_point: "/mnt/zfs"
+
+# Pool properties
+zfs_ashift: 12              # 4K sector alignment
+
+# Dataset properties (applied to root dataset)
+zfs_compression: "lz4"
+zfs_atime: "off"
+zfs_xattr: "sa"
+zfs_recordsize: "128K"      # default, tunable per child dataset
+
+# ARC max size in bytes (4GB default, out of 32GB total)
+# ZFS ARC competes with MergerFS page cache, staging VM, Docker containers
+zfs_arc_max_bytes: 4294967296
+
+# Weekly scrub schedule (cron)
+zfs_scrub_cron_day: "0"     # Sunday
+zfs_scrub_cron_hour: "2"    # 2 AM
+zfs_scrub_cron_minute: "0"

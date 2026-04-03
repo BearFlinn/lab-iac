@@ -43,6 +43,13 @@ monitoring_smart_reallocated_warn: 5
 # SnapRAID: max days since last scrub before warning
 monitoring_snapraid_scrub_max_days: 7
 
+# ZFS: pool capacity thresholds
+monitoring_zfs_capacity_warn_pct: 80
+monitoring_zfs_capacity_crit_pct: 90
+
+# ZFS: max days since last scrub before warning
+monitoring_zfs_scrub_max_days: 8
+
 # --- Services to monitor ---
 # List of systemd units that must be active. Checks skip units that don't exist.
 monitoring_required_services:

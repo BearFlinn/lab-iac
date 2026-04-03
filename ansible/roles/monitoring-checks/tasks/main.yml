@@ -38,6 +38,7 @@
     - check-ipmi
     - check-snapraid
     - check-nfs
+    - check-zfs
   tags: [monitoring]
 
 - name: Deploy check orchestrator

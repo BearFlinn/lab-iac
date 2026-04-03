@@ -47,6 +47,12 @@ all:
           role: data         # 3TB
         - bay: 8
           role: data         # 3TB (existing data — not wiped)
+        - bay: 9
+          role: zfs          # 2TB — migrated from tower-pc
+        - bay: 10
+          role: zfs          # 2TB — migrated from tower-pc
+        - bay: 11
+          role: zfs          # 2TB — migrated from tower-pc
 
   vars:
     network_dns:

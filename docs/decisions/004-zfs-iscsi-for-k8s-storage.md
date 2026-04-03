@@ -1,7 +1,7 @@
 # ADR-004: ZFS + iSCSI for K8s Block Storage
 
 **Date:** 2026-04-02
-**Status:** Accepted
+**Status:** Accepted (ZFS pool created 2026-04-03, iSCSI pending)
 
 ## Context
 

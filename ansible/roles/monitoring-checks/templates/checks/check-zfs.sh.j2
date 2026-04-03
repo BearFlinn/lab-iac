@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+# Managed by Ansible — monitoring-checks role
+# Check ZFS pool health, capacity, scrub status, I/O errors, and ARC stats
+# Gracefully exits if ZFS is not installed
+set -euo pipefail
+
+source "{{ monitoring_lib_dir }}/lib/alert.sh"
+init_metrics "check_zfs"
+
+CHECK="check-zfs"
+CAPACITY_WARN={{ monitoring_zfs_capacity_warn_pct }}
+CAPACITY_CRIT={{ monitoring_zfs_capacity_crit_pct }}
+SCRUB_MAX_DAYS={{ monitoring_zfs_scrub_max_days }}
+
+# Skip if ZFS is not installed
+if ! command -v zpool &>/dev/null; then
+    write_metric "monitoring_zfs_installed" "0" "Whether ZFS is installed" "gauge"
+    flush_metrics
+    exit 0
+fi
+
+write_metric "monitoring_zfs_installed" "1" "Whether ZFS is installed" "gauge"
+write_metric "monitoring_zfs_check_time" "$(date +%s)" "Timestamp of last ZFS check" "gauge"
+
+# Check each pool
+while IFS=$'\t' read -r pool health; do
+    # Pool health (ONLINE, DEGRADED, FAULTED, etc.)
+    if [ "$health" = "ONLINE" ]; then
+        write_metric_labeled "monitoring_zfs_pool_healthy" "pool=\"${pool}\"" "1"
+        clear_alert "$CHECK" "health_${pool}"
+    else
+        write_metric_labeled "monitoring_zfs_pool_healthy" "pool=\"${pool}\"" "0"
+        alert "critical" "$CHECK" "health_${pool}" "ZFS pool ${pool} is ${health}"
+    fi
+
+    # Capacity percentage
+    capacity=$(zpool list -Hpo capacity "$pool" 2>/dev/null || echo "")
+    if [ -n "$capacity" ]; then
+        write_metric_labeled "monitoring_zfs_pool_capacity_percent" "pool=\"${pool}\"" "$capacity"
+        if (( capacity >= CAPACITY_CRIT )); then
+            alert "critical" "$CHECK" "capacity_${pool}" "ZFS pool ${pool} is ${capacity}% full"
+        elif (( capacity >= CAPACITY_WARN )); then
+            alert "warning" "$CHECK" "capacity_${pool}" "ZFS pool ${pool} is ${capacity}% full"
+        else
+            clear_alert "$CHECK" "capacity_${pool}"
+        fi
+    fi
+
+    # Allocated and free bytes
+    alloc=$(zpool list -Hpo allocated "$pool" 2>/dev/null || echo "0")
+    free=$(zpool list -Hpo free "$pool" 2>/dev/null || echo "0")
+    write_metric_labeled "monitoring_zfs_pool_allocated_bytes" "pool=\"${pool}\"" "$alloc"
+    write_metric_labeled "monitoring_zfs_pool_free_bytes" "pool=\"${pool}\"" "$free"
+
+    # Scrub status — parse last scrub completion time
+    scrub_line=$(zpool status "$pool" 2>/dev/null | grep "scan:" || true)
+    if echo "$scrub_line" | grep -q "scrub repaired"; then
+        # Extract date from lines like: "scan: scrub repaired 0B in 01:23:45 with 0 errors on Sun Apr  6 02:01:23 2026"
+        scrub_date=$(echo "$scrub_line" | grep -oP 'on \K.+' || true)
+        if [ -n "$scrub_date" ]; then
+            scrub_epoch=$(date -d "$scrub_date" +%s 2>/dev/null || echo 0)
+            now=$(date +%s)
+            days_since=$(( (now - scrub_epoch) / 86400 ))
+            write_metric_labeled "monitoring_zfs_scrub_age_days" "pool=\"${pool}\"" "$days_since"
+            if (( days_since > SCRUB_MAX_DAYS )); then
+                alert "warning" "$CHECK" "scrub_${pool}" "ZFS pool ${pool} scrub is ${days_since} days old (threshold: ${SCRUB_MAX_DAYS} days)"
+            else
+                clear_alert "$CHECK" "scrub_${pool}"
+            fi
+        fi
+    elif echo "$scrub_line" | grep -q "scrub in progress"; then
+        write_metric_labeled "monitoring_zfs_scrub_in_progress" "pool=\"${pool}\"" "1"
+    fi
+
+    # I/O errors from zpool status (read/write/checksum columns)
+    errors=$(zpool status "$pool" 2>/dev/null | awk '
+        /raidz|mirror|spare|log|cache|sd[a-z]|nvme/ {
+            for (i=3; i<=5; i++) {
+                if ($i ~ /^[0-9]+$/) sum += $i
+            }
+        }
+        END { print sum+0 }
+    ')
+    write_metric_labeled "monitoring_zfs_pool_errors" "pool=\"${pool}\"" "$errors"
+    if (( errors > 0 )); then
+        alert "critical" "$CHECK" "errors_${pool}" "ZFS pool ${pool} has ${errors} I/O errors"
+    else
+        clear_alert "$CHECK" "errors_${pool}"
+    fi
+
+done < <(zpool list -Ho name,health 2>/dev/null)
+
+# ARC stats from /proc/spl/kstat/zfs/arcstats
+if [ -f /proc/spl/kstat/zfs/arcstats ]; then
+    arc_size=$(awk '/^size / {print $3}' /proc/spl/kstat/zfs/arcstats)
+    arc_hits=$(awk '/^hits / {print $3}' /proc/spl/kstat/zfs/arcstats)
+    arc_misses=$(awk '/^misses / {print $3}' /proc/spl/kstat/zfs/arcstats)
+    [ -n "$arc_size" ] && write_metric "monitoring_zfs_arc_size_bytes" "$arc_size" "ZFS ARC size in bytes" "gauge"
+    [ -n "$arc_hits" ] && write_metric "monitoring_zfs_arc_hits_total" "$arc_hits" "ZFS ARC cache hits" "counter"
+    [ -n "$arc_misses" ] && write_metric "monitoring_zfs_arc_misses_total" "$arc_misses" "ZFS ARC cache misses" "counter"
+fi
+
+flush_metrics

@@ -1,24 +1,17 @@
 ---
-# R730xd Full Storage Stack
-# Chains: bay resolution → storage-prep → mergerfs → snapraid → nfs-server
-#
-# Drive bays are defined in inventory (r730xd_drive_bays). The pre_tasks
-# resolve bay numbers to OS block devices via iDRAC racadm at runtime.
+# R730xd ZFS Pool Setup
+# Resolves ZFS-role drive bays via iDRAC, then creates raidz1 pool
 #
 # Prerequisites:
 #   - R730xd baseline setup applied (setup-r730xd.yml)
-#   - Data drives physically installed and in Non-RAID/JBOD mode via iDRAC
+#   - ZFS drives physically installed and in Non-RAID/JBOD mode via iDRAC
 #   - iDRAC accessible at idrac_host with credentials in vault
 #
 # Usage:
-#   ansible-playbook -i ansible/inventory/r730xd.yml ansible/playbooks/r730xd-storage.yml \
+#   ansible-playbook -i ansible/inventory/r730xd.yml ansible/playbooks/r730xd-zfs.yml \
 #     --vault-password-file .vault_pass -v
-#
-# After first run:
-#   - Run `ssh r730xd 'sudo snapraid sync'` (initial sync takes hours)
-#   - Update K8s NFS provisioner to point at 10.0.0.200:/mnt/pool
 
-- name: R730xd storage stack
+- name: R730xd ZFS pool setup
   hosts: r730xd
   gather_facts: yes
   become: yes
@@ -31,10 +24,10 @@
       ansible.builtin.assert:
         that:
           - r730xd_drive_bays is defined
-          - r730xd_drive_bays | length > 0
+          - r730xd_drive_bays | selectattr('role', 'equalto', 'zfs') | list | length > 0
         fail_msg: >
-          No drive bays defined. Add r730xd_drive_bays to inventory
-          (ansible/inventory/r730xd.yml).
+          No ZFS drive bays defined. Add entries with role: zfs to
+          r730xd_drive_bays in inventory (ansible/inventory/r730xd.yml).
 
     - name: Query iDRAC for physical disk info
       ansible.builtin.command: >
@@ -83,8 +76,6 @@
       ansible.builtin.set_fact:
         serial_to_device: "{{ _serial_map }}"
       vars:
-        # Normalize serials: strip spaces and dashes, uppercase
-        # iDRAC reports "WD WCC4E6JPH3JT", lsblk reports "WD-WCC4E6JPH3JT"
         _serial_map: >-
           {%- set result = {} -%}
           {%- for dev in (lsblk_output.stdout | from_json).blockdevices -%}
@@ -95,17 +86,14 @@
           {%- endfor -%}
           {{ result }}
 
-    - name: Filter inventory to storage drives (exclude ZFS)
+    - name: Resolve ZFS drive bays to OS devices
       ansible.builtin.set_fact:
-        storage_drive_bays: "{{ r730xd_drive_bays | rejectattr('role', 'equalto', 'zfs') | list }}"
-
-    - name: Resolve storage drive bays to OS devices
-      ansible.builtin.set_fact:
-        resolved_drives: "{{ _resolved }}"
+        zfs_drives: "{{ _resolved }}"
       vars:
+        _zfs_bays: "{{ r730xd_drive_bays | selectattr('role', 'equalto', 'zfs') | list }}"
         _resolved: >-
           {%- set result = [] -%}
-          {%- for bay_def in storage_drive_bays -%}
+          {%- for bay_def in _zfs_bays -%}
             {%- set bay_num = bay_def.bay | int -%}
             {%- set serial = idrac_bay_map.get(bay_num, '') -%}
             {%- if serial -%}
@@ -123,30 +111,25 @@
           {%- endfor -%}
           {{ result }}
 
-    - name: Validate all storage bays were resolved
+    - name: Validate all ZFS bays were resolved
       ansible.builtin.assert:
         that:
-          - resolved_drives | length == storage_drive_bays | length
+          - zfs_drives | length == (r730xd_drive_bays | selectattr('role', 'equalto', 'zfs') | list | length)
         fail_msg: >
-          Could not resolve all storage drive bays. Expected {{ storage_drive_bays | length }}
-          drives, found {{ resolved_drives | length }}.
+          Could not resolve all ZFS drive bays. Expected
+          {{ r730xd_drive_bays | selectattr('role', 'equalto', 'zfs') | list | length }}
+          drives, found {{ zfs_drives | length }}.
           Check that drives are installed, in JBOD mode, and visible to the OS.
           iDRAC bay→serial map: {{ idrac_bay_map }}
           Host serial→device map: {{ serial_to_device }}
 
-    - name: Display resolved drive mapping
+    - name: Display resolved ZFS drive mapping
       ansible.builtin.debug:
-        msg: "Bay {{ item.bay }} ({{ item.role }}): serial={{ item.serial }} → /dev/{{ item.device }}"
-      loop: "{{ resolved_drives }}"
+        msg: "Bay {{ item.bay }} (zfs): serial={{ item.serial }} → /dev/{{ item.device }}"
+      loop: "{{ zfs_drives }}"
       loop_control:
         label: "bay{{ item.bay }}"
 
   roles:
-    - role: r730xd-storage-prep
-      tags: [storage, storage-prep]
-    - role: r730xd-mergerfs
-      tags: [storage, mergerfs]
-    - role: r730xd-snapraid
-      tags: [storage, snapraid]
-    - role: r730xd-nfs-server
-      tags: [storage, nfs]
+    - role: r730xd-zfs
+      tags: [storage, zfs]

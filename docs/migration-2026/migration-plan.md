@@ -133,7 +133,7 @@ Tower PC resumes the router role ([ADR-011](../decisions/011-ap630-restored-to-s
 - [x] ~~Configure storage~~ — **done 2026-03-31. MergerFS pool at `/mnt/pool` (5×3TB data), SnapRAID parity (2×4TB). Deployed via `ansible/playbooks/r730xd-storage.yml`.**
   - [ ] bcache SSD for read acceleration (deferred — not blocking)
 - [x] ~~Set up NFS exports for K8s PVCs~~ — **done 2026-03-31. `/mnt/pool` exported to 10.0.0.0/24 via `r730xd-nfs-server` role.**
-- [ ] Set up ZFS pool on 3×2TB drives (migrated from tower-pc) for latency-sensitive workloads — see [ADR-004](../decisions/004-zfs-iscsi-for-k8s-storage.md)
+- [x] ~~Set up ZFS pool on 3×2TB drives (migrated from tower-pc) for latency-sensitive workloads~~ — **done 2026-04-03. ZFS raidz1 pool `tank` (3×2TB, bays 9+10+11) mounted at `/mnt/zfs`. ~3.6TB usable. lz4 compression, 4GB ARC max. Monitoring: `check-zfs.sh` (tier 1, every 5 min), Prometheus alert rules (degraded/capacity/errors/scrub). See [ADR-004](../decisions/004-zfs-iscsi-for-k8s-storage.md). Deployed via `ansible/playbooks/r730xd-zfs.yml`.**
 - [ ] Set up iSCSI off ZFS for K8s cluster storage (replacing NFS for performance) — see [ADR-004](../decisions/004-zfs-iscsi-for-k8s-storage.md)
 - [x] ~~Set up S3-compatible storage~~ — **done 2026-04-01. MinIO deployed at 10.0.0.200:9000 (API) / :9001 (console). Data on MergerFS pool. Deployed via `ansible/playbooks/deploy-foundation-stores.yml`. See ADR-003.**
 - [x] ~~Set up foundation data stores~~ — **done 2026-04-01. PostgreSQL 16 (:5432), Redis 7 (:6379), MinIO (:9000/:9001) running as Docker Compose services on R730xd. Data persisted on MergerFS pool at `/mnt/pool/foundation/`. Daily Postgres backup via pg_dumpall. See ADR-003 and `ansible/README.md` for connection details.**
@@ -175,7 +175,7 @@ Tower PC resumes the router role ([ADR-011](../decisions/011-ap630-restored-to-s
 
 See [ADR-004](../decisions/004-zfs-iscsi-for-k8s-storage.md) and [ADR-005](../decisions/005-nfs-root-for-pxe-nodes.md) for storage architecture decisions.
 
-- [ ] Set up ZFS pool on R730 (3×2TB drives from tower-pc) for latency-sensitive storage
+- [x] ~~Set up ZFS pool on R730 (3×2TB drives from tower-pc) for latency-sensitive storage~~ — **done 2026-04-03 (pool `tank`, raidz1, `/mnt/zfs`)**
 - [ ] Set up iSCSI target on R730 (off ZFS) for K8s block storage
 - [ ] Configure K8s iSCSI CSI driver / provisioner
 - [ ] Migrate existing PV data from tower-pc NFS to R730
@@ -230,7 +230,7 @@ Before the Optiplex can be wiped and joined to K8s, its services need new homes:
 Tower PC serves as both router and GPU inference workstation ([ADR-001](../decisions/001-tower-pc-as-router.md), reinstated by [ADR-011](../decisions/011-ap630-restored-to-stock-wifi-ap.md)).
 
 - [ ] Shut down tower-pc (critical workloads already on R730 staging VM from Phase 2A)
-- [ ] Migrate 3×2TB ZFS drives to R730 (for latency-sensitive ZFS/iSCSI pool)
+- [x] ~~Migrate 3×2TB ZFS drives to R730 (for latency-sensitive ZFS/iSCSI pool)~~ — **done 2026-04-03. Drives installed in bays 9+10+11, pool `tank` created.**
 - [ ] Install GPUs: 1080 Ti + 1050 Ti (keep existing 1060)
   - Verify PSU can handle the load (1080 Ti alone is ~250W)
   - Verify PCIe slot spacing for triple GPU

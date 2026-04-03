@@ -149,6 +149,62 @@ groups:
             SnapRAID scrub is {{ '{{' }} $value {{ '}}' }} days overdue
             on {{ '{{' }} $labels.instance {{ '}}' }}
 
+  - name: zfs
+    rules:
+      - alert: ZFSPoolDegraded
+        expr: monitoring_zfs_pool_healthy == 0
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: >-
+            ZFS pool {{ '{{' }} $labels.pool {{ '}}' }} is unhealthy
+            on {{ '{{' }} $labels.instance {{ '}}' }}
+
+      - alert: ZFSPoolCapacityWarning
+        expr: monitoring_zfs_pool_capacity_percent > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: >-
+            ZFS pool {{ '{{' }} $labels.pool {{ '}}' }} is
+            {{ '{{' }} $value {{ '}}' }}% full
+            on {{ '{{' }} $labels.instance {{ '}}' }}
+
+      - alert: ZFSPoolCapacityCritical
+        expr: monitoring_zfs_pool_capacity_percent > 90
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: >-
+            ZFS pool {{ '{{' }} $labels.pool {{ '}}' }} is
+            {{ '{{' }} $value {{ '}}' }}% full
+            on {{ '{{' }} $labels.instance {{ '}}' }}
+
+      - alert: ZFSPoolErrors
+        expr: monitoring_zfs_pool_errors > 0
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: >-
+            ZFS pool {{ '{{' }} $labels.pool {{ '}}' }} has
+            {{ '{{' }} $value {{ '}}' }} I/O errors
+            on {{ '{{' }} $labels.instance {{ '}}' }}
+
+      - alert: ZFSScrubOverdue
+        expr: monitoring_zfs_scrub_age_days > 8
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: >-
+            ZFS pool {{ '{{' }} $labels.pool {{ '}}' }} scrub is
+            {{ '{{' }} $value {{ '}}' }} days overdue
+            on {{ '{{' }} $labels.instance {{ '}}' }}
+
   - name: observability
     rules:
       - alert: TargetDown

@@ -1,0 +1,159 @@
+---
+# r730xd-zfs: Install ZFS, create raidz1 pool, tune ARC, enable auto-import
+# Requires: zfs_drives fact from r730xd-zfs.yml pre_tasks
+
+- name: Validate zfs_drives fact exists
+  ansible.builtin.assert:
+    that:
+      - zfs_drives is defined
+      - zfs_drives | length > 0
+    fail_msg: >
+      zfs_drives fact is not set. This role must be called from
+      r730xd-zfs.yml which resolves ZFS drive bays via iDRAC in pre_tasks.
+
+- name: Display ZFS drives
+  ansible.builtin.debug:
+    msg: "Bay {{ item.bay }}: /dev/{{ item.device }} — serial {{ item.serial }}"
+  loop: "{{ zfs_drives }}"
+  loop_control:
+    label: "bay{{ item.bay }}"
+
+- name: Install kernel headers for DKMS
+  ansible.builtin.apt:
+    name: "linux-headers-{{ ansible_kernel }}"
+    state: present
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Install ZFS packages
+  ansible.builtin.apt:
+    name:
+      - zfsutils-linux
+    state: present
+
+- name: Build ZFS DKMS module if missing
+  ansible.builtin.command: "dkms autoinstall"
+  register: dkms_build
+  changed_when: "'added' in dkms_build.stdout or 'built' in dkms_build.stdout"
+
+- name: Load ZFS kernel module
+  community.general.modprobe:
+    name: zfs
+    state: present
+
+- name: Ensure ZFS module loads at boot
+  ansible.builtin.lineinfile:
+    path: /etc/modules-load.d/zfs.conf
+    line: zfs
+    create: yes
+    mode: "0644"
+
+- name: Configure ZFS ARC max
+  ansible.builtin.copy:
+    content: "options zfs zfs_arc_max={{ zfs_arc_max_bytes }}\n"
+    dest: /etc/modprobe.d/zfs.conf
+    mode: "0644"
+  notify: Apply ARC max at runtime
+
+- name: Check if pool already exists
+  ansible.builtin.command: "zpool list {{ zfs_pool_name }}"
+  register: zpool_check
+  changed_when: false
+  failed_when: false
+
+- name: Build device list for pool creation
+  ansible.builtin.set_fact:
+    zfs_device_list: "{{ zfs_drives | map(attribute='device') | map('regex_replace', '^', '/dev/') | list }}"
+  when: zpool_check.rc != 0
+
+- name: Check for existing signatures on ZFS drives (disk and partitions)
+  ansible.builtin.shell: "blkid {{ item }}* 2>/dev/null || true"
+  register: zfs_sig_check
+  changed_when: false
+  loop: "{{ zfs_device_list | default([]) }}"
+  when: zpool_check.rc != 0
+
+- name: Warn about existing signatures
+  ansible.builtin.debug:
+    msg: "WARNING: {{ item.item }} has existing signatures — zpool create -f will be used:\n{{ item.stdout }}"
+  loop: "{{ zfs_sig_check.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item | default('n/a') }}"
+  when:
+    - zpool_check.rc != 0
+    - item.stdout is defined
+    - item.stdout | trim | length > 0
+
+- name: Determine if force create is needed
+  ansible.builtin.set_fact:
+    zfs_force_flag: >-
+      {{ (zfs_sig_check.results | default([])
+          | selectattr('stdout', 'defined')
+          | map(attribute='stdout')
+          | map('trim')
+          | select('ne', '')
+          | list | length > 0) | ternary('-f', '') }}
+  when: zpool_check.rc != 0
+
+- name: Create ZFS pool
+  ansible.builtin.command: >
+    zpool create
+    {{ zfs_force_flag | default('') }}
+    -o ashift={{ zfs_ashift }}
+    -O compression={{ zfs_compression }}
+    -O atime={{ zfs_atime }}
+    -O xattr={{ zfs_xattr }}
+    -O recordsize={{ zfs_recordsize }}
+    -O mountpoint={{ zfs_mount_point }}
+    {{ zfs_pool_name }}
+    {{ zfs_pool_type }}
+    {{ zfs_device_list | join(' ') }}
+  when: zpool_check.rc != 0
+  changed_when: true
+
+- name: Enable ZFS auto-import and mount services
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    enabled: yes
+    state: started
+  loop:
+    - zfs-import-cache
+    - zfs-mount
+    - zfs.target
+
+- name: Create weekly scrub cron job
+  ansible.builtin.cron:
+    name: "zfs-scrub-{{ zfs_pool_name }}"
+    job: "/usr/sbin/zpool scrub {{ zfs_pool_name }}"
+    weekday: "{{ zfs_scrub_cron_day }}"
+    hour: "{{ zfs_scrub_cron_hour }}"
+    minute: "{{ zfs_scrub_cron_minute }}"
+    user: root
+
+- name: Verify pool status
+  ansible.builtin.command: "zpool status {{ zfs_pool_name }}"
+  register: zpool_status
+  changed_when: false
+
+- name: Display pool status
+  ansible.builtin.debug:
+    msg: "{{ zpool_status.stdout_lines }}"
+
+- name: Get pool properties
+  ansible.builtin.command: "zpool list -v {{ zfs_pool_name }}"
+  register: zpool_list
+  changed_when: false
+
+- name: Display pool summary
+  ansible.builtin.debug:
+    msg:
+      - "=== R730xd ZFS Pool Setup Complete ==="
+      - ""
+      - "Pool: {{ zfs_pool_name }}"
+      - "Type: {{ zfs_pool_type }}"
+      - "Drives: {{ zfs_drives | length }} (bays {{ zfs_drives | map(attribute='bay') | join(', ') }})"
+      - "Mount: {{ zfs_mount_point }}"
+      - "ARC max: {{ (zfs_arc_max_bytes / 1073741824) | round(1) }}GB"
+      - "Compression: {{ zfs_compression }}"
+      - ""
+      - "{{ zpool_list.stdout }}"
