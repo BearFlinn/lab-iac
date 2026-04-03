@@ -1,7 +1,7 @@
 # ADR 010: AP630 iuDMA 10 Mbps Limit Requires RDP for Router Use
 
 **Date:** 2026-04-03
-**Status:** Accepted
+**Status:** Accepted — AP630 ruled out as WAN router
 
 ## Context
 
@@ -58,11 +58,17 @@ and 4 embedded firmware binaries).
 ## Consequences
 
 - The AP630 is not usable as a primary router in its current state
-- RDP initialization is the only path to wire-rate forwarding
-- The GPL hardware driver source in asuswrt-merlin.ng makes this feasible without
-  full reverse engineering — `data_path_init.c` documents the exact init sequence,
-  and Runner firmware is available as loadable C arrays
-- Next step: write a minimal kernel module that uses the GPL register drivers to
-  init BBH+BPM+DMA and load Runner firmware, bypassing BDMF/RDPA entirely
-- If minimal RDP init proves infeasible, the AP630 should be deprioritized in favor
-  of a device with open-source data plane support
+- RDP init was successfully ported as a kernel module (rdp_full_init.ko),
+  achieving ~95 Mbps — a 10x improvement over iuDMA's 10 Mbps
+- However, 95 Mbps is CPU-bound on the single Cortex-A53 @ 1.8 GHz
+- Even with full Runner hardware forwarding (RDPA), the CPU must still
+  process every new flow (routing, NAT, firewall). The Runner only
+  accelerates subsequent packets in an already-classified flow.
+- For a router with nftables/NAT, the CPU is always in the path for
+  connection setup. ~95 Mbps is the practical ceiling for routed traffic.
+- The AP630 was designed as a WiFi AP (L2 bridging), not an L3 router.
+  The Runner accelerates bridging, not routing with firewall rules.
+- **Conclusion: the AP630 is not viable as a GbE WAN router.**
+  It should be repurposed (managed switch, low-bandwidth appliance)
+  or replaced with hardware that has a faster CPU or open-source
+  data plane support (e.g., x86 mini-PC, Marvell/Qualcomm SoC).

@@ -78,9 +78,14 @@ Runner firmware, and enables all 4 Runner cores.
 | TCP RX | 9.41 Mbps | **94 Mbps** | **10x** |
 | TCP TX | 10.0 Mbps | **95 Mbps** | **9.5x** |
 
-The ~95 Mbps ceiling is likely CPU-bound (single Cortex-A53 @ 1.8 GHz running
-the full kernel networking stack). Next: enable SMP (second core) and/or
-integrate Runner hardware forwarding to bypass the CPU for routed traffic.
+The ~95 Mbps ceiling is CPU-bound (single Cortex-A53 @ 1.8 GHz). Even with full
+Runner hardware forwarding, the CPU must process every new flow (routing lookup,
+NAT, nftables). The Runner only accelerates already-classified flows (L2 bridging).
+For a router with firewall rules, the CPU is always in the critical path.
+
+**Conclusion: the AP630 is not viable as a GbE WAN router.** The 95 Mbps ceiling
+is ~11% of the 868 Mbps WAN speed. The device was designed as a WiFi AP (L2
+bridging), not an L3 router. See ADR 010 for the full analysis.
 
 ## Next Steps (by priority)
 
