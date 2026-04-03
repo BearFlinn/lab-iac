@@ -1,7 +1,7 @@
 # ADR-003: AP630 as Lab Router (Replacing Tower PC)
 
 **Date:** 2026-04-02
-**Status:** Accepted (supersedes ADR-001)
+**Status:** Superseded by [ADR-011](011-ap630-restored-to-stock-wifi-ap.md) — AP630 restored to stock HiveOS for use as WiFi AP. Tower PC resumes router role (ADR-001 reinstated).
 
 ## Context
 

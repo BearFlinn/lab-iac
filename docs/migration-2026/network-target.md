@@ -1,6 +1,6 @@
 # Target Network Architecture
 
-Last updated: 2026-03-27
+Last updated: 2026-04-03
 
 ## Physical Layout
 
@@ -98,7 +98,8 @@ This is the highest-value segmentation — keeps storage I/O off the general net
 
 | AP | Location | Notes |
 |----|----------|-------|
-| AP230 (primary) | Central location — living room or hallway | Best performance, primary coverage |
+| AP630 (primary) | Central location — living room or hallway | Highest performance (4×4:4 MU-MIMO, 802.11ac Wave 2). Restored to stock HiveOS 2026-04-03 ([ADR-011](../decisions/011-ap630-restored-to-stock-wifi-ap.md)). |
+| AP230 (secondary) | Second coverage zone | Strong performance (3×3:3 MIMO) |
 | AP130 #1 | Garage/workshop | Workshop coverage |
 | AP130 #2 | Far side of house or closet area | Dead spot coverage |
 

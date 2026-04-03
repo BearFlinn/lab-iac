@@ -1,0 +1,170 @@
+#!/usr/bin/expect -f
+# Restore AP630 to stock HiveOS firmware
+# PoE cycles, catches U-Boot, flashes mtd4/5/6/7 from TFTP backups
+
+set timeout 30
+log_user 1
+
+set serial_dev "/dev/ttyUSB0"
+set baud 9600
+set uboot_pw "AhNf?d@ta06"
+
+puts "\n=== AP630 Stock Firmware Restore ==="
+
+# Open serial port
+spawn -noecho sudo picocom -b $baud --noreset $serial_dev
+expect "Terminal ready"
+sleep 1
+
+# PoE cycle
+puts "\n>>> PoE cycling AP..."
+system "bash /home/bearf/Projects/lab-iac/ap630-debian/scripts/power-cycle-ap.sh 5"
+puts ">>> Waiting for boot..."
+
+# Phase 1: Wait for "Hit any key" — don't spam, just watch
+set timeout 90
+expect {
+    "Hit any key*" {
+        puts "\n>>> Caught autoboot prompt"
+    }
+    timeout {
+        puts "\n>>> TIMEOUT waiting for boot"
+        send "\x01\x18"; expect eof; exit 1
+    }
+}
+
+# Send a single key to interrupt autoboot
+send "\r"
+sleep 1
+
+# Phase 2: Handle password prompt
+# The AP asks for a password after autoboot is interrupted
+set timeout 15
+expect {
+    "assword:" {
+        puts "\n>>> Password prompt"
+        sleep 1
+        send "$uboot_pw\r"
+    }
+    "u-boot>" {
+        puts "\n>>> Already at U-Boot (no password needed)"
+    }
+    timeout {
+        # Try sending another key
+        send "\r"
+        expect {
+            "assword:" {
+                sleep 1
+                send "$uboot_pw\r"
+            }
+            "u-boot>" { }
+            timeout {
+                puts "\n>>> Could not reach U-Boot"
+                send "\x01\x18"; expect eof; exit 1
+            }
+        }
+    }
+}
+
+# Wait for u-boot> prompt
+set timeout 15
+expect {
+    "u-boot>" { }
+    "assword:" {
+        # Wrong password? Try again
+        puts "\n>>> Retrying password..."
+        sleep 1
+        send "$uboot_pw\r"
+        expect {
+            "u-boot>" { }
+            timeout {
+                puts "\n>>> Password failed"
+                send "\x01\x18"; expect eof; exit 1
+            }
+        }
+    }
+    timeout {
+        puts "\n>>> No u-boot> prompt after password"
+        send "\x01\x18"; expect eof; exit 1
+    }
+}
+
+puts "\n>>> AT U-BOOT PROMPT — starting restore\n"
+
+# Verify TFTP connectivity
+puts ">>> Checking TFTP server..."
+send "ping 192.168.1.100\r"
+set timeout 15
+expect {
+    "is alive" { }
+    "u-boot>" {
+        puts ">>> WARNING: ping didn't confirm alive, proceeding anyway"
+    }
+    timeout {
+        puts ">>> TFTP server unreachable — check network"
+        send "\x01\x18"; expect eof; exit 1
+    }
+}
+expect "u-boot>"
+
+# Step 1: Erase U-Boot env (mtd7)
+puts "\n>>> Step 1/4: Erasing U-Boot env (mtd7)..."
+send "nand erase 0xe600000 0x100000\r"
+set timeout 30
+expect "u-boot>"
+puts ">>> mtd7 erased"
+
+# Step 2: Flash kernel (mtd4, ~14 MB)
+puts "\n>>> Step 2/4: Flashing kernel (mtd4, ~14 MB)..."
+set timeout 120
+send "tftpboot 0x10000000 mtd4_kernel.bin\r"
+expect "u-boot>"
+send "nand erase 0xe00000 0xe00000\r"
+set timeout 60
+expect "u-boot>"
+# Use literal $filesize — backslash escapes Tcl variable expansion
+send "nand write 0x10000000 0xe00000 \$filesize\r"
+set timeout 120
+expect "u-boot>"
+puts ">>> mtd4 done"
+
+# Step 3: Flash DTS (mtd5, ~2 MB)
+puts "\n>>> Step 3/4: Flashing DTS (mtd5, ~2 MB)..."
+set timeout 60
+send "tftpboot 0x10000000 mtd5_dts.bin\r"
+expect "u-boot>"
+send "nand erase 0x1c00000 0x200000\r"
+expect "u-boot>"
+send "nand write 0x10000000 0x1c00000 \$filesize\r"
+expect "u-boot>"
+puts ">>> mtd5 done"
+
+# Step 4: Flash rootfs (mtd6, ~200 MB — this is the big one)
+puts "\n>>> Step 4/4: Flashing rootfs (mtd6, ~200 MB)..."
+puts ">>>   TFTP transfer: ~3-4 min at 1 MB/s"
+puts ">>>   NAND erase+write: additional minutes"
+puts ">>>   DO NOT power off!"
+set timeout 600
+send "tftpboot 0x10000000 mtd6_appimage.bin\r"
+expect "u-boot>"
+set timeout 300
+send "nand erase 0x1e00000 0xc800000\r"
+expect "u-boot>"
+send "nand write 0x10000000 0x1e00000 \$filesize\r"
+set timeout 600
+expect "u-boot>"
+puts ">>> mtd6 done"
+
+# Boot stock firmware
+puts "\n>>> All partitions restored! Booting HiveOS..."
+send "reset\r"
+sleep 3
+
+# Exit picocom
+send "\x01\x18"
+expect eof
+
+puts "\n=== RESTORE COMPLETE ==="
+puts "AP630 rebooting into HiveOS (IQ Engine 10.6r7)"
+puts "Default login: admin / aerohive"
+puts "Verify: show version"

@@ -1,6 +1,6 @@
 # New Setup Planning
 
-Last updated: 2026-04-02
+Last updated: 2026-04-03
 
 ## Target Architecture
 
@@ -126,11 +126,12 @@ Last updated: 2026-04-02
 - All machines connect through this
 - VLAN capability if needed for segmentation
 
-### Aerohive APs (2× AP130, 1× AP230)
+### Aerohive APs (2× AP130, 1× AP230, 1× AP630)
 
-- AP230 as primary (higher performance, 3×3:3 MIMO)
+- AP630 as primary (highest performance: 4×4:4 MU-MIMO, 802.11ac Wave 2). Restored to stock HiveOS IQ Engine 10.6r7 on 2026-04-03 after Debian router project was closed out ([ADR-011](../decisions/011-ap630-restored-to-stock-wifi-ap.md)).
+- AP230 as secondary (3×3:3 MIMO)
 - AP130s for coverage extension
-- Standalone mode confirmed — all 3 run HiveOS CLI without cloud/controller dependency
+- Standalone mode confirmed — all 4 run HiveOS CLI without cloud/controller dependency
 
 ## Network Topology
 

@@ -1,7 +1,7 @@
 # ADR-001: Tower PC as Lab Router
 
 **Date:** 2026-03-27
-**Status:** Superseded by ADR-003
+**Status:** Reinstated by [ADR-011](011-ap630-restored-to-stock-wifi-ap.md) (was superseded by ADR-003, but AP630 router project closed out)
 
 ## Context
 

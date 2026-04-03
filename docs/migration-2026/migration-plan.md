@@ -1,6 +1,6 @@
 # Migration Plan
 
-Last updated: 2026-04-02
+Last updated: 2026-04-03
 
 ## Guiding Principles
 
@@ -91,7 +91,7 @@ This is the big move. The current cluster goes down, everything gets relocated.
 
 ### 1C: Set Up Switch & Network
 
-**Blocked by AP630 Debian router project** — AP630 will replace Tower PC as the router ([ADR-003](../decisions/003-ap630-as-router.md)). VLANs and final switch config depend on the router being ready. See `docs/ap630-debian-project.md` for status.
+Tower PC resumes the router role ([ADR-011](../decisions/011-ap630-restored-to-stock-wifi-ap.md) — AP630 router project closed out, device restored to stock HiveOS as WiFi AP). VLANs and final switch config depend on the Tower PC being set up as router.
 
 - [x] ~~Initial closet networking~~ — **5-port managed switch relocated to closet (2026-03-26). Current K8s machines + desktop on 8-port unmanaged switch.**
 - [ ] Mount SR2024 in closet (replaces temporary 5-port managed switch)
@@ -227,7 +227,7 @@ Before the Optiplex can be wiped and joined to K8s, its services need new homes:
 
 ### 4A: Tower PC — GPU Inference Workstation
 
-Router role moved to AP630 ([ADR-003](../decisions/003-ap630-as-router.md)). Tower PC is now purely a GPU inference workstation.
+Tower PC serves as both router and GPU inference workstation ([ADR-001](../decisions/001-tower-pc-as-router.md), reinstated by [ADR-011](../decisions/011-ap630-restored-to-stock-wifi-ap.md)).
 
 - [ ] Shut down tower-pc (critical workloads already on R730 staging VM from Phase 2A)
 - [ ] Migrate 3×2TB ZFS drives to R730 (for latency-sensitive ZFS/iSCSI pool)
@@ -235,31 +235,33 @@ Router role moved to AP630 ([ADR-003](../decisions/003-ap630-as-router.md)). Tow
   - Verify PSU can handle the load (1080 Ti alone is ~250W)
   - Verify PCIe slot spacing for triple GPU
 - [ ] Reinstall OS (or repurpose existing install)
+- [ ] Configure routing: nftables NAT, DHCP (dnsmasq), DNS
+- [ ] Connect WAN (Xfinity gateway in bridge mode) + LAN (SR2024) on separate NICs
+- [ ] Replace Xfinity gateway's routing role
 - [ ] Install NVIDIA drivers
 - [ ] Install inference stack (Ollama, vLLM, or text-generation-inference)
 - [ ] Configure API access from other machines on the lab VLAN
 
-### 4D: AP630 — Router
+### 4D: AP630 — WiFi AP (Stock HiveOS)
 
-Aerohive AP630 repurposed as a Debian arm64 router ([ADR-003](../decisions/003-ap630-as-router.md)). 2× GbE, no WiFi — using existing AP230/AP130 for that. See `docs/ap630-debian-project.md` for full technical details.
+~~Originally planned as Debian arm64 router ([ADR-003](../decisions/003-ap630-as-router.md)). Closed out — hardware bandwidth ceiling of 95 Mbps is not viable for GbE WAN routing ([ADR-010](../decisions/010-ap630-iudma-limit-requires-rdp.md), [ADR-011](../decisions/011-ap630-restored-to-stock-wifi-ap.md)).~~
 
-- [x] ~~Root access~~ — **CVE-2025-27229 shell injection**
-- [x] ~~U-Boot access~~ — **bootdelay=5 written to NAND env, password confirmed**
-- [x] ~~Kernel boots~~ — **Linux 6.12.0 on custom DTS, boots to initramfs**
-- [x] ~~Ethernet working~~ — **ENET DMA + SF2 switch + DSA, both ports operational**
-- [ ] Flash fixed kernel + DTB to NAND for standalone boot with networking
-- [ ] Install full Debian rootfs to NAND
-- [ ] Configure routing: nftables NAT, DHCP (dnsmasq), DNS
-- [ ] Connect WAN (Xfinity gateway) + LAN (SR2024) on eth0/eth1
-- [ ] Replace Xfinity gateway's routing role
+Restored to stock HiveOS IQ Engine 10.6r7 on 2026-04-03. Now used as a WiFi AP alongside the AP230 and AP130s.
+
+- [x] ~~Restored stock firmware~~ — **flashed via U-Boot TFTP from NAND backups (2026-04-03)**
+- [ ] Configure SSID + security (standalone mode, `no capwap client enable`)
+- [ ] Mount in optimal location for coverage
+- [ ] Connect to SR2024 (PoE from switch)
 
 ### 4B: WiFi APs
 
 - [x] ~~Flash/configure Aerohive APs for standalone mode~~ — **confirmed standalone via `no capwap client enable`. All 3 APs factory reset and CAPWAP disabled (2026-03-27).**
+- [x] ~~AP630 restored to stock HiveOS~~ — **IQ Engine 10.6r7 (2026-04-03). See [ADR-011](../decisions/011-ap630-restored-to-stock-wifi-ap.md).**
 - [ ] Mount AP230 in central location (starting with AP230 only — [ADR-009](../decisions/009-start-with-ap230-only.md))
-- [ ] Mount AP130(s) if coverage is insufficient
-- [ ] Connect to SR2024 (PoE from switch, no injectors needed)
-- [ ] Configure SSID + password
+- [ ] Mount AP630 for additional coverage (highest-performance AP: 4×4:4 MU-MIMO, 802.11ac Wave 2)
+- [ ] Mount AP130(s) if coverage is still insufficient
+- [ ] Connect APs to SR2024 (PoE from switch, no injectors needed)
+- [ ] Configure SSID + password on each AP
 - [ ] Test coverage throughout house
 - [ ] Disable Xfinity gateway WiFi (once verified)
 
@@ -330,7 +332,7 @@ Phase 3E: Verify cluster
          ├──────────────────────┬──────────────────┐
          v                      v                  v
 Phase 4A: Tower PC →       Phase 4B: WiFi APs  Phase 4D: AP630 →
-  GPU inference only            │                Router (Debian)
+  Router + GPU inference        │                WiFi AP (stock)
          │                      │                  │
          v                      v                  v
 Phase 5: Cleanup & documentation (tear down staging VM)
