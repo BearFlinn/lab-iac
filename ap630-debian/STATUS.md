@@ -67,6 +67,21 @@ Conclusion: the ~10 Mbps iuDMA throughput is a **hardware limitation** of the
 BCM4908 slow-path DMA engine. No register tuning can change it.
 Line-rate forwarding requires the Runner Data Path (RDP) accelerator.
 
+### RDP init results (2026-04-03)
+
+Compiled the asuswrt-merlin.ng U-Boot RDP `data_path_init()` as a kernel module
+(`rdp_full_init.ko`). The module initializes BBH, BPM, SBPM, IH, DMA, loads
+Runner firmware, and enables all 4 Runner cores.
+
+| Test | iuDMA only | With RDP init | Improvement |
+|------|-----------|---------------|-------------|
+| TCP RX | 9.41 Mbps | **94 Mbps** | **10x** |
+| TCP TX | 10.0 Mbps | **95 Mbps** | **9.5x** |
+
+The ~95 Mbps ceiling is likely CPU-bound (single Cortex-A53 @ 1.8 GHz running
+the full kernel networking stack). Next: enable SMP (second core) and/or
+integrate Runner hardware forwarding to bypass the CPU for routed traffic.
+
 ## Next Steps (by priority)
 
 ### Practical / Quick Wins

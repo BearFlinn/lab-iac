@@ -1789,7 +1789,7 @@ uint32_t data_path_init( S_DPI_CFG  *pCfg)
     bpm_drv_init(pCfg, &bpm_cfg_params);
 
     /*init BBH of emac ports*/
-    for ( macIter =  DRV_BBH_EMAC_0; macIter <= DRV_BBH_EMAC_1; macIter++)
+    for ( macIter =  DRV_BBH_EMAC_0; macIter <= DRV_BBH_DSL; macIter++)
     {
         f_initialize_bbh_of_emac_port(macIter);
     }
