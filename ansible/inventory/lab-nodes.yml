@@ -56,8 +56,8 @@ all:
           model: "Dell Optiplex 9020 SFF"
           cpu: "Intel i7-4790 (4C/8T)"
           ram_gb: 32
-          node_roles: ["standalone"]
-          # To be freed: services must migrate before wiping and joining K8s
+          node_roles: ["worker"]
+          ipmi_exporter_enabled: false
 
     storage_servers:
       hosts:

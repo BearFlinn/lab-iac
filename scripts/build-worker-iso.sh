@@ -15,7 +15,6 @@
 #
 # Usage:
 #   ./scripts/build-worker-iso.sh <debian-netinst.iso> --hostname quanta --ip 10.0.0.202
-#   ./scripts/build-worker-iso.sh <debian-netinst.iso> --hostname quanta --ip 10.0.0.202 --disk /dev/sdb
 #   sudo ./scripts/build-worker-iso.sh <debian-netinst.iso> --hostname quanta --ip 10.0.0.202 --usb /dev/sdc
 
 set -euo pipefail
@@ -32,7 +31,6 @@ BUILD_DIR="${REPO_ROOT}/build"
 # Defaults
 HOSTNAME=""
 STATIC_IP=""
-BOOT_DISK="/dev/sda"
 USB_DEVICE=""
 
 # Colors
@@ -68,7 +66,6 @@ Required:
   --ip <addr>             Static IP address (e.g., 10.0.0.202)
 
 Options:
-  --disk <device>         Boot disk (default: /dev/sda)
   --usb <device>          Flash ISO to USB device after building
   --help                  Show this help
 EOF
@@ -90,7 +87,6 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --hostname)  HOSTNAME="$2"; shift 2 ;;
         --ip)        STATIC_IP="$2"; shift 2 ;;
-        --disk)      BOOT_DISK="$2"; shift 2 ;;
         --usb)       USB_DEVICE="$2"; shift 2 ;;
         --help)      usage ;;
         *)
@@ -200,7 +196,7 @@ chmod -R u+w "${WORK_DIR}/iso"
 info "Building preseed configuration..."
 info "  Hostname:  ${HOSTNAME}"
 info "  Static IP: ${STATIC_IP}"
-info "  Boot disk: ${BOOT_DISK}"
+info "  Boot disk: auto-detect (first non-removable, non-USB)"
 
 ESCAPED_PASSWORD="$(printf '%s\n' "${WORKER_PASSWORD}" | sed 's/[&/\]/\\&/g')"
 ESCAPED_PUBKEY="$(printf '%s\n' "${PUBKEY}" | sed 's/[&/\]/\\&/g')"
@@ -210,7 +206,6 @@ sed -i "s/__HOSTNAME__/${HOSTNAME}/g" "${WORK_DIR}/preseed.cfg"
 sed -i "s/__SSH_PASSWORD__/${ESCAPED_PASSWORD}/g" "${WORK_DIR}/preseed.cfg"
 sed -i "s|__SSH_PUBLIC_KEY__|${ESCAPED_PUBKEY}|g" "${WORK_DIR}/preseed.cfg"
 sed -i "s|__STATIC_IP__|${STATIC_IP}|g" "${WORK_DIR}/preseed.cfg"
-sed -i "s|__BOOT_DISK__|${BOOT_DISK}|g" "${WORK_DIR}/preseed.cfg"
 
 cp "${WORK_DIR}/preseed.cfg" "${WORK_DIR}/iso/preseed.cfg"
 
