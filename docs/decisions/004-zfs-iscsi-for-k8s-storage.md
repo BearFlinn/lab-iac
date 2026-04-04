@@ -1,7 +1,8 @@
 # ADR-004: ZFS + iSCSI for K8s Block Storage
 
 **Date:** 2026-04-02
-**Status:** Accepted (ZFS pool created 2026-04-03, service datasets added 2026-04-03, iSCSI pending)
+**Status:** Accepted (ZFS pool created 2026-04-03, iSCSI pending)
+**Related:** [ADR-012](012-hot-services-on-zfs-minio-split.md) — hot services moved onto ZFS datasets
 
 ## Context
 
@@ -9,9 +10,7 @@ The R730xd has two storage tiers: a MergerFS/SnapRAID pool (5×3TB data + 2×4TB
 
 ## Decision
 
-Use iSCSI backed by ZFS zvols on the R730xd for K8s persistent volume storage. NFS off MergerFS remains available for bulk/non-latency-sensitive data.
-
-**Update (2026-04-03):** Before iSCSI is implemented, the ZFS pool is also hosting all continuously-writing Docker services via per-service datasets with tuned recordsize: PostgreSQL (8K), Redis (64K), MinIO Obs (1M), Prometheus (128K), Loki (128K), Tempo (128K), Grafana (128K). This moves hot writes off MergerFS/SnapRAID, which assumes data is relatively static between syncs. A separate MinIO Bulk instance remains on MergerFS for write-once-read-many workloads (container registry, build artifacts).
+Use iSCSI backed by ZFS zvols on the R730xd for K8s persistent volume storage. NFS off MergerFS remains available for bulk/non-latency-sensitive data. See [ADR-012](012-hot-services-on-zfs-minio-split.md) for the decision to also host Docker service data on ZFS datasets.
 
 ## Alternatives Considered
 
