@@ -3,8 +3,8 @@
 # Data on ZFS pool (tank/observability/prometheus, recordsize=128K)
 # Scrapes node_exporter, ipmi_exporter, and observability services
 #
-# Prometheus: http://10.0.0.200:9090
-# Alertmanager: http://10.0.0.200:9093
+# Prometheus: http://<r730xd_ip>:9090
+# Alertmanager: http://<r730xd_ip>:9093
 
 # Images (pinned versions)
 prometheus_image: "prom/prometheus:v3.4.0"
@@ -33,19 +33,19 @@ prometheus_evaluation_interval: "15s"
 
 # Scrape targets — node_exporter
 prometheus_node_targets:
-  - target: "10.0.0.200:9100"
+  - target: "{{ r730xd_ip }}:9100"
     labels:
       instance: "r730xd"
-  - target: "178.156.217.91:9100"
+  - target: "{{ proxy_vps_public_ip }}:9100"
     labels:
       instance: "proxy-vps"
-  - target: "192.168.122.191:9100"
+  - target: "{{ staging_vm_ip }}:9100"
     labels:
       instance: "staging-vm"
 
 # Scrape targets — ipmi_exporter
 prometheus_ipmi_targets:
-  - target: "10.0.0.200:9290"
+  - target: "{{ r730xd_ip }}:9290"
     labels:
       instance: "r730xd"
 
@@ -54,25 +54,25 @@ prometheus_observability_targets:
   - job: "prometheus"
     target: "localhost:9090"
   - job: "loki"
-    target: "10.0.0.200:3100"
+    target: "{{ r730xd_ip }}:3100"
   - job: "tempo"
-    target: "10.0.0.200:3200"
+    target: "{{ r730xd_ip }}:3200"
   - job: "grafana"
-    target: "10.0.0.200:3000"
+    target: "{{ r730xd_ip }}:3000"
   - job: "minio-obs"
-    target: "10.0.0.200:9000"
+    target: "{{ r730xd_ip }}:9000"
     metrics_path: "/minio/v2/metrics/cluster"
   - job: "minio-bulk"
-    target: "10.0.0.200:9002"
+    target: "{{ r730xd_ip }}:9002"
     metrics_path: "/minio/v2/metrics/cluster"
   - job: "postgres-exporter"
-    target: "10.0.0.200:9187"
+    target: "{{ r730xd_ip }}:9187"
   - job: "redis-exporter"
-    target: "10.0.0.200:9121"
+    target: "{{ r730xd_ip }}:9121"
   - job: "cadvisor"
-    target: "10.0.0.200:8080"
+    target: "{{ r730xd_ip }}:8080"
   - job: "caddy"
-    target: "178.156.217.91:2019"
+    target: "{{ proxy_vps_public_ip }}:2019"
 
 # Scrape targets — blackbox probes (external endpoints)
 prometheus_blackbox_targets:
@@ -80,7 +80,7 @@ prometheus_blackbox_targets:
   - "https://pennydreadfulsfx.com"
   - "https://resume.bearflinn.com"
 
-prometheus_blackbox_exporter: "10.0.0.200:9115"
+prometheus_blackbox_exporter: "{{ r730xd_ip }}:9115"
 
 # Alertmanager — webhook receiver (optional)
 # Set monitoring_alert_webhook_url in group_vars to enable

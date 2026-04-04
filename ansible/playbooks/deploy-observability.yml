@@ -27,13 +27,13 @@
 #   ... --tags grafana
 #   ... --tags alloy
 #
-# Endpoints (after deploy):
-#   Prometheus:   http://10.0.0.200:9090
-#   Alertmanager: http://10.0.0.200:9093
-#   Loki:         http://10.0.0.200:3100
-#   Tempo API:    http://10.0.0.200:3200
-#   Tempo OTLP:   10.0.0.200:4317 (gRPC), 10.0.0.200:4318 (HTTP)
-#   Grafana:      http://10.0.0.200:3000
+# Endpoints (after deploy) — IPs from ansible/group_vars/all/network.yml:
+#   Prometheus:   http://<r730xd_ip>:9090
+#   Alertmanager: http://<r730xd_ip>:9093
+#   Loki:         http://<r730xd_ip>:3100
+#   Tempo API:    http://<r730xd_ip>:3200
+#   Tempo OTLP:   <r730xd_ip>:4317 (gRPC), <r730xd_ip>:4318 (HTTP)
+#   Grafana:      http://<r730xd_ip>:3000
 
 - name: Deploy observability stack
   hosts: r730xd

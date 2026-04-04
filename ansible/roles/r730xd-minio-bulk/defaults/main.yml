@@ -3,8 +3,8 @@
 # Cold instance on MergerFS pool — serves container registry and build artifacts
 # Write-once-read-many workload, SnapRAID-compatible
 #
-# API: http://10.0.0.200:9002
-# Console: http://10.0.0.200:9003
+# API: http://<r730xd_ip>:9002
+# Console: http://<r730xd_ip>:9003
 
 # Image
 minio_bulk_image: "minio/minio:latest"

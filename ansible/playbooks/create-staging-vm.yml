@@ -235,7 +235,7 @@
           - "Name: {{ staging_vm_name }}"
           - "IP: {{ discovered_vm_ip }} (NAT — reachable from R730xd)"
           - "SSH (from R730xd): ssh {{ staging_vm_user }}@{{ discovered_vm_ip }}"
-          - "SSH (from dev): ssh -J bearf@10.0.0.200 {{ staging_vm_user }}@{{ discovered_vm_ip }}"
+          - "SSH (from dev): ssh -J bearf@{{ r730xd_ip }} {{ staging_vm_user }}@{{ discovered_vm_ip }}"
           - "vCPUs: {{ staging_vm_vcpus }}, RAM: {{ staging_vm_ram_mb }}MB, Disk: {{ staging_vm_disk_gb }}GB"
           - ""
           - "Next steps:"

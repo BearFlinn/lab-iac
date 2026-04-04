@@ -8,15 +8,15 @@
 #   - amtool    (Alertmanager silence/alert management)
 #
 # Configures Fish shell environment variables for connecting to
-# the R730xd observability stack at 10.0.0.200.
+# the R730xd observability stack.
 #
 # Usage:
 #   ./scripts/install-observability-cli.sh
 #
-# Environment variables (override defaults):
-#   LOKI_ADDR          (default: http://10.0.0.200:3100)
-#   PROMETHEUS_ADDR    (default: http://10.0.0.200:9090)
-#   ALERTMANAGER_ADDR  (default: http://10.0.0.200:9093)
+# Environment variables (override defaults from lab-network.env):
+#   LOKI_ADDR          (default: http://<r730xd_ip>:3100)
+#   PROMETHEUS_ADDR    (default: http://<r730xd_ip>:9090)
+#   ALERTMANAGER_ADDR  (default: http://<r730xd_ip>:9093)
 #   INSTALL_DIR        (default: /usr/local/bin)
 
 set -euo pipefail
@@ -25,9 +25,14 @@ set -euo pipefail
 # Configuration
 # =============================================================================
 
-LOKI_ADDR="${LOKI_ADDR:-http://10.0.0.200:3100}"
-PROMETHEUS_ADDR="${PROMETHEUS_ADDR:-http://10.0.0.200:9090}"
-ALERTMANAGER_ADDR="${ALERTMANAGER_ADDR:-http://10.0.0.200:9093}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Source lab network config (see ansible/group_vars/all/network.yml)
+# shellcheck source=lab-network.env
+[[ -f "${SCRIPT_DIR}/lab-network.env" ]] && . "${SCRIPT_DIR}/lab-network.env"
+
+LOKI_ADDR="${LOKI_ADDR:-http://${R730XD_IP:-10.0.0.200}:3100}"
+PROMETHEUS_ADDR="${PROMETHEUS_ADDR:-http://${R730XD_IP:-10.0.0.200}:9090}"
+ALERTMANAGER_ADDR="${ALERTMANAGER_ADDR:-http://${R730XD_IP:-10.0.0.200}:9093}"
 INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
 
 ARCH="$(uname -m)"
@@ -170,7 +175,7 @@ echo "  # Tail all container logs"
 echo "  logcli query '{job=\"docker\"}' --tail"
 echo ""
 echo "  # Query Prometheus"
-echo "  promtool query instant http://10.0.0.200:9090 'up'"
+echo "  promtool query instant ${PROMETHEUS_ADDR} 'up'"
 echo ""
 echo "  # List active alerts"
 echo "  amtool alert --alertmanager.url=${ALERTMANAGER_ADDR}"

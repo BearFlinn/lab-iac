@@ -83,5 +83,5 @@
       - "{{ nfs_active_exports.stdout_lines }}"
       - ""
       - "K8s NFS provisioner should point at:"
-      - "  server: {{ ansible_facts['default_ipv4']['address'] | default('10.0.0.200') }}"
+      - "  server: {{ ansible_facts['default_ipv4']['address'] | default(r730xd_ip) }}"
       - "  path: {{ nfs_export_path }}"

@@ -64,7 +64,7 @@
     msg:
       - "=== Prometheus Exporters ==="
       - ""
-      - "postgres-exporter: http://{{ ansible_facts['default_ipv4']['address'] | default('10.0.0.200') }}:{{ postgres_exporter_port }}"
-      - "redis-exporter:    http://{{ ansible_facts['default_ipv4']['address'] | default('10.0.0.200') }}:{{ redis_exporter_port }}"
-      - "blackbox-exporter: http://{{ ansible_facts['default_ipv4']['address'] | default('10.0.0.200') }}:{{ blackbox_exporter_port }}"
-      - "cadvisor:          http://{{ ansible_facts['default_ipv4']['address'] | default('10.0.0.200') }}:{{ cadvisor_port }}"
+      - "postgres-exporter: http://{{ ansible_facts['default_ipv4']['address'] | default(r730xd_ip) }}:{{ postgres_exporter_port }}"
+      - "redis-exporter:    http://{{ ansible_facts['default_ipv4']['address'] | default(r730xd_ip) }}:{{ redis_exporter_port }}"
+      - "blackbox-exporter: http://{{ ansible_facts['default_ipv4']['address'] | default(r730xd_ip) }}:{{ blackbox_exporter_port }}"
+      - "cadvisor:          http://{{ ansible_facts['default_ipv4']['address'] | default(r730xd_ip) }}:{{ cadvisor_port }}"

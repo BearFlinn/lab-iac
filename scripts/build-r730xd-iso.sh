@@ -36,8 +36,17 @@ BUILD_DIR="${REPO_ROOT}/build"
 WORK_DIR="${BUILD_DIR}/iso-work"
 OUTPUT_ISO="${BUILD_DIR}/debian-13-r730xd.iso"
 
+# Source lab network config (see ansible/group_vars/all/network.yml)
+# shellcheck source=lab-network.env
+[[ -f "${SCRIPT_DIR}/lab-network.env" ]] && . "${SCRIPT_DIR}/lab-network.env"
+
+# Network config — substituted into preseed at build time
+STATIC_IP="${R730XD_IP:-10.0.0.200}"
+GATEWAY="${LAB_GATEWAY:-10.0.0.1}"
+DNS="${LAB_DNS:-8.8.8.8 8.8.4.4}"
+
 # iDRAC config — bay 12 is the designated boot drive slot
-IDRAC_HOST="r730xd-idrac"
+IDRAC_HOST="${IDRAC_HOST:-r730xd-idrac}"
 BOOT_DRIVE_BAY="12"
 
 # Colors
@@ -227,6 +236,9 @@ cp "${PRESEED_TEMPLATE}" "${WORK_DIR}/preseed.cfg"
 sed -i "s/__SSH_PASSWORD__/${ESCAPED_PASSWORD}/g" "${WORK_DIR}/preseed.cfg"
 sed -i "s|__SSH_PUBLIC_KEY__|${ESCAPED_PUBKEY}|g" "${WORK_DIR}/preseed.cfg"
 sed -i "s|__BOOT_DISK_BY_ID__|${BOOT_DISK_BY_ID}|g" "${WORK_DIR}/preseed.cfg"
+sed -i "s|__STATIC_IP__|${STATIC_IP}|g" "${WORK_DIR}/preseed.cfg"
+sed -i "s|__GATEWAY__|${GATEWAY}|g" "${WORK_DIR}/preseed.cfg"
+sed -i "s|__DNS__|${DNS}|g" "${WORK_DIR}/preseed.cfg"
 
 # Inject preseed into ISO root
 cp "${WORK_DIR}/preseed.cfg" "${WORK_DIR}/iso/preseed.cfg"
@@ -322,5 +334,5 @@ info "Next steps:"
 echo "  1. Plug USB into R730xd front panel"
 echo "  2. Boot from USB (F11 boot menu or iDRAC)"
 echo "  3. Install runs unattended (~10-15 min)"
-echo "  4. After reboot, SSH to bearf@10.0.0.200"
+echo "  4. After reboot, SSH to bearf@${STATIC_IP}"
 echo "  5. Run: ansible-playbook -i ansible/inventory/r730xd.yml ansible/playbooks/setup-r730xd.yml -v"

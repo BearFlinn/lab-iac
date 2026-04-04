@@ -3,7 +3,7 @@
 # S3 backend via MinIO Obs, single-binary mode
 # Local data on ZFS pool (tank/observability/loki, recordsize=128K)
 #
-# Loki API: http://10.0.0.200:3100
+# Loki API: http://<r730xd_ip>:3100
 
 # Image (pinned version)
 loki_image: "grafana/loki:3.4.2"
@@ -19,7 +19,7 @@ loki_compose_dir: "/opt/observability/loki"
 loki_memory_limit: "512m"
 
 # S3 backend (MinIO)
-loki_s3_endpoint: "10.0.0.200:9000"
+loki_s3_endpoint: "{{ r730xd_ip }}:9000"
 loki_s3_bucket: "observability-loki"
 loki_s3_region: "us-east-1"
 # Access keys from group_vars (vault-backed)

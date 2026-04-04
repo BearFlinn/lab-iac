@@ -325,7 +325,7 @@
           - "All traffic enters via Caddy on port 80."
           - ""
           - "Next steps:"
-          - "  1. Get staging VM NetBird IP: ssh bearf@10.0.0.210 'netbird status'"
+          - "  1. Get staging VM NetBird IP: ssh bearf@{{ r730xd_ip }} 'netbird status'"
           - "  2. Update k8s_ingress_endpoint in ansible/inventory/proxy-vps.yml"
           - "     to <netbird-ip>:80"
           - "  3. Run setup-proxy-vps.yml to apply VPS routing change"

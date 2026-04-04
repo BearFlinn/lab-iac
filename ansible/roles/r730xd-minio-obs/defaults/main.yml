@@ -3,8 +3,8 @@
 # Hot instance on ZFS pool — serves Loki and Tempo S3 backends
 # Continuous writes, 30-day retention — incompatible with SnapRAID
 #
-# API: http://10.0.0.200:9000
-# Console: http://10.0.0.200:9001
+# API: http://<r730xd_ip>:9000
+# Console: http://<r730xd_ip>:9001
 
 # Image
 minio_obs_image: "minio/minio:latest"

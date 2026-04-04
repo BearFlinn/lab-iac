@@ -96,7 +96,7 @@
     msg:
       - "=== Grafana ==="
       - ""
-      - "URL: http://{{ ansible_facts['default_ipv4']['address'] | default('10.0.0.200') }}:{{ grafana_port }}"
+      - "URL: http://{{ ansible_facts['default_ipv4']['address'] | default(r730xd_ip) }}:{{ grafana_port }}"
       - "User: {{ grafana_admin_user }}"
       - "Data: {{ grafana_data_dir }}"
       - "Database: {{ grafana_database_type }}://{{ grafana_database_host }}/{{ grafana_database_name }}"

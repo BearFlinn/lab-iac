@@ -9,7 +9,7 @@ services:
     ports:
       - "{{ postgres_exporter_port }}:9187"
     environment:
-      DATA_SOURCE_NAME: "postgresql://postgres:{{ postgres_password }}@10.0.0.200:5432/postgres?sslmode=disable"
+      DATA_SOURCE_NAME: "postgresql://postgres:{{ postgres_password }}@{{ r730xd_ip }}:5432/postgres?sslmode=disable"
     deploy:
       resources:
         limits:
@@ -27,7 +27,7 @@ services:
     ports:
       - "{{ redis_exporter_port }}:9121"
     environment:
-      REDIS_ADDR: "10.0.0.200:6379"
+      REDIS_ADDR: "{{ r730xd_ip }}:6379"
       REDIS_PASSWORD: "{{ redis_password }}"
     deploy:
       resources:

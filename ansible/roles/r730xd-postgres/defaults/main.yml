@@ -2,7 +2,7 @@
 # r730xd-postgres: PostgreSQL on Docker for foundation data store
 # Data persisted on ZFS pool (tank/foundation/postgres, recordsize=8K)
 #
-# Connection: postgresql://<user>:<password>@10.0.0.200:5432/<database>
+# Connection: postgresql://<user>:<password>@<r730xd_ip>:5432/<database>
 
 # Image
 postgres_version: "16"

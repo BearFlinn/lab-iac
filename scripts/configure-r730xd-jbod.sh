@@ -8,11 +8,11 @@
 #
 # Prerequisites:
 #   - sshpass (apt install sshpass)
-#   - Network access to iDRAC at 10.0.0.203
+#   - Network access to iDRAC (see ansible/group_vars/all/network.yml)
 #
 # Environment variables:
 #   IDRAC_PASSWORD  - iDRAC root password (prompted if not set)
-#   IDRAC_HOST      - iDRAC IP/hostname (default: 10.0.0.203)
+#   IDRAC_HOST      - iDRAC IP/hostname (default: from lab-network.env)
 #
 # Usage:
 #   ./scripts/configure-r730xd-jbod.sh [OPTIONS]
@@ -30,7 +30,12 @@ set -euo pipefail
 # Configuration
 # =============================================================================
 
-IDRAC_HOST="${IDRAC_HOST:-10.0.0.203}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Source lab network config (see ansible/group_vars/all/network.yml)
+# shellcheck source=lab-network.env
+[[ -f "${SCRIPT_DIR}/lab-network.env" ]] && . "${SCRIPT_DIR}/lab-network.env"
+
+IDRAC_HOST="${IDRAC_HOST:-${IDRAC_IP:-10.0.0.203}}"
 BOOT_DRIVE_BAY="12"
 CONTROLLER_FQDD="RAID.Slot.1-1"
 ENCLOSURE_FQDD="Enclosure.Internal.0-1:${CONTROLLER_FQDD}"

@@ -1,5 +1,7 @@
 # Current Hardware Inventory
 
+> **IP addresses:** Authoritative values are in `ansible/group_vars/all/network.yml`.
+
 Last updated: 2026-04-02
 
 ---
@@ -16,7 +18,7 @@ Last updated: 2026-04-02
 | RAM | 8 GB |
 | Storage | 256 GB SSD (to be removed — repurposed to jumpbox) |
 | GPU | None |
-| Network | enp2s0, IP 10.0.0.226 |
+| Network | enp2s0, IP `<dell_inspiron_ip>` |
 | Current role | K8s control plane (single-node etcd, apiserver, scheduler, controller-manager) |
 | Migration note | Will PXE boot from R730 (diskless). SSD repurposed to jumpbox. |
 
@@ -30,7 +32,7 @@ Last updated: 2026-04-02
 | RAM | 24 GB |
 | Storage | 128 GB NVMe (bcache backing), 240 GB SATA SSD (OS), 1 TB HDD (NFS), 3×2 TB HDD (all healthy — ZFS pool appeared degraded due to setup script targeting a card reader instead of the 3rd drive) — **~6.4 TB total raw** |
 | GPU | NVIDIA GTX 1060 3 GB |
-| Network | eno1, IP 10.0.0.249 |
+| Network | eno1, IP `<tower_pc_ip>` |
 | Current role | K8s worker — NFS server, storage services, GPU workloads |
 
 ### msi-laptop — Worker (REMOVING)
@@ -43,7 +45,7 @@ Last updated: 2026-04-02
 | RAM | 32 GB |
 | Storage | 1 TB SSD + 1 TB HDD — **2 TB total** |
 | GPU | NVIDIA GTX 1060 3 GB |
-| Network | enp61s0, IP 10.0.0.177 |
+| Network | enp61s0, IP 10.0.0.177 (decommissioned — see MEMORY.md) |
 | Current role | K8s worker — monitoring/observability workloads |
 | Migration note | **Being removed from cluster to repurpose as a development machine.** Workloads must be migrated before removal. |
 
@@ -93,12 +95,12 @@ Last updated: 2026-04-02
 | Drive bays | **12× 3.5" front** (hot-swap, 2 backplanes) + **2× 2.5" rear** — confirmed |
 | RAID | Dell PERC H730 Mini |
 | PSUs | 2× 750W redundant (Delta) |
-| iDRAC | 10.0.0.203, firmware 2.86.86.86, IPMI + SSH racadm working |
+| iDRAC | `<r730xd_idrac_ip>`, firmware 2.86.86.86, IPMI + SSH racadm working |
 | Service tag | 45L1DH2 |
 | Built | December 2016 |
 | GPU | TBD (supports full-height PCIe cards) |
 | OS | Debian 13.4 (Trixie), kernel 6.12.74, UEFI boot |
-| OS IP | 10.0.0.200 on eno1 (static) |
+| OS IP | `<r730xd_ip>` on eno1 (static) |
 | Boot drive | Samsung SSD 850 EVO 250GB in bay 12 (rear 2.5" slot), non-RAID mode |
 | Status | **Online.** OS installed 2026-03-26 via preseeded USB. Baseline playbook applied. |
 | Storage | MergerFS pool: 5×3TB data + 2×4TB parity (SnapRAID). 15TB usable. Deployed via `r730xd-storage.yml`. |
@@ -114,7 +116,7 @@ Last updated: 2026-04-02
 | RAM | 64 GB DDR3 1333 MHz |
 | Storage | 6× SATA ports, no hot-swap bays — drives mount internally. 240 GB SSD installed as boot drive. |
 | GPU | TBD — check PCIe slots |
-| Remote mgmt | IPMI/BMC at 10.0.0.201 (on lab subnet) |
+| Remote mgmt | IPMI/BMC at `<quanta_bmc_ip>` (on lab subnet) |
 | BIOS | AMI v2.14.1219 (dated 2012-10-04), UEFI boot supported |
 | Network | 4-port NIC via PCIe riser (installed 2026-03-27) |
 | Status | 240 GB boot drive installed, OS imaging via preseeded ISO |
@@ -259,7 +261,7 @@ Note: 1× 4TB was dead on arrival and discarded. Bay 8 drive had existing data, 
 - [x] ~~Check R730 drive bay configuration~~ — **12× 3.5" front (LFF) + 2× 2.5" rear**
 - [x] ~~Check Quanta drive bay configuration~~ — **6× SATA, internal mount, no hot-swap**
 - [x] ~~Test POST on both servers~~ — **both confirmed**
-- [x] ~~Verify iDRAC (R730) and BMC/IPMI (Quanta) remote management access~~ — **iDRAC SSH racadm working (no Enterprise license — no virtual media). Quanta BMC/IPMI at 10.0.0.201.**
+- [x] ~~Verify iDRAC (R730) and BMC/IPMI (Quanta) remote management access~~ — **iDRAC SSH racadm working (no Enterprise license — no virtual media). Quanta BMC/IPMI at `<quanta_bmc_ip>`.**
 - [x] ~~Test all 24 ports on the SR2024 switch~~ — **ports 1–4 confirmed working (APs on 1–3, laptop on 4). Full port test pending but switch responds correctly. VLANs, LACP, PoE all confirmed (2026-03-27).**
 - [x] ~~Determine Aerohive AP firmware situation~~ — **all 3 APs run standalone via `no capwap client enable`. Factory reset and CAPWAP disabled on all devices (2026-03-27). See docs/aerohive-serial-interface.md for details.**
 - [x] ~~Back up the data on the one 3 TB drive~~ — **mounted directly into R730xd MergerFS pool (bay 8), data preserved in-place**

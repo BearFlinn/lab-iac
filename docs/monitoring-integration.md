@@ -1,5 +1,7 @@
 # Monitoring Integration Guide
 
+> **IP addresses:** Authoritative values are in `ansible/group_vars/all/network.yml`.
+
 How the homelab monitoring system works today, and how to evolve it as the lab grows.
 
 ## Current Architecture
@@ -149,7 +151,7 @@ scrape_configs:
   - job_name: "node"
     static_configs:
       - targets:
-          - "10.0.0.200:9100"   # r730xd
+          - "<r730xd_ip>:9100"   # r730xd
           # Add more hosts as they come online
         labels:
           env: "homelab"
@@ -157,7 +159,7 @@ scrape_configs:
   - job_name: "ipmi"
     static_configs:
       - targets:
-          - "10.0.0.200:9290"   # r730xd
+          - "<r730xd_ip>:9290"   # r730xd
         labels:
           env: "homelab"
 ```
@@ -338,7 +340,7 @@ IPMI exporter has no Alloy-native equivalent — keep the standalone exporter in
 
 prometheus.scrape "node" {
   targets = [
-    {"__address__" = "10.0.0.200:9100", "instance" = "r730xd"},
+    {"__address__" = "<r730xd_ip>:9100", "instance" = "r730xd"},
     // Add more hosts as they come online
   ]
   forward_to = [prometheus.remote_write.default.receiver]
@@ -347,7 +349,7 @@ prometheus.scrape "node" {
 
 prometheus.scrape "ipmi" {
   targets = [
-    {"__address__" = "10.0.0.200:9290", "instance" = "r730xd"},
+    {"__address__" = "<r730xd_ip>:9290", "instance" = "r730xd"},
   ]
   forward_to = [prometheus.remote_write.default.receiver]
   scrape_interval = "30s"

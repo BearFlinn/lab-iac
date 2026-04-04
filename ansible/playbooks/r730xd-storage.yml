@@ -16,7 +16,7 @@
 #
 # After first run:
 #   - Run `ssh r730xd 'sudo snapraid sync'` (initial sync takes hours)
-#   - Update K8s NFS provisioner to point at 10.0.0.200:/mnt/pool
+#   - Update K8s NFS provisioner to point at <r730xd_ip>:/mnt/pool
 
 - name: R730xd storage stack
   hosts: r730xd

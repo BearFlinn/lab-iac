@@ -26,8 +26,8 @@
   gather_facts: yes
   become: yes
   vars:
-    gateway: "{{ network_gateway | default('10.0.0.1') }}"
-    dns_servers: "{{ network_dns | default(['8.8.8.8', '8.8.4.4']) }}"
+    gateway: "{{ network_gateway | default(lab_gateway) }}"
+    dns_servers: "{{ network_dns | default(lab_dns) }}"
     network_interface: "{{ ansible_default_ipv4.interface }}"
 
   tasks:
@@ -256,7 +256,7 @@
   tags: [monitoring]
   vars:
     prometheus_targets_dir: "/opt/observability/prometheus/targets.d"
-    loki_url: "http://10.0.0.200:3100/loki/api/v1/push"
+    loki_url: "http://{{ r730xd_ip }}:3100/loki/api/v1/push"
     alloy_version: "1.9.0"
 
   tasks:

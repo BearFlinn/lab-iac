@@ -5,7 +5,7 @@
 
 ## Context
 
-The lab architecture places all stateful workloads on the R730xd storage server. K8s nodes are diskless (PXE boot) and treat compute as disposable. Services that need durable state — PostgreSQL, Redis, MinIO — must run on the R730xd, with K8s workloads connecting over the LAN at `10.0.0.200:<port>`.
+The lab architecture places all stateful workloads on the R730xd storage server. K8s nodes are diskless (PXE boot) and treat compute as disposable. Services that need durable state — PostgreSQL, Redis, MinIO — must run on the R730xd, with K8s workloads connecting over the LAN at `<r730xd_ip>:<port>`.
 
 Several design choices needed to be made about how to organize, deploy, and persist these services.
 
@@ -21,7 +21,7 @@ Each role deploys its own `docker-compose.yml` under `/opt/foundation/<service>/
 
 ### Host network for Postgres and Redis, published ports for MinIO
 
-Postgres and Redis use `network_mode: host`. Simplest path for LAN clients to reach `10.0.0.200:5432` and `10.0.0.200:6379` — no NAT overhead, real client IPs in logs. MinIO uses published ports to keep the API and console ports cleanly separated. MinIO Obs (observability) on ports 9000/9001, MinIO Bulk (registry/artifacts) on ports 9002/9003.
+Postgres and Redis use `network_mode: host`. Simplest path for LAN clients to reach `<r730xd_ip>:5432` and `<r730xd_ip>:6379` — no NAT overhead, real client IPs in logs. MinIO uses published ports to keep the API and console ports cleanly separated. MinIO Obs (observability) on ports 9000/9001, MinIO Bulk (registry/artifacts) on ports 9002/9003.
 
 ### Two MinIO instances for different workloads
 
@@ -42,5 +42,5 @@ A daily `pg_dumpall` with 7-day rotation provides a basic safety net. ZFS snapsh
 ## Trade-offs
 
 - **Host network limits port flexibility.** If two Postgres instances are needed, one must use a non-default port. Acceptable — a single shared Postgres is the intended pattern.
-- **No TLS between services.** Traffic is on a private LAN (`10.0.0.0/24`). TLS can be added later if the threat model changes.
+- **No TLS between services.** Traffic is on a private LAN (`<lab_subnet>`). TLS can be added later if the threat model changes.
 - **Docker volumes vs bind mounts.** We use bind mounts to `/mnt/zfs/foundation/...` (hot) and `/mnt/pool/foundation/...` (cold) rather than Docker named volumes. This makes the data location explicit and visible to ZFS snapshots, backup scripts, and operators browsing the filesystem.

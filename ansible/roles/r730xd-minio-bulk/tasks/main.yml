@@ -49,7 +49,7 @@
     msg:
       - "=== MinIO Bulk (registry/artifacts) ==="
       - ""
-      - "API: http://{{ ansible_facts['default_ipv4']['address'] | default('10.0.0.200') }}:{{ minio_bulk_api_port }}"
-      - "Console: http://{{ ansible_facts['default_ipv4']['address'] | default('10.0.0.200') }}:{{ minio_bulk_console_port }}"
+      - "API: http://{{ ansible_facts['default_ipv4']['address'] | default(r730xd_ip) }}:{{ minio_bulk_api_port }}"
+      - "Console: http://{{ ansible_facts['default_ipv4']['address'] | default(r730xd_ip) }}:{{ minio_bulk_console_port }}"
       - "Data: {{ minio_bulk_data_dir }}"
       - "Backing: MergerFS (/mnt/pool)"

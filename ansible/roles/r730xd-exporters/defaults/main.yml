@@ -2,10 +2,10 @@
 # r730xd-exporters: Prometheus exporters for foundation stores + infrastructure
 # Stateless scrapers — no persistent data
 #
-# postgres-exporter: http://10.0.0.200:9187
-# redis-exporter:    http://10.0.0.200:9121
-# blackbox-exporter: http://10.0.0.200:9115
-# cadvisor:          http://10.0.0.200:8080
+# postgres-exporter: http://<r730xd_ip>:9187
+# redis-exporter:    http://<r730xd_ip>:9121
+# blackbox-exporter: http://<r730xd_ip>:9115
+# cadvisor:          http://<r730xd_ip>:8080
 
 # Images (pinned versions)
 postgres_exporter_image: "prometheuscommunity/postgres-exporter:v0.16.0"

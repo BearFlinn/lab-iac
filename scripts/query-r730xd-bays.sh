@@ -11,7 +11,7 @@
 #
 # Environment variables:
 #   IDRAC_PASSWORD  - iDRAC root password (required)
-#   IDRAC_HOST      - iDRAC IP/hostname (default: 10.0.0.203)
+#   IDRAC_HOST      - iDRAC IP/hostname (default: from lab-network.env)
 #   BOOT_DRIVE_BAY  - Bay to exclude from output (default: 12)
 #
 # Usage:
@@ -26,7 +26,12 @@ set -euo pipefail
 # Configuration
 # =============================================================================
 
-IDRAC_HOST="${IDRAC_HOST:-10.0.0.203}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Source lab network config (see ansible/group_vars/all/network.yml)
+# shellcheck source=lab-network.env
+[[ -f "${SCRIPT_DIR}/lab-network.env" ]] && . "${SCRIPT_DIR}/lab-network.env"
+
+IDRAC_HOST="${IDRAC_HOST:-${IDRAC_IP:-10.0.0.203}}"
 BOOT_DRIVE_BAY="${BOOT_DRIVE_BAY:-12}"
 
 # =============================================================================

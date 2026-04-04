@@ -65,7 +65,7 @@
     msg:
       - "=== Loki ==="
       - ""
-      - "API: http://{{ ansible_facts['default_ipv4']['address'] | default('10.0.0.200') }}:{{ loki_port }}"
+      - "API: http://{{ ansible_facts['default_ipv4']['address'] | default(r730xd_ip) }}:{{ loki_port }}"
       - "Data: {{ loki_data_dir }}"
       - "S3 bucket: {{ loki_s3_bucket }}"
       - "Retention: {{ loki_retention_period }}"

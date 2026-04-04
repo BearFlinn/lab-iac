@@ -115,8 +115,8 @@
     msg:
       - "=== Prometheus + Alertmanager ==="
       - ""
-      - "Prometheus: http://{{ ansible_facts['default_ipv4']['address'] | default('10.0.0.200') }}:{{ prometheus_port }}"
-      - "Alertmanager: http://{{ ansible_facts['default_ipv4']['address'] | default('10.0.0.200') }}:{{ alertmanager_port }}"
+      - "Prometheus: http://{{ ansible_facts['default_ipv4']['address'] | default(r730xd_ip) }}:{{ prometheus_port }}"
+      - "Alertmanager: http://{{ ansible_facts['default_ipv4']['address'] | default(r730xd_ip) }}:{{ alertmanager_port }}"
       - "Data: {{ prometheus_data_dir }}"
       - "Config: {{ prometheus_compose_dir }}"
       - "Retention: {{ prometheus_retention_time }} / {{ prometheus_retention_size }}"

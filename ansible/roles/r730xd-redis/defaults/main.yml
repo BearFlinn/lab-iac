@@ -2,7 +2,7 @@
 # r730xd-redis: Redis on Docker for foundation data store
 # Persistent via AOF + RDB on ZFS pool (tank/foundation/redis, recordsize=64K)
 #
-# Connection: redis://:<password>@10.0.0.200:6379
+# Connection: redis://:<password>@<r730xd_ip>:6379
 
 # Image
 redis_version: "7"

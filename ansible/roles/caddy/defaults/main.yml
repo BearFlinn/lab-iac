@@ -39,7 +39,7 @@ enable_k8s_proxy: false
 # =============================================================================
 
 # K8s ingress endpoint - IP:port reachable from VPS (via VPN tunnel)
-# Example: "100.96.94.27:30487" (NetBird IP + NodePort)
+# Example: "<netbird_k8s_ingress_ip>:30487" (NetBird IP + NodePort)
 k8s_ingress_endpoint: ""
 
 # Non-K8s services (static sites or other reverse proxies)

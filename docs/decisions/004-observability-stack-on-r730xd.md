@@ -22,7 +22,7 @@ Deploy the Grafana LGTM stack (Loki, Grafana, Tempo, Prometheus) plus Alertmanag
 
 ```
                     ┌─────────────────────────────────────────────┐
-                    │              R730xd (10.0.0.200)             │
+                    │              R730xd (<r730xd_ip>)             │
                     │                                             │
                     │  ┌──────────┐   scrape    ┌──────────────┐ │
                     │  │  node    │◄────────────│  Prometheus  │ │
@@ -71,7 +71,7 @@ Deploy the Grafana LGTM stack (Loki, Grafana, Tempo, Prometheus) plus Alertmanag
 
 7. **Conservative memory limits** — ~3GB total across all services on a 32GB machine already running foundation stores (~10GB effective). Prometheus 1.5GB, Loki 512MB, Tempo 256MB, Grafana 256MB, Alloy 256MB, Alertmanager 128MB.
 
-8. **No TLS between services** — Consistent with ADR-003. Private LAN (10.0.0.0/24).
+8. **No TLS between services** — Consistent with ADR-003. Private LAN (<lab_subnet>).
 
 ## Consequences
 

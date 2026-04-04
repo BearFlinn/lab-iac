@@ -28,10 +28,16 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 PRESEED_TEMPLATE="${REPO_ROOT}/configs/k8s-worker/preseed.cfg"
 BUILD_DIR="${REPO_ROOT}/build"
 
+# Source lab network config (see ansible/group_vars/all/network.yml)
+# shellcheck source=lab-network.env
+[[ -f "${SCRIPT_DIR}/lab-network.env" ]] && . "${SCRIPT_DIR}/lab-network.env"
+
 # Defaults
 HOSTNAME=""
 STATIC_IP=""
 USB_DEVICE=""
+GATEWAY="${LAB_GATEWAY:-10.0.0.1}"
+DNS="${LAB_DNS:-8.8.8.8 8.8.4.4}"
 
 # Colors
 RED='\033[0;31m'
@@ -66,6 +72,8 @@ Required:
   --ip <addr>             Static IP address (e.g., 10.0.0.202)
 
 Options:
+  --gateway <addr>        Gateway IP (default: from lab-network.env or 10.0.0.1)
+  --dns <servers>         DNS servers, space-separated (default: from lab-network.env or "8.8.8.8 8.8.4.4")
   --usb <device>          Flash ISO to USB device after building
   --help                  Show this help
 EOF
@@ -87,6 +95,8 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --hostname)  HOSTNAME="$2"; shift 2 ;;
         --ip)        STATIC_IP="$2"; shift 2 ;;
+        --gateway)   GATEWAY="$2"; shift 2 ;;
+        --dns)       DNS="$2"; shift 2 ;;
         --usb)       USB_DEVICE="$2"; shift 2 ;;
         --help)      usage ;;
         *)
@@ -206,6 +216,8 @@ sed -i "s/__HOSTNAME__/${HOSTNAME}/g" "${WORK_DIR}/preseed.cfg"
 sed -i "s/__SSH_PASSWORD__/${ESCAPED_PASSWORD}/g" "${WORK_DIR}/preseed.cfg"
 sed -i "s|__SSH_PUBLIC_KEY__|${ESCAPED_PUBKEY}|g" "${WORK_DIR}/preseed.cfg"
 sed -i "s|__STATIC_IP__|${STATIC_IP}|g" "${WORK_DIR}/preseed.cfg"
+sed -i "s|__GATEWAY__|${GATEWAY}|g" "${WORK_DIR}/preseed.cfg"
+sed -i "s|__DNS__|${DNS}|g" "${WORK_DIR}/preseed.cfg"
 
 cp "${WORK_DIR}/preseed.cfg" "${WORK_DIR}/iso/preseed.cfg"
 

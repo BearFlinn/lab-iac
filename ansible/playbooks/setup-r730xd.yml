@@ -16,7 +16,7 @@
   become: yes
   vars:
     gateway: "{{ network_gateway | default(ansible_default_ipv4.gateway) }}"
-    dns_servers: "{{ network_dns | default(['8.8.8.8', '8.8.4.4']) }}"
+    dns_servers: "{{ network_dns | default(lab_dns) }}"
     network_interface: "{{ ansible_default_ipv4.interface }}"
     current_static_ip: "{{ static_ip | default(ansible_default_ipv4.address) }}"
     current_netmask: "{{ ansible_default_ipv4.netmask }}"
@@ -81,8 +81,8 @@
         - name: Check current IP matches expected
           ansible.builtin.assert:
             that:
-              - current_static_ip == "10.0.0.200"
-            fail_msg: "Expected IP 10.0.0.200 but got {{ current_static_ip }}"
+              - current_static_ip == r730xd_ip
+            fail_msg: "Expected IP {{ r730xd_ip }} but got {{ current_static_ip }}"
             success_msg: "Static IP is correctly set to {{ current_static_ip }}"
 
     - name: Verify network configuration file exists

@@ -14,8 +14,8 @@
 #
 # Environment variables:
 #   IDRAC_PASSWORD  - iDRAC root password (required)
-#   IDRAC_HOST      - iDRAC IP/hostname (default: 10.0.0.203)
-#   R730XD_HOST     - R730xd SSH host (default: 10.0.0.200)
+#   IDRAC_HOST      - iDRAC IP/hostname (default: from lab-network.env)
+#   R730XD_HOST     - R730xd SSH host (default: from lab-network.env)
 #   R730XD_USER     - R730xd SSH user (default: bearf)
 #   BOOT_DRIVE_BAY  - Bay to refuse to wipe (default: 12)
 #
@@ -36,8 +36,13 @@ set -euo pipefail
 # Configuration
 # =============================================================================
 
-IDRAC_HOST="${IDRAC_HOST:-10.0.0.203}"
-R730XD_HOST="${R730XD_HOST:-10.0.0.200}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Source lab network config (see ansible/group_vars/all/network.yml)
+# shellcheck source=lab-network.env
+[[ -f "${SCRIPT_DIR}/lab-network.env" ]] && . "${SCRIPT_DIR}/lab-network.env"
+
+IDRAC_HOST="${IDRAC_HOST:-${IDRAC_IP:-10.0.0.203}}"
+R730XD_HOST="${R730XD_HOST:-${R730XD_IP:-10.0.0.200}}"
 R730XD_USER="${R730XD_USER:-bearf}"
 BOOT_DRIVE_BAY="${BOOT_DRIVE_BAY:-12}"
 

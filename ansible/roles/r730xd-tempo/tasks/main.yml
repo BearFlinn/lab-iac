@@ -65,8 +65,8 @@
     msg:
       - "=== Tempo ==="
       - ""
-      - "API: http://{{ ansible_facts['default_ipv4']['address'] | default('10.0.0.200') }}:{{ tempo_api_port }}"
-      - "OTLP gRPC: {{ ansible_facts['default_ipv4']['address'] | default('10.0.0.200') }}:{{ tempo_otlp_grpc_port }}"
-      - "OTLP HTTP: {{ ansible_facts['default_ipv4']['address'] | default('10.0.0.200') }}:{{ tempo_otlp_http_port }}"
+      - "API: http://{{ ansible_facts['default_ipv4']['address'] | default(r730xd_ip) }}:{{ tempo_api_port }}"
+      - "OTLP gRPC: {{ ansible_facts['default_ipv4']['address'] | default(r730xd_ip) }}:{{ tempo_otlp_grpc_port }}"
+      - "OTLP HTTP: {{ ansible_facts['default_ipv4']['address'] | default(r730xd_ip) }}:{{ tempo_otlp_http_port }}"
       - "Data: {{ tempo_data_dir }}"
       - "S3 bucket: {{ tempo_s3_bucket }}"

@@ -3,9 +3,9 @@
 # S3 backend via MinIO Obs, single-binary mode
 # Local data on ZFS pool (tank/observability/tempo, recordsize=128K)
 #
-# Tempo API: http://10.0.0.200:3200
-# OTLP gRPC: 10.0.0.200:4317
-# OTLP HTTP: 10.0.0.200:4318
+# Tempo API: http://<r730xd_ip>:3200
+# OTLP gRPC: <r730xd_ip>:4317
+# OTLP HTTP: <r730xd_ip>:4318
 
 # Image (pinned version)
 tempo_image: "grafana/tempo:2.7.2"
@@ -23,7 +23,7 @@ tempo_compose_dir: "/opt/observability/tempo"
 tempo_memory_limit: "256m"
 
 # S3 backend (MinIO)
-tempo_s3_endpoint: "10.0.0.200:9000"
+tempo_s3_endpoint: "{{ r730xd_ip }}:9000"
 tempo_s3_bucket: "observability-tempo"
 # Access keys from group_vars (vault-backed)
 # tempo_s3_access_key: "{{ minio_observability_access_key }}"

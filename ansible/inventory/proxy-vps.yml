@@ -1,10 +1,11 @@
 ---
 # Proxy VPS Inventory
 # Hetzner VPS running Caddy as reverse proxy to K8s cluster via NetBird tunnel
+# IP addresses: see ansible/group_vars/all/network.yml (single source of truth)
 #
 # SSH configured in ~/.ssh/config:
 #   Host proxy-vps
-#     HostName <vps-ip>
+#     HostName <proxy_vps_public_ip>
 #     User bearf
 #     Port 2222
 
@@ -31,7 +32,7 @@ all:
       # K8s ingress endpoint (NetBird IP + NodePort)
       # All *.bearflinn.com subdomains not matched by caddy_services
       # are proxied here - K8s ingress handles routing and 404s
-      k8s_ingress_endpoint: "100.96.94.27:30487"
+      k8s_ingress_endpoint: "{{ netbird_k8s_ingress_ip }}:30487"
 
       # External domains routed to K8s ingress (non-bearflinn.com domains)
       caddy_k8s_domains:
@@ -44,7 +45,7 @@ all:
       caddy_services:
         - domain: "gin-house.bearflinn.com"
           type: "proxy"
-          backend: "100.96.217.175:8123"
+          backend: "{{ netbird_home_assistant_ip }}:8123"
           comment: "Home Assistant via Tailscale"
         - domain: "test.bearflinn.com"
           type: "static"
@@ -77,7 +78,7 @@ all:
       # across UFW reloads.
       udp_forwarding_rules:
         - src_port: 8211
-          dest_ip: "100.96.46.7"
+          dest_ip: "{{ netbird_palworld_ip }}"
           dest_port: 8211
           comment: "Palworld game server on deb-web"
 
@@ -96,7 +97,7 @@ all:
     # Home network public IP for monitoring firewall rules
     # R730xd Prometheus scrapes VPS over the internet (no NetBird on R730xd)
     # Update this if ISP assigns a new IP
-    monitoring_home_ip: "98.251.87.200"
+    monitoring_home_ip: "{{ home_public_ip }}"
 
     # Firewall configuration
     enable_firewall: true

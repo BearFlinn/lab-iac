@@ -1,0 +1,30 @@
+---
+# Network topology — single source of truth for all IP addresses
+# All Ansible roles, playbooks, and inventory files reference these variables.
+# Shell scripts: see scripts/lab-network.env
+# Preseed configs: use __PLACEHOLDER__ substitution from build scripts
+
+# Lab network
+lab_subnet: "10.0.0.0/24"
+lab_gateway: "10.0.0.1"
+lab_dns:
+  - "8.8.8.8"
+  - "8.8.4.4"
+
+# Machine IPs
+r730xd_ip: "10.0.0.200"
+r730xd_idrac_ip: "10.0.0.203"
+quanta_ip: "10.0.0.202"
+quanta_bmc_ip: "10.0.0.201"
+dell_inspiron_ip: "10.0.0.226"
+intel_nuc_ip: "10.0.0.46"
+tower_pc_ip: "10.0.0.249"
+optiplex_ip: "10.0.0.187"
+staging_vm_ip: "192.168.122.191"
+
+# External / VPN
+proxy_vps_public_ip: "178.156.217.91"
+home_public_ip: "98.251.87.200"
+netbird_k8s_ingress_ip: "100.96.94.27"
+netbird_home_assistant_ip: "100.96.217.175"
+netbird_palworld_ip: "100.96.46.7"

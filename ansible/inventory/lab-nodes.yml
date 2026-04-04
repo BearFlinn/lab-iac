@@ -1,12 +1,13 @@
 ---
 # Lab Node Inventory
-# All physical lab machines on the 10.0.0.0/24 network
+# All physical lab machines on the lab network
+# IP addresses: see ansible/group_vars/all/network.yml (single source of truth)
 #
 # Usage (target specific groups):
 #   ansible-playbook -l k8s_cluster ansible/playbooks/some-playbook.yml
 #   ansible -i ansible/inventory/lab-nodes.yml all -m ping
 #
-# Note: Quanta BMC/IPMI is at 10.0.0.201 (separate from OS IP below)
+# Note: Quanta BMC/IPMI is at <quanta_bmc_ip> (separate from OS IP below)
 
 all:
   children:
@@ -15,7 +16,7 @@ all:
         k8s_control_plane:
           hosts:
             dell-inspiron-15:
-              ansible_host: 10.0.0.226
+              ansible_host: "{{ dell_inspiron_ip }}"
               model: "Dell Inspiron 15"
               cpu: "Intel i3-7100U (2C/4T @ 2.7 GHz)"
               ram_gb: 8
@@ -25,15 +26,15 @@ all:
         k8s_workers:
           hosts:
             quanta:
-              ansible_host: 10.0.0.202
+              ansible_host: "{{ quanta_ip }}"
               model: "Quanta QSSC-2ML"
               cpu: "2x Intel Xeon E5-2670 (16C/32T @ 2.6 GHz)"
               ram_gb: 64
-              bmc_host: 10.0.0.201
+              bmc_host: "{{ quanta_bmc_ip }}"
               node_roles: ["worker"]
 
             intel-nuc:
-              ansible_host: 10.0.0.46
+              ansible_host: "{{ intel_nuc_ip }}"
               model: "Intel NUC12SNKi72"
               cpu: "Intel Core i7-12700H (14C/20T)"
               ram_gb: 64
@@ -42,7 +43,7 @@ all:
               # ARC GPU is dead — headless worker only
 
             tower-pc:
-              ansible_host: 10.0.0.249
+              ansible_host: "{{ tower_pc_ip }}"
               model: "Custom Tower PC"
               cpu: "Intel i7-4790 (4C/8T @ 3.6-4.0 GHz)"
               ram_gb: 24
@@ -52,7 +53,7 @@ all:
     standalone:
       hosts:
         optiplex:
-          ansible_host: 10.0.0.187
+          ansible_host: "{{ optiplex_ip }}"
           model: "Dell Optiplex 9020 SFF"
           cpu: "Intel i7-4790 (4C/8T)"
           ram_gb: 32
@@ -62,7 +63,7 @@ all:
     storage_servers:
       hosts:
         r730xd:
-          ansible_host: 10.0.0.200
+          ansible_host: "{{ r730xd_ip }}"
           model: "Dell PowerEdge R730xd"
           cpu: "Intel Xeon E5-2630 v3 (8C/16T @ 2.4 GHz)"
           ram_gb: 32
@@ -70,12 +71,12 @@ all:
 
     # Temporary staging VM on R730xd — hosts critical workloads during migration
     # See ADR-002. Remove after migration Phase 5.
-    # VM is on NAT network (192.168.122.x), reachable via R730xd jump host
+    # VM is on NAT network, reachable via R730xd jump host
     staging:
       hosts:
         staging-vm:
-          ansible_host: 192.168.122.191
-          ansible_ssh_common_args: '-o ProxyJump=bearf@10.0.0.200'
+          ansible_host: "{{ staging_vm_ip }}"
+          ansible_ssh_common_args: '-o ProxyJump=bearf@{{ r730xd_ip }}'
           node_roles: ["staging"]
           # Monitoring — VM has no IPMI/BMC or SMART-capable disks
           ipmi_exporter_enabled: false

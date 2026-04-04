@@ -40,4 +40,4 @@ ZFS datasets with per-workload recordsize tuning:
 - ZFS provides checksums, lz4 compression, and per-dataset snapshots for all hot data. Enables future point-in-time recovery for PostgreSQL via ZFS snapshots.
 - Two MinIO instances to manage instead of one. Separate credentials, separate Prometheus scrape targets, separate health checks.
 - ZFS capacity (~3.6TB) must be monitored — hot data with 30-day retention (Loki, Tempo via MinIO Obs) plus database growth will consume space over time.
-- Loki/Tempo S3 endpoint (`10.0.0.200:9000`) is unchanged — no config changes needed for existing observability service accounts.
+- Loki/Tempo S3 endpoint (`<r730xd_ip>:9000`) is unchanged — no config changes needed for existing observability service accounts.

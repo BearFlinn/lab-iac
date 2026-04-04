@@ -49,7 +49,7 @@
     msg:
       - "=== MinIO Obs (observability) ==="
       - ""
-      - "API: http://{{ ansible_facts['default_ipv4']['address'] | default('10.0.0.200') }}:{{ minio_obs_api_port }}"
-      - "Console: http://{{ ansible_facts['default_ipv4']['address'] | default('10.0.0.200') }}:{{ minio_obs_console_port }}"
+      - "API: http://{{ ansible_facts['default_ipv4']['address'] | default(r730xd_ip) }}:{{ minio_obs_api_port }}"
+      - "Console: http://{{ ansible_facts['default_ipv4']['address'] | default(r730xd_ip) }}:{{ minio_obs_console_port }}"
       - "Data: {{ minio_obs_data_dir }}"
       - "Backing: ZFS (tank/foundation/minio-obs)"

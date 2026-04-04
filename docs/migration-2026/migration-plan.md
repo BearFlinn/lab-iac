@@ -1,5 +1,7 @@
 # Migration Plan
 
+> **IP addresses:** Authoritative values are in `ansible/group_vars/all/network.yml`.
+
 Last updated: 2026-04-03
 
 ## Guiding Principles
@@ -55,7 +57,7 @@ Document everything that's running so nothing gets lost in the migration:
 - [x] ~~deb-web (Optiplex) services~~ — **inventoried. Running duplicate Docker Compose copies of most K8s apps, plus Prometheus/Grafana monitoring stack, Palworld (systemd), Caddy, cloudflared, GitHub Actions runner, agent-docs-sync.**
 - [x] ~~Tower-pc services~~ — **NFS export at /mnt/nfs-storage (bcache-backed 1TB HDD). ZFS pool had appeared DEGRADED but all 3×2TB drives are healthy — the setup script targeted a card reader slot (/dev/sdg) instead of the third drive (/dev/sdd). ~9MB data. No Docker containers. No extra services.**
 - [x] ~~MSI laptop workloads~~ — **Nothing custom — just kubelet/containerd. Hosts 18 of ~25 pods (most K8s workloads schedule here). Clean removal.**
-- [ ] **DNS/networking dependencies** — what breaks if IPs change? (NFS export references 10.0.0.0/24 + NetBird IP 172.30.186.199; VPS proxy routes to K8s ingress via NetBird)
+- [ ] **DNS/networking dependencies** — what breaks if IPs change? (NFS export references `<lab_subnet>` + NetBird IP 172.30.186.199; VPS proxy routes to K8s ingress via NetBird)
 - [x] ~~Ansible vault~~ — **.vault_pass exists (45 bytes). Ensure backed up outside repo.**
 - [x] ~~cloudflared on deb-web~~ — **dead, can be removed**
 - [x] ~~agent-docs-sync on deb-web~~ — **trivial, nearly unused, can be dropped**
@@ -129,10 +131,10 @@ Tower PC resumes the router role ([ADR-011](../decisions/011-ap630-restored-to-s
 
 - [x] ~~Install boot drive~~ — **Samsung SSD 850 EVO 250GB in rear bay 12 (non-RAID mode)**
 - [x] ~~Install data drives~~ — **7 drives installed: 2×4TB (parity, bays 0+3) + 5×3TB (data, bays 1+2+4+5+8). Bay 8 contains the original 3TB with existing data, mounted directly into pool.**
-- [x] ~~Install OS~~ — **Debian 13.4 (Trixie) installed 2026-03-26 via preseeded USB (fully scripted: `scripts/build-r730xd-iso.sh`). UEFI boot, static IP 10.0.0.200, SSH key auth, baseline playbook applied (`ansible/playbooks/setup-r730xd.yml`).**
+- [x] ~~Install OS~~ — **Debian 13.4 (Trixie) installed 2026-03-26 via preseeded USB (fully scripted: `scripts/build-r730xd-iso.sh`). UEFI boot, static IP `<r730xd_ip>`, SSH key auth, baseline playbook applied (`ansible/playbooks/setup-r730xd.yml`).**
 - [x] ~~Configure storage~~ — **done 2026-03-31. MergerFS pool at `/mnt/pool` (5×3TB data), SnapRAID parity (2×4TB). Deployed via `ansible/playbooks/r730xd-storage.yml`.**
   - [ ] bcache SSD for read acceleration (deferred — not blocking)
-- [x] ~~Set up NFS exports for K8s PVCs~~ — **done 2026-03-31. `/mnt/pool` exported to 10.0.0.0/24 via `r730xd-nfs-server` role.**
+- [x] ~~Set up NFS exports for K8s PVCs~~ — **done 2026-03-31. `/mnt/pool` exported to `<lab_subnet>` via `r730xd-nfs-server` role.**
 - [x] ~~Set up ZFS pool on 3×2TB drives (migrated from tower-pc) for latency-sensitive workloads~~ — **done 2026-04-03. ZFS raidz1 pool `tank` (3×2TB, bays 9+10+11) mounted at `/mnt/zfs`. ~3.6TB usable. lz4 compression, 4GB ARC max. Monitoring: `check-zfs.sh` (tier 1, every 5 min), Prometheus alert rules (degraded/capacity/errors/scrub). See [ADR-004](../decisions/004-zfs-iscsi-for-k8s-storage.md). Deployed via `ansible/playbooks/r730xd-zfs.yml`.**
 - [ ] Set up iSCSI off ZFS for K8s cluster storage (replacing NFS for performance) — see [ADR-004](../decisions/004-zfs-iscsi-for-k8s-storage.md)
 - [x] ~~Set up S3-compatible storage~~ — **done 2026-04-01, migrated to two-tier 2026-04-03. MinIO Obs (hot, ZFS) at :9000/:9001 for Loki/Tempo. MinIO Bulk (cold, MergerFS) at :9002/:9003 for container registry and build artifacts. Deployed via `ansible/playbooks/deploy-foundation-stores.yml`. See ADR-003.**
@@ -143,15 +145,15 @@ Tower PC resumes the router role ([ADR-011](../decisions/011-ap630-restored-to-s
   - Port 1: VLAN 1 (general/management + internet)
   - Port 2: VLAN 10 (lab network)
   - Port 3-4: VLAN 20 (dedicated storage, if using storage VLAN)
-- [x] ~~Set up iDRAC remote management~~ — **SSH racadm working at 10.0.0.203. Note: no Enterprise license, so no virtual media. HTTPS web UI works for basic monitoring.**
+- [x] ~~Set up iDRAC remote management~~ — **SSH racadm working at `<r730xd_idrac_ip>`. Note: no Enterprise license, so no virtual media. HTTPS web UI works for basic monitoring.**
 - [ ] Install NetBird for VPN access
 - [ ] Verify NFS is accessible from K8s nodes
-- [x] ~~**Stand up staging VM**~~ ([ADR-002](../decisions/002-r730-staging-vm-for-migration.md)) — **done 2026-03-28. Debian 13 VM on libvirt NAT network (192.168.122.191), 4 vCPU / 8GB RAM. KVM/libvirt installed via `ansible/roles/r730xd-vm-host`, VM provisioned via `ansible/playbooks/create-staging-vm.yml`. Uses Debian generic cloud image + cloud-init + UEFI boot. Docker, gh CLI, and NetBird (100.96.220.249) installed. Critical services deployed via `ansible/playbooks/deploy-staging-services.yml`:**
+- [x] ~~**Stand up staging VM**~~ ([ADR-002](../decisions/002-r730-staging-vm-for-migration.md)) — **done 2026-03-28. Debian 13 VM on libvirt NAT network (`<staging_vm_ip>`), 4 vCPU / 8GB RAM. KVM/libvirt installed via `ansible/roles/r730xd-vm-host`, VM provisioned via `ansible/playbooks/create-staging-vm.yml`. Uses Debian generic cloud image + cloud-init + UEFI boot. Docker, gh CLI, and NetBird installed. Critical services deployed via `ansible/playbooks/deploy-staging-services.yml`:**
   - **landing-page** (nginx) — landing.bearflinn.com
   - **caz-portfolio** (Rust) — pennydreadfulsfx.com
   - **resume-site** (FastAPI + pgvector/pg16) — resume.bearflinn.com
   - **Caddy reverse proxy on port 80, routes by Host header. All repos cloned from grizzly-endeavors org, built from source on VM.**
-  - [ ] Update VPS proxy to route traffic to staging VM (NetBird IP 100.96.220.249:80)
+  - [ ] Update VPS proxy to route traffic to staging VM (staging VM NetBird IP:80)
   - [ ] Verify all critical services are reachable from public internet before proceeding to Phase 3
 
 ### 2B: Quanta — K8s Worker (Diskless)

@@ -2,6 +2,8 @@
 
 Configuration management for active infrastructure. Previous K8s cluster and tower-pc configs are in `archive/pre-migration-2026/ansible/`.
 
+> **IP addresses:** Authoritative values are in `group_vars/all/network.yml`. IPs in this README are for quick reference only.
+
 ## Playbooks
 
 | Playbook | Target | Purpose |
@@ -59,16 +61,16 @@ PostgreSQL, Redis, and two MinIO instances run on the R730xd as Docker Compose s
 
 | Service | Address | Data Directory | Storage Tier |
 |---------|---------|----------------|--------------|
-| PostgreSQL 16 | `postgresql://postgres:<password>@10.0.0.200:5432/` | `/mnt/zfs/foundation/postgres/data` | ZFS (8K recordsize) |
-| Redis 7 | `redis://:<password>@10.0.0.200:6379` | `/mnt/zfs/foundation/redis/data` | ZFS (64K recordsize) |
-| MinIO Obs API | `http://10.0.0.200:9000` | `/mnt/zfs/foundation/minio-obs/data` | ZFS (1M recordsize) |
-| MinIO Obs Console | `http://10.0.0.200:9001` | — | — |
-| MinIO Bulk API | `http://10.0.0.200:9002` | `/mnt/pool/foundation/minio-bulk/data` | MergerFS |
-| MinIO Bulk Console | `http://10.0.0.200:9003` | — | — |
+| PostgreSQL 16 | `postgresql://postgres:<password>@<r730xd_ip>:5432/` | `/mnt/zfs/foundation/postgres/data` | ZFS (8K recordsize) |
+| Redis 7 | `redis://:<password>@<r730xd_ip>:6379` | `/mnt/zfs/foundation/redis/data` | ZFS (64K recordsize) |
+| MinIO Obs API | `http://<r730xd_ip>:9000` | `/mnt/zfs/foundation/minio-obs/data` | ZFS (1M recordsize) |
+| MinIO Obs Console | `http://<r730xd_ip>:9001` | — | — |
+| MinIO Bulk API | `http://<r730xd_ip>:9002` | `/mnt/pool/foundation/minio-bulk/data` | MergerFS |
+| MinIO Bulk Console | `http://<r730xd_ip>:9003` | — | — |
 
 ### Connecting from K8s workloads
 
-K8s pods reach these services at `10.0.0.200:<port>`. Use Kubernetes Secrets or ConfigMaps to pass connection strings — do not hardcode credentials in manifests.
+K8s pods reach these services at `<r730xd_ip>:<port>`. Use Kubernetes Secrets or ConfigMaps to pass connection strings — do not hardcode credentials in manifests.
 
 ```yaml
 # Example: Postgres connection in a K8s deployment
@@ -78,12 +80,12 @@ env:
       secretKeyRef:
         name: foundation-postgres
         key: url
-        # value: postgresql://myapp:password@10.0.0.200:5432/myapp
+        # value: postgresql://myapp:password@<r730xd_ip>:5432/myapp
 ```
 
 ### Connecting from staging VM services
 
-The staging VM (192.168.122.191) reaches the R730xd host at its bridge IP. Pass connection strings via Docker Compose environment variables, same as existing staging services.
+The staging VM (<staging_vm_ip>) reaches the R730xd host at its bridge IP. Pass connection strings via Docker Compose environment variables, same as existing staging services.
 
 ### Operations
 
@@ -113,8 +115,8 @@ docker logs minio-bulk --tail 50
 # Health checks
 docker exec foundation-postgres pg_isready -U postgres
 docker exec foundation-redis redis-cli -a <password> ping
-curl http://10.0.0.200:9000/minio/health/live   # MinIO Obs
-curl http://10.0.0.200:9002/minio/health/live   # MinIO Bulk
+curl http://<r730xd_ip>:9000/minio/health/live   # MinIO Obs
+curl http://<r730xd_ip>:9002/minio/health/live   # MinIO Bulk
 ```
 
 ### Creating application databases
@@ -162,13 +164,13 @@ Prometheus, Loki, Tempo, Grafana, and Alloy run on the R730xd as Docker Compose 
 
 | Service | Address | Data Directory | Storage Tier |
 |---------|---------|----------------|--------------|
-| Prometheus | `http://10.0.0.200:9090` | `/mnt/zfs/observability/prometheus/data` | ZFS (128K recordsize) |
-| Alertmanager | `http://10.0.0.200:9093` | `/mnt/zfs/observability/prometheus/alertmanager` | ZFS |
-| Loki | `http://10.0.0.200:3100` | `/mnt/zfs/observability/loki/data` | ZFS (128K recordsize) |
-| Tempo API | `http://10.0.0.200:3200` | `/mnt/zfs/observability/tempo/data` | ZFS (128K recordsize) |
-| Tempo OTLP gRPC | `10.0.0.200:4317` | — | — |
-| Tempo OTLP HTTP | `10.0.0.200:4318` | — | — |
-| Grafana | `http://10.0.0.200:3000` | `/mnt/zfs/observability/grafana/data` | ZFS (128K recordsize) |
+| Prometheus | `http://<r730xd_ip>:9090` | `/mnt/zfs/observability/prometheus/data` | ZFS (128K recordsize) |
+| Alertmanager | `http://<r730xd_ip>:9093` | `/mnt/zfs/observability/prometheus/alertmanager` | ZFS |
+| Loki | `http://<r730xd_ip>:3100` | `/mnt/zfs/observability/loki/data` | ZFS (128K recordsize) |
+| Tempo API | `http://<r730xd_ip>:3200` | `/mnt/zfs/observability/tempo/data` | ZFS (128K recordsize) |
+| Tempo OTLP gRPC | `<r730xd_ip>:4317` | — | — |
+| Tempo OTLP HTTP | `<r730xd_ip>:4318` | — | — |
+| Grafana | `http://<r730xd_ip>:3000` | `/mnt/zfs/observability/grafana/data` | ZFS (128K recordsize) |
 
 ### Operations
 
@@ -194,9 +196,9 @@ docker logs observability-loki --tail 50
 docker logs observability-grafana --tail 50
 
 # Health checks
-curl http://10.0.0.200:9090/-/healthy
-curl http://10.0.0.200:3100/ready
-curl http://10.0.0.200:3000/api/health
+curl http://<r730xd_ip>:9090/-/healthy
+curl http://<r730xd_ip>:3100/ready
+curl http://<r730xd_ip>:3000/api/health
 ```
 
 ## Inventory
@@ -204,7 +206,7 @@ curl http://10.0.0.200:3000/api/health
 | File | Hosts |
 |------|-------|
 | `proxy-vps.yml` | Hetzner VPS (SSH port 2222) |
-| `r730xd.yml` | Dell R730xd storage server (10.0.0.200) |
+| `r730xd.yml` | Dell R730xd storage server (<r730xd_ip>) |
 | `lab-nodes.yml` | All lab machines (K8s cluster, standalone, staging) |
 
 ## Vault secrets

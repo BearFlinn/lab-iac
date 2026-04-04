@@ -14,4 +14,4 @@ alloy_compose_dir: "/opt/observability/alloy"
 alloy_memory_limit: "256m"
 
 # Loki endpoint
-alloy_loki_url: "http://10.0.0.200:3100/loki/api/v1/push"
+alloy_loki_url: "http://{{ r730xd_ip }}:3100/loki/api/v1/push"

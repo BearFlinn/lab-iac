@@ -59,7 +59,7 @@
     msg:
       - "=== Redis {{ redis_version }} ==="
       - ""
-      - "Connection: redis://:<password>@{{ ansible_facts['default_ipv4']['address'] | default('10.0.0.200') }}:{{ redis_port }}"
+      - "Connection: redis://:<password>@{{ ansible_facts['default_ipv4']['address'] | default(r730xd_ip) }}:{{ redis_port }}"
       - "Data: {{ redis_data_dir }}"
       - "Compose: {{ redis_compose_dir }}"
       - ""

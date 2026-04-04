@@ -11,12 +11,10 @@ bridge_name: "br0"
 # Physical interface to attach to the bridge
 # R730xd primary NIC — verify with `ip link` on the host
 bridge_physical_interface: "eno1"
-bridge_address: "10.0.0.200"
+bridge_address: "{{ r730xd_ip }}"
 bridge_netmask: "255.255.255.0"
-bridge_gateway: "10.0.0.1"
-bridge_dns:
-  - "8.8.8.8"
-  - "8.8.4.4"
+bridge_gateway: "{{ lab_gateway }}"
+bridge_dns: "{{ lab_dns }}"
 
 # --- VM Storage ---
 vm_storage_pool_path: "/var/lib/libvirt/images"
