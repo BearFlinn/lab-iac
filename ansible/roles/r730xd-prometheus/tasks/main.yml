@@ -22,6 +22,20 @@
   loop:
     - "{{ prometheus_compose_dir }}"
     - "{{ prometheus_compose_dir }}/rules"
+    - "{{ prometheus_compose_dir }}/targets.d"
+
+- name: Seed file_sd targets from defaults
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "{{ prometheus_compose_dir }}/targets.d/{{ item.dest }}"
+    owner: root
+    group: root
+    mode: "0644"
+    force: false
+  loop:
+    - { src: "targets.d/nodes.yml.j2", dest: "nodes.yml" }
+    - { src: "targets.d/ipmi.yml.j2", dest: "ipmi.yml" }
+  notify: reload prometheus
 
 - name: Deploy Prometheus configuration
   ansible.builtin.template:

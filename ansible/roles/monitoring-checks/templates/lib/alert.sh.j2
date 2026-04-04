@@ -34,8 +34,16 @@ alert() {
         fi
     fi
 
+    # Map alert levels to valid syslog priorities
+    local syslog_priority="$level"
+    case "$level" in
+        critical) syslog_priority="crit" ;;
+        warning)  syslog_priority="warning" ;;
+        info)     syslog_priority="info" ;;
+    esac
+
     # Log to syslog
-    logger -t "monitoring" -p "user.${level}" "[${level^^}] ${check}: ${message}"
+    logger -t "monitoring" -p "user.${syslog_priority}" "[${level^^}] ${check}: ${message}"
 
     # Webhook dispatch
     if [[ -n "$ALERT_WEBHOOK_URL" ]]; then

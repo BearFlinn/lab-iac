@@ -112,12 +112,13 @@ Last updated: 2026-04-02
 | Form factor | Rackmount |
 | CPU | 2× Intel Xeon E5-2670 0 — 8C/16T @ 2.6 GHz (turbo 3.3 GHz), Sandy Bridge-EP, 115W TDP each (230W total CPU) |
 | RAM | 64 GB DDR3 1333 MHz |
-| Storage | 6× SATA ports, no hot-swap bays — drives mount internally. Currently empty. Will PXE boot (diskless). |
+| Storage | 6× SATA ports, no hot-swap bays — drives mount internally. 240 GB SSD installed as boot drive. |
 | GPU | TBD — check PCIe slots |
 | Remote mgmt | IPMI/BMC at 10.0.0.201 (on lab subnet) |
-| BIOS | AMI v2.14.1219 (dated 2012-10-04) |
-| Status | POST confirmed, no drives installed |
-| TODO | Set BMC/IPMI static IP, check PCIe slot count/type, install OS drive |
+| BIOS | AMI v2.14.1219 (dated 2012-10-04), UEFI boot supported |
+| Network | 4-port NIC via PCIe riser (installed 2026-03-27) |
+| Status | 240 GB boot drive installed, OS imaging via preseeded ISO |
+| TODO | Set BMC/IPMI static IP, check PCIe slot count/type |
 
 ### Network Equipment
 

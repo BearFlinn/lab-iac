@@ -1,0 +1,427 @@
+---
+# K8s Worker Node Setup Playbook
+# For nodes installed via build-worker-iso.sh (Debian 13, no swap, static IP)
+#
+# What preseed already handles:
+#   - Partitioning (EFI + root, no swap partition)
+#   - User account (bearf, passwordless sudo)
+#   - SSH key auth
+#   - Static IP via /etc/network/interfaces
+#   - swap.target masked, vm.swappiness=0
+#
+# What this playbook adds:
+#   - Belt-and-suspenders swap verification
+#   - Network config management (changeable for future VLAN migration)
+#   - Baseline packages
+#   - Hostname and /etc/hosts
+#   - Monitoring (node-exporter, IPMI, SMART)
+#   - Lid-close handling (for laptops like the Inspiron)
+#
+# Usage:
+#   ansible-playbook -i ansible/inventory/lab-nodes.yml -l quanta ansible/playbooks/setup-k8s-worker.yml -v
+#   ansible-playbook -i ansible/inventory/lab-nodes.yml -l k8s_workers ansible/playbooks/setup-k8s-worker.yml -v
+
+- name: K8s worker node setup
+  hosts: all
+  gather_facts: yes
+  become: yes
+  vars:
+    gateway: "{{ network_gateway | default('10.0.0.1') }}"
+    dns_servers: "{{ network_dns | default(['8.8.8.8', '8.8.4.4']) }}"
+    network_interface: "{{ ansible_default_ipv4.interface }}"
+
+  tasks:
+    # ==========================================================================
+    # Swap — belt-and-suspenders verification
+    # Preseed creates no swap partition, but verify and enforce at every run
+    # ==========================================================================
+
+    - name: Ensure swap is off
+      ansible.builtin.command: swapoff -a
+      changed_when: false
+      failed_when: false
+
+    - name: Comment out any swap entries in fstab
+      ansible.builtin.replace:
+        path: /etc/fstab
+        regexp: '^([^#].*\s+swap\s+.*)$'
+        replace: '# \1'
+
+    - name: Mask swap.target
+      ansible.builtin.systemd:
+        name: swap.target
+        masked: yes
+
+    - name: Find and mask active systemd swap units
+      block:
+        - name: List active swap units
+          ansible.builtin.shell: systemctl list-units --type=swap --state=active --no-legend --plain | awk '{print $1}'
+          register: active_swap_units
+          changed_when: false
+
+        - name: Mask active swap units
+          ansible.builtin.systemd:
+            name: "{{ item }}"
+            masked: yes
+          loop: "{{ active_swap_units.stdout_lines }}"
+          when: active_swap_units.stdout_lines | length > 0
+
+    - name: Set vm.swappiness=0
+      ansible.posix.sysctl:
+        name: vm.swappiness
+        value: '0'
+        sysctl_file: /etc/sysctl.d/99-no-swap.conf
+        reload: yes
+
+    - name: Verify swap is disabled
+      ansible.builtin.shell: swapon --show --noheadings
+      register: swap_check
+      changed_when: false
+      failed_when: swap_check.stdout | length > 0
+
+    # ==========================================================================
+    # Packages
+    # ==========================================================================
+
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install baseline packages
+      ansible.builtin.apt:
+        name:
+          - curl
+          - wget
+          - git
+          - vim
+          - htop
+          - net-tools
+          - dnsutils
+          - iputils-ping
+          - traceroute
+          - nfs-common
+          - lvm2
+          - python3
+          - smartmontools
+          - lm-sensors
+        state: present
+
+    # ==========================================================================
+    # Hostname
+    # ==========================================================================
+
+    - name: Set hostname
+      ansible.builtin.hostname:
+        name: "{{ inventory_hostname }}"
+
+    - name: Update /etc/hosts with hostname
+      ansible.builtin.lineinfile:
+        path: /etc/hosts
+        regexp: '^127\.0\.1\.1'
+        line: "127.0.1.1 {{ inventory_hostname }}"
+        state: present
+
+    - name: Add lab nodes to /etc/hosts
+      ansible.builtin.blockinfile:
+        path: /etc/hosts
+        block: |
+          # Lab nodes
+          {% for host in groups['all'] %}
+          {% if hostvars[host].get('ansible_host') %}
+          {{ hostvars[host].ansible_host }} {{ host }}
+          {% endif %}
+          {% endfor %}
+        marker: "# {mark} ANSIBLE MANAGED — lab nodes"
+
+    # ==========================================================================
+    # Timezone
+    # ==========================================================================
+
+    - name: Configure timezone
+      community.general.timezone:
+        name: "{{ timezone | default('America/New_York') }}"
+
+    # ==========================================================================
+    # Network — static IP via /etc/network/interfaces
+    # Preseed sets this initially; Ansible enforces it going forward
+    # Change ansible_host in inventory to update a node's IP
+    # ==========================================================================
+
+    - name: Configure static IP
+      ansible.builtin.copy:
+        content: |
+          # Managed by Ansible — setup-k8s-worker.yml
+          source /etc/network/interfaces.d/*
+
+          auto lo
+          iface lo inet loopback
+
+          auto {{ network_interface }}
+          allow-hotplug {{ network_interface }}
+          iface {{ network_interface }} inet static
+              address {{ ansible_host }}
+              netmask 255.255.255.0
+              gateway {{ gateway }}
+              dns-nameservers {{ dns_servers | join(' ') }}
+        dest: /etc/network/interfaces
+        mode: '0644'
+      register: network_changed
+
+    - name: Apply network changes
+      when: network_changed.changed
+      block:
+        - name: Restart networking
+          ansible.builtin.shell: |
+            ifdown {{ network_interface }} 2>/dev/null || true
+            ifup {{ network_interface }} 2>/dev/null || true
+          async: 45
+          poll: 0
+
+        - name: Wait for network to stabilize
+          ansible.builtin.wait_for:
+            timeout: 10
+          delegate_to: localhost
+
+        - name: Verify connectivity
+          ansible.builtin.wait_for_connection:
+            timeout: 30
+            delay: 5
+
+    # ==========================================================================
+    # Laptop tweaks (safe to run on desktops — just no-ops)
+    # ==========================================================================
+
+    - name: Prevent hibernation on lid close
+      ansible.builtin.lineinfile:
+        path: /etc/systemd/logind.conf
+        regexp: "{{ item.regexp }}"
+        line: "{{ item.line }}"
+        state: present
+      loop:
+        - { regexp: '^#?HandleLidSwitch=', line: 'HandleLidSwitch=ignore' }
+        - { regexp: '^#?HandleLidSwitchExternalPower=', line: 'HandleLidSwitchExternalPower=ignore' }
+        - { regexp: '^#?HandleLidSwitchDocked=', line: 'HandleLidSwitchDocked=ignore' }
+      notify: restart systemd-logind
+
+    # ==========================================================================
+    # Disable automatic updates (prevent surprise reboots)
+    # ==========================================================================
+
+    - name: Disable automatic updates
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        enabled: no
+        state: stopped
+      loop:
+        - unattended-upgrades
+        - apt-daily.timer
+        - apt-daily-upgrade.timer
+      failed_when: false
+
+    # ==========================================================================
+    # Summary
+    # ==========================================================================
+
+    - name: Display node info
+      ansible.builtin.debug:
+        msg:
+          - "Hostname: {{ inventory_hostname }}"
+          - "IP: {{ ansible_host }}"
+          - "Interface: {{ network_interface }}"
+          - "OS: {{ ansible_distribution }} {{ ansible_distribution_version }}"
+          - "Kernel: {{ ansible_kernel }}"
+          - "Swap: DISABLED (verified)"
+
+  handlers:
+    - name: restart systemd-logind
+      ansible.builtin.systemd:
+        name: systemd-logind
+        state: restarted
+        daemon_reload: yes
+
+- name: K8s worker monitoring
+  hosts: all
+  gather_facts: yes
+  become: yes
+  tags: [monitoring]
+  roles:
+    - monitoring-base
+    - monitoring-checks
+
+- name: Register with Prometheus and Loki
+  hosts: all
+  gather_facts: no
+  become: yes
+  tags: [monitoring]
+  vars:
+    prometheus_targets_dir: "/opt/observability/prometheus/targets.d"
+    loki_url: "http://10.0.0.200:3100/loki/api/v1/push"
+    alloy_version: "1.9.0"
+
+  tasks:
+    # ==========================================================================
+    # Prometheus — drop target files on R730xd
+    # ==========================================================================
+
+    - name: Register node-exporter target with Prometheus
+      ansible.builtin.copy:
+        content: |
+          - targets:
+              - "{{ ansible_host }}:9100"
+            labels:
+              env: "homelab"
+              instance: "{{ inventory_hostname }}"
+        dest: "{{ prometheus_targets_dir }}/node-{{ inventory_hostname }}.yml"
+        mode: "0644"
+      delegate_to: r730xd
+
+    - name: Register IPMI exporter target with Prometheus
+      ansible.builtin.copy:
+        content: |
+          - targets:
+              - "{{ ansible_host }}:9290"
+            labels:
+              env: "homelab"
+              instance: "{{ inventory_hostname }}"
+        dest: "{{ prometheus_targets_dir }}/ipmi-{{ inventory_hostname }}.yml"
+        mode: "0644"
+      delegate_to: r730xd
+      when: ipmi_exporter_enabled | default(true)
+
+    # ==========================================================================
+    # Alloy — lightweight log shipper to Loki
+    # Ships journal logs from this node to the central Loki instance
+    # ==========================================================================
+
+    - name: Create alloy system user
+      ansible.builtin.user:
+        name: alloy
+        system: true
+        shell: /usr/sbin/nologin
+        create_home: false
+        groups: systemd-journal
+        append: true
+
+    - name: Create Alloy directories
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: directory
+        owner: "{{ item.owner | default('root') }}"
+        mode: "0755"
+      loop:
+        - { path: /etc/alloy }
+        - { path: /var/lib/alloy, owner: alloy }
+
+    - name: Deploy Alloy configuration
+      ansible.builtin.copy:
+        content: |
+          // Managed by Ansible — setup-k8s-worker.yml
+          // Ships journal logs to Loki on R730xd
+
+          loki.source.journal "journal" {
+            path          = "/var/log/journal"
+            relabel_rules = loki.relabel.journal_labels.rules
+            forward_to    = [loki.write.loki.receiver]
+            labels        = { "job" = "journal" }
+          }
+
+          loki.relabel "journal_labels" {
+            forward_to = []
+
+            rule {
+              source_labels = ["__journal__systemd_unit"]
+              target_label  = "unit"
+            }
+
+            rule {
+              source_labels = ["__journal__hostname"]
+              target_label  = "hostname"
+            }
+
+            rule {
+              source_labels = ["__journal_priority_keyword"]
+              target_label  = "level"
+            }
+          }
+
+          loki.write "loki" {
+            endpoint {
+              url = "{{ loki_url }}"
+            }
+          }
+        dest: /etc/alloy/config.alloy
+        mode: "0644"
+      notify: restart alloy
+
+    - name: Install unzip
+      ansible.builtin.apt:
+        name: unzip
+        state: present
+
+    - name: Download Alloy binary
+      ansible.builtin.get_url:
+        url: "https://github.com/grafana/alloy/releases/download/v{{ alloy_version }}/alloy-linux-amd64.zip"
+        dest: "/tmp/alloy-{{ alloy_version }}.zip"
+        mode: "0644"
+      register: alloy_download
+
+    - name: Extract Alloy binary
+      ansible.builtin.command:
+        cmd: "unzip -o /tmp/alloy-{{ alloy_version }}.zip -d /tmp/alloy-extract"
+        creates: "/tmp/alloy-extract/alloy-linux-amd64"
+      when: alloy_download.changed
+
+    - name: Install Alloy binary
+      ansible.builtin.copy:
+        src: "/tmp/alloy-extract/alloy-linux-amd64"
+        dest: /usr/local/bin/alloy
+        remote_src: true
+        mode: "0755"
+      when: alloy_download.changed
+      notify: restart alloy
+
+    - name: Deploy Alloy systemd unit
+      ansible.builtin.copy:
+        content: |
+          [Unit]
+          Description=Grafana Alloy
+          After=network-online.target
+          Wants=network-online.target
+
+          [Service]
+          Type=simple
+          User=alloy
+          WorkingDirectory=/var/lib/alloy
+          ExecStart=/usr/local/bin/alloy run /etc/alloy/config.alloy
+          Restart=on-failure
+          RestartSec=10
+          MemoryMax=128M
+
+          [Install]
+          WantedBy=multi-user.target
+        dest: /etc/systemd/system/alloy.service
+        mode: "0644"
+      notify: restart alloy
+
+    - name: Enable and start Alloy
+      ansible.builtin.systemd:
+        name: alloy
+        enabled: true
+        state: started
+        daemon_reload: true
+
+    - name: Clean up Alloy download artifacts
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "/tmp/alloy-{{ alloy_version }}.zip"
+        - /tmp/alloy-extract
+
+  handlers:
+    - name: restart alloy
+      ansible.builtin.systemd:
+        name: alloy
+        state: restarted
+        daemon_reload: true

@@ -6,8 +6,7 @@
 #   ansible-playbook -l k8s_cluster ansible/playbooks/some-playbook.yml
 #   ansible -i ansible/inventory/lab-nodes.yml all -m ping
 #
-# Note: Quanta (10.0.0.201) is BMC/IPMI only — no OS installed yet.
-# It will be added here once PXE boot is configured.
+# Note: Quanta BMC/IPMI is at 10.0.0.201 (separate from OS IP below)
 
 all:
   children:
@@ -21,9 +20,27 @@ all:
               cpu: "Intel i3-7100U (2C/4T @ 2.7 GHz)"
               ram_gb: 8
               node_roles: ["control-plane"]
+              ipmi_exporter_enabled: false
 
         k8s_workers:
           hosts:
+            quanta:
+              ansible_host: 10.0.0.202
+              model: "Quanta QSSC-2ML"
+              cpu: "2x Intel Xeon E5-2670 (16C/32T @ 2.6 GHz)"
+              ram_gb: 64
+              bmc_host: 10.0.0.201
+              node_roles: ["worker"]
+
+            intel-nuc:
+              ansible_host: 10.0.0.46
+              model: "Intel NUC12SNKi72"
+              cpu: "Intel Core i7-12700H (14C/20T)"
+              ram_gb: 64
+              node_roles: ["worker"]
+              ipmi_exporter_enabled: false
+              # ARC GPU is dead — headless worker only
+
             tower-pc:
               ansible_host: 10.0.0.249
               model: "Custom Tower PC"

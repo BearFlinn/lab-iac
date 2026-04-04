@@ -16,29 +16,19 @@ alerting:
 
 scrape_configs:
   - job_name: "node"
-    static_configs:
-{% for target in prometheus_node_targets %}
-      - targets:
-          - "{{ target.target }}"
-        labels:
-          env: "homelab"
-{% for key, value in target.labels.items() %}
-          {{ key }}: "{{ value }}"
-{% endfor %}
-{% endfor %}
+    file_sd_configs:
+      - files:
+          - "/etc/prometheus/targets.d/nodes.yml"
+          - "/etc/prometheus/targets.d/node-*.yml"
+        refresh_interval: 30s
 
   - job_name: "ipmi"
     scrape_interval: 30s
-    static_configs:
-{% for target in prometheus_ipmi_targets %}
-      - targets:
-          - "{{ target.target }}"
-        labels:
-          env: "homelab"
-{% for key, value in target.labels.items() %}
-          {{ key }}: "{{ value }}"
-{% endfor %}
-{% endfor %}
+    file_sd_configs:
+      - files:
+          - "/etc/prometheus/targets.d/ipmi.yml"
+          - "/etc/prometheus/targets.d/ipmi-*.yml"
+        refresh_interval: 30s
 
 {% for svc in prometheus_observability_targets %}
   - job_name: "{{ svc.job }}"

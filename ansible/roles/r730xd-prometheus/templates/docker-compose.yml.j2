@@ -13,6 +13,7 @@ services:
       - {{ prometheus_data_dir }}:/prometheus
       - {{ prometheus_compose_dir }}/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - {{ prometheus_compose_dir }}/rules:/etc/prometheus/rules:ro
+      - {{ prometheus_compose_dir }}/targets.d:/etc/prometheus/targets.d:ro
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--storage.tsdb.path=/prometheus"

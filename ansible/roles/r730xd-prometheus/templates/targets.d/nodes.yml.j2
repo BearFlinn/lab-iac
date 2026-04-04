@@ -1,0 +1,11 @@
+# Managed by Ansible — r730xd-prometheus role (seed file)
+# Additional targets added dynamically by worker setup playbooks
+{% for target in prometheus_node_targets %}
+- targets:
+    - "{{ target.target }}"
+  labels:
+    env: "homelab"
+{% for key, value in target.labels.items() %}
+    {{ key }}: "{{ value }}"
+{% endfor %}
+{% endfor %}
