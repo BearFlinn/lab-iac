@@ -1,6 +1,7 @@
 ---
 # r730xd-tempo: Tempo distributed tracing on Docker
-# S3 backend via MinIO, single-binary mode
+# S3 backend via MinIO Obs, single-binary mode
+# Local data on ZFS pool (tank/observability/tempo, recordsize=128K)
 #
 # Tempo API: http://10.0.0.200:3200
 # OTLP gRPC: 10.0.0.200:4317
@@ -15,7 +16,7 @@ tempo_otlp_grpc_port: 4317
 tempo_otlp_http_port: 4318
 
 # Directories
-tempo_data_dir: "/mnt/pool/observability/tempo/data"
+tempo_data_dir: "/mnt/zfs/observability/tempo/data"
 tempo_compose_dir: "/opt/observability/tempo"
 
 # Memory limit

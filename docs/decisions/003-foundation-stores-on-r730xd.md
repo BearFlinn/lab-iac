@@ -13,7 +13,7 @@ Several design choices needed to be made about how to organize, deploy, and pers
 
 ### Separate roles, not a single "foundation-stores" role
 
-Each service gets its own Ansible role (`r730xd-postgres`, `r730xd-redis`, `r730xd-minio`). They have different configuration concerns (Postgres tuning vs Redis memory policy vs MinIO bucket setup), different upgrade cadences, and independent lifecycles. A single role would create artificial coupling. This follows the existing pattern where each `r730xd-*` role is one responsibility.
+Each service gets its own Ansible role (`r730xd-postgres`, `r730xd-redis`, `r730xd-minio-obs`, `r730xd-minio-bulk`). They have different configuration concerns (Postgres tuning vs Redis memory policy vs MinIO bucket setup), different upgrade cadences, and independent lifecycles. A single role would create artificial coupling. This follows the existing pattern where each `r730xd-*` role is one responsibility.
 
 ### Separate Docker Compose projects per service
 
@@ -21,18 +21,26 @@ Each role deploys its own `docker-compose.yml` under `/opt/foundation/<service>/
 
 ### Host network for Postgres and Redis, published ports for MinIO
 
-Postgres and Redis use `network_mode: host`. Simplest path for LAN clients to reach `10.0.0.200:5432` and `10.0.0.200:6379` — no NAT overhead, real client IPs in logs. MinIO uses published ports (`9000:9000`, `9001:9001`) to keep the API and console ports cleanly separated.
+Postgres and Redis use `network_mode: host`. Simplest path for LAN clients to reach `10.0.0.200:5432` and `10.0.0.200:6379` — no NAT overhead, real client IPs in logs. MinIO uses published ports to keep the API and console ports cleanly separated. MinIO Obs (observability) on ports 9000/9001, MinIO Bulk (registry/artifacts) on ports 9002/9003.
 
-### Data on MergerFS pool
+### Two MinIO instances for different workloads
 
-All service data lives under `/mnt/pool/foundation/<service>/`. MergerFS adds a FUSE layer, but its fsync pass-through is reliable at homelab scale. The pool's flexibility (spanning multiple drives, balanced writes) outweighs the marginal overhead. If Postgres performance becomes an issue, data can be moved to a direct bay mount later without changing the role — just override `postgres_data_dir`.
+MinIO is split into two instances on different storage tiers:
+- **MinIO Obs** (`minio-obs`, ports 9000/9001) — hot instance on ZFS for Loki/Tempo S3 backend. Continuous writes, 30-day retention, latency-sensitive queries.
+- **MinIO Bulk** (`minio-bulk`, ports 9002/9003) — cold instance on MergerFS for container registry and build artifacts. Write-once-read-many, SnapRAID-compatible.
+
+### Data on ZFS pool (hot) and MergerFS pool (cold)
+
+Continuously-writing services (PostgreSQL, Redis, MinIO Obs) live on the ZFS raidz1 pool at `/mnt/zfs/foundation/<service>/`. ZFS provides checksums, lz4 compression, and per-dataset recordsize tuning (8K for Postgres, 64K for Redis, 1M for MinIO). These workloads are incompatible with SnapRAID's sync-between-writes model.
+
+MinIO Bulk lives on the MergerFS pool at `/mnt/pool/foundation/minio-bulk/`. Write-once-read-many workloads (container images, build artifacts) are well-suited to SnapRAID parity protection.
 
 ### Postgres backup via pg_dump cron
 
-SnapRAID protects against drive failure but is not a point-in-time backup (syncs are periodic, no protection against accidental deletion within a sync window). A daily `pg_dumpall` with 7-day rotation provides a basic safety net. Redis has built-in AOF/RDB persistence. MinIO backup (e.g., `mc mirror`) deferred to a follow-up.
+A daily `pg_dumpall` with 7-day rotation provides a basic safety net. ZFS snapshots on the Postgres dataset offer additional point-in-time recovery capability. Redis has built-in AOF/RDB persistence. MinIO Bulk backup (e.g., `mc mirror`) deferred to a follow-up. MinIO Obs data has 30-day retention and is considered reproducible (logs/traces).
 
 ## Trade-offs
 
 - **Host network limits port flexibility.** If two Postgres instances are needed, one must use a non-default port. Acceptable — a single shared Postgres is the intended pattern.
 - **No TLS between services.** Traffic is on a private LAN (`10.0.0.0/24`). TLS can be added later if the threat model changes.
-- **Docker volumes vs bind mounts.** We use bind mounts to `/mnt/pool/foundation/...` rather than Docker named volumes. This makes the data location explicit and visible to SnapRAID, backup scripts, and operators browsing the filesystem.
+- **Docker volumes vs bind mounts.** We use bind mounts to `/mnt/zfs/foundation/...` (hot) and `/mnt/pool/foundation/...` (cold) rather than Docker named volumes. This makes the data location explicit and visible to ZFS snapshots, backup scripts, and operators browsing the filesystem.

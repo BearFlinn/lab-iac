@@ -1,6 +1,7 @@
 ---
 # r730xd-grafana: Grafana dashboards on Docker
 # PostgreSQL backend, provisioned data sources and dashboards
+# Local data on ZFS pool (tank/observability/grafana, recordsize=128K)
 #
 # Grafana: http://10.0.0.200:3000
 
@@ -11,7 +12,7 @@ grafana_image: "grafana/grafana:11.6.0"
 grafana_port: 3000
 
 # Directories
-grafana_data_dir: "/mnt/pool/observability/grafana/data"
+grafana_data_dir: "/mnt/zfs/observability/grafana/data"
 grafana_compose_dir: "/opt/observability/grafana"
 
 # Memory limit

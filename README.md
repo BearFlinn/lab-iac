@@ -9,7 +9,7 @@ Infrastructure as Code for a bare-metal homelab on repurposed enterprise and con
 The previous K8s cluster configs have been archived (`archive/pre-migration-2026/`). The repo now contains only configs for infrastructure that's online or actively being built.
 
 **Online:**
-- **Dell R730xd** — Storage server (Debian 13, 32GB ECC, 14 drive bays). Hosts MergerFS + SnapRAID storage, NFS for K8s PVCs, PXE boot for diskless nodes, foundation data stores (Postgres, Redis, MinIO), observability stack (Prometheus, Loki, Tempo, Grafana), and a staging VM for critical services during migration.
+- **Dell R730xd** — Storage server (Debian 13, 32GB ECC, 14 drive bays). Two storage tiers: ZFS raidz1 pool for latency-sensitive services (Postgres, Redis, MinIO Obs, Prometheus, Loki, Tempo, Grafana), MergerFS + SnapRAID for bulk storage (MinIO Bulk, NFS for K8s PVCs). Staging VM for critical services during migration.
 - **Hetzner VPS** — Caddy reverse proxy with wildcard TLS (*.bearflinn.com via Cloudflare DNS-01). Routes traffic over NetBird VPN to the cluster.
 
 **In progress:**

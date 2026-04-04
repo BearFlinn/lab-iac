@@ -1,5 +1,6 @@
 ---
 # r730xd-prometheus: Prometheus + Alertmanager on Docker
+# Data on ZFS pool (tank/observability/prometheus, recordsize=128K)
 # Scrapes node_exporter, ipmi_exporter, and observability services
 #
 # Prometheus: http://10.0.0.200:9090
@@ -14,8 +15,8 @@ prometheus_port: 9090
 alertmanager_port: 9093
 
 # Directories
-prometheus_data_dir: "/mnt/pool/observability/prometheus/data"
-alertmanager_data_dir: "/mnt/pool/observability/prometheus/alertmanager"
+prometheus_data_dir: "/mnt/zfs/observability/prometheus/data"
+alertmanager_data_dir: "/mnt/zfs/observability/prometheus/alertmanager"
 prometheus_compose_dir: "/opt/observability/prometheus"
 
 # Retention
@@ -58,8 +59,11 @@ prometheus_observability_targets:
     target: "10.0.0.200:3200"
   - job: "grafana"
     target: "10.0.0.200:3000"
-  - job: "minio"
+  - job: "minio-obs"
     target: "10.0.0.200:9000"
+    metrics_path: "/minio/v2/metrics/cluster"
+  - job: "minio-bulk"
+    target: "10.0.0.200:9002"
     metrics_path: "/minio/v2/metrics/cluster"
   - job: "postgres-exporter"
     target: "10.0.0.200:9187"

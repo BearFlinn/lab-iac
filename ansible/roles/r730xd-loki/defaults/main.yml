@@ -1,6 +1,7 @@
 ---
 # r730xd-loki: Loki log aggregation on Docker
-# S3 backend via MinIO, single-binary mode
+# S3 backend via MinIO Obs, single-binary mode
+# Local data on ZFS pool (tank/observability/loki, recordsize=128K)
 #
 # Loki API: http://10.0.0.200:3100
 
@@ -11,7 +12,7 @@ loki_image: "grafana/loki:3.4.2"
 loki_port: 3100
 
 # Directories
-loki_data_dir: "/mnt/pool/observability/loki/data"
+loki_data_dir: "/mnt/zfs/observability/loki/data"
 loki_compose_dir: "/opt/observability/loki"
 
 # Memory limit

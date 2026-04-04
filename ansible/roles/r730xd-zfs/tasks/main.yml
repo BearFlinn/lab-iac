@@ -130,6 +130,38 @@
     minute: "{{ zfs_scrub_cron_minute }}"
     user: root
 
+# --- Service datasets ---
+
+- name: Check existing datasets
+  ansible.builtin.command: "zfs list -H -o name -r {{ zfs_pool_name }}"
+  register: zfs_existing_datasets
+  changed_when: false
+
+- name: Create parent datasets
+  ansible.builtin.command: >
+    zfs create {{ zfs_pool_name }}/{{ item }}
+  loop: "{{ zfs_datasets | map(attribute='name') | map('regex_replace', '/.*', '') | unique | list }}"
+  when: (zfs_pool_name + '/' + item) not in zfs_existing_datasets.stdout_lines
+
+- name: Create service datasets with tuned recordsize
+  ansible.builtin.command: >
+    zfs create
+    -o recordsize={{ item.recordsize }}
+    {{ zfs_pool_name }}/{{ item.name }}
+  loop: "{{ zfs_datasets }}"
+  loop_control:
+    label: "{{ zfs_pool_name }}/{{ item.name }} (recordsize={{ item.recordsize }})"
+  when: (zfs_pool_name + '/' + item.name) not in zfs_existing_datasets.stdout_lines
+
+- name: Display dataset layout
+  ansible.builtin.command: "zfs list -r -o name,used,avail,mountpoint,recordsize {{ zfs_pool_name }}"
+  register: zfs_dataset_list
+  changed_when: false
+
+- name: Show datasets
+  ansible.builtin.debug:
+    msg: "{{ zfs_dataset_list.stdout_lines }}"
+
 - name: Verify pool status
   ansible.builtin.command: "zpool status {{ zfs_pool_name }}"
   register: zpool_status

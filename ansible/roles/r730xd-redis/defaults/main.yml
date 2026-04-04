@@ -1,6 +1,6 @@
 ---
 # r730xd-redis: Redis on Docker for foundation data store
-# Persistent via AOF + RDB on MergerFS pool
+# Persistent via AOF + RDB on ZFS pool (tank/foundation/redis, recordsize=64K)
 #
 # Connection: redis://:<password>@10.0.0.200:6379
 
@@ -13,7 +13,7 @@ redis_port: 6379
 redis_bind_address: "0.0.0.0"
 
 # Directories
-redis_data_dir: "/mnt/pool/foundation/redis/data"
+redis_data_dir: "/mnt/zfs/foundation/redis/data"
 redis_compose_dir: "/opt/foundation/redis"
 
 # Password (set via vault — see group_vars/all/vars.yml)

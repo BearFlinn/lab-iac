@@ -1,6 +1,6 @@
 ---
 # r730xd-postgres: PostgreSQL on Docker for foundation data store
-# Data persisted on MergerFS pool, consumed by K8s workloads and staging services
+# Data persisted on ZFS pool (tank/foundation/postgres, recordsize=8K)
 #
 # Connection: postgresql://<user>:<password>@10.0.0.200:5432/<database>
 
@@ -12,8 +12,8 @@ postgres_image: "postgres:{{ postgres_version }}"
 postgres_port: 5432
 
 # Directories
-postgres_data_dir: "/mnt/pool/foundation/postgres/data"
-postgres_backup_dir: "/mnt/pool/foundation/postgres/backup"
+postgres_data_dir: "/mnt/zfs/foundation/postgres/data"
+postgres_backup_dir: "/mnt/zfs/foundation/postgres/backup"
 postgres_compose_dir: "/opt/foundation/postgres"
 
 # Superuser password (set via vault — see group_vars/all/vars.yml)

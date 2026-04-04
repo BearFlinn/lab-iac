@@ -3,14 +3,16 @@
 #
 # Deploys Prometheus, Alertmanager, Loki, Tempo, Grafana, and Alloy as
 # Docker Compose services on the R730xd storage server. Uses foundation
-# stores (MinIO for S3 object storage, PostgreSQL for Grafana database).
+# stores (MinIO Obs for S3 object storage, PostgreSQL for Grafana database).
+#
+# All observability data persisted on ZFS pool (tank/observability/*).
 #
 # See ADR-004 for design decisions.
 #
 # Prerequisites:
 #   - R730xd baseline applied (setup-r730xd.yml — installs Docker)
-#   - R730xd storage stack deployed (r730xd-storage.yml — MergerFS pool)
-#   - Foundation stores running (deploy-foundation-stores.yml — MinIO, Postgres)
+#   - ZFS pool and datasets created (r730xd-zfs.yml)
+#   - Foundation stores running (deploy-foundation-stores.yml — MinIO Obs, Postgres)
 #   - Vault secrets configured (see vault.yml.example)
 #
 # Usage:
@@ -39,11 +41,11 @@
   gather_facts: yes
 
   pre_tasks:
-    - name: Verify MergerFS pool is mounted
-      ansible.builtin.command: findmnt /mnt/pool
+    - name: Verify ZFS pool is mounted
+      ansible.builtin.command: findmnt /mnt/zfs
       changed_when: false
-      failed_when: pool_check.rc != 0
-      register: pool_check
+      failed_when: zfs_check.rc != 0
+      register: zfs_check
       tags: [always]
 
     - name: Verify Docker is installed
@@ -66,11 +68,11 @@
              ansible_facts.services['docker.service'].state != 'running'"
       tags: [always]
 
-    - name: Verify MinIO is healthy
+    - name: Verify MinIO Obs is healthy
       ansible.builtin.uri:
         url: "http://localhost:9000/minio/health/live"
         status_code: 200
-      register: minio_health
+      register: minio_obs_health
       tags: [always]
 
     - name: Verify PostgreSQL is healthy
@@ -81,10 +83,10 @@
       register: pg_health
       tags: [always]
 
-    # --- MinIO bucket and service account provisioning ---
+    # --- MinIO Obs bucket and service account provisioning ---
 
     - name: Check if MinIO client is available in container
-      ansible.builtin.command: docker exec foundation-minio mc --version
+      ansible.builtin.command: docker exec minio-obs mc --version
       changed_when: false
       failed_when: false
       register: mc_check
@@ -92,10 +94,10 @@
 
     - name: Configure MinIO client alias
       ansible.builtin.command: >
-        docker exec foundation-minio mc alias set local
+        docker exec minio-obs mc alias set local
         http://localhost:9000
-        {{ minio_root_user }}
-        {{ minio_root_password }}
+        {{ minio_obs_root_user }}
+        {{ minio_obs_root_password }}
       changed_when: false
       no_log: true
       when: mc_check.rc == 0
@@ -103,7 +105,7 @@
 
     - name: Create Loki S3 bucket
       ansible.builtin.command: >
-        docker exec foundation-minio mc mb --ignore-existing local/observability-loki
+        docker exec minio-obs mc mb --ignore-existing local/observability-loki
       register: loki_bucket
       changed_when: "'Bucket created' in loki_bucket.stdout"
       when: mc_check.rc == 0
@@ -111,7 +113,7 @@
 
     - name: Create Tempo S3 bucket
       ansible.builtin.command: >
-        docker exec foundation-minio mc mb --ignore-existing local/observability-tempo
+        docker exec minio-obs mc mb --ignore-existing local/observability-tempo
       register: tempo_bucket
       changed_when: "'Bucket created' in tempo_bucket.stdout"
       when: mc_check.rc == 0
@@ -119,7 +121,7 @@
 
     - name: Check if observability MinIO user exists
       ansible.builtin.command: >
-        docker exec foundation-minio mc admin user info local {{ minio_observability_access_key }}
+        docker exec minio-obs mc admin user info local {{ minio_observability_access_key }}
       changed_when: false
       failed_when: false
       register: minio_user_check
@@ -128,7 +130,7 @@
 
     - name: Create observability MinIO user
       ansible.builtin.command: >
-        docker exec foundation-minio mc admin user add local
+        docker exec minio-obs mc admin user add local
         {{ minio_observability_access_key }}
         {{ minio_observability_secret_key }}
       no_log: true
@@ -137,7 +139,7 @@
 
     - name: Grant observability user readwrite access to Loki bucket
       ansible.builtin.command: >
-        docker exec foundation-minio mc admin policy attach local readwrite
+        docker exec minio-obs mc admin policy attach local readwrite
         --user {{ minio_observability_access_key }}
       changed_when: false
       when: mc_check.rc == 0

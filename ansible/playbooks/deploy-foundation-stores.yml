@@ -1,8 +1,12 @@
 ---
 # deploy-foundation-stores.yml — Deploy foundation data stores to R730xd
 #
-# Deploys PostgreSQL, Redis, and MinIO as Docker Compose services on the
-# R730xd storage server. Data persisted on MergerFS pool at /mnt/pool.
+# Deploys PostgreSQL, Redis, MinIO Obs, and MinIO Bulk as Docker Compose
+# services on the R730xd storage server.
+#
+# Storage tiers:
+#   Hot (ZFS):     PostgreSQL, Redis, MinIO Obs — continuous-write workloads
+#   Cold (MergerFS): MinIO Bulk — write-once-read-many (registry, artifacts)
 #
 # These services are consumed by K8s workloads (via 10.0.0.200:<port>)
 # and staging VM services. They run on R730xd because stateful workloads
@@ -12,8 +16,8 @@
 #
 # Prerequisites:
 #   - R730xd baseline applied (setup-r730xd.yml — installs Docker)
-#   - R730xd storage stack deployed (r730xd-storage.yml)
-#   - MergerFS pool active at /mnt/pool
+#   - R730xd storage stack deployed (r730xd-storage.yml — MergerFS pool)
+#   - ZFS pool and datasets created (r730xd-zfs.yml)
 #   - Vault secrets configured (see vault.yml.example)
 #
 # Usage:
@@ -24,13 +28,16 @@
 # Deploy individual services:
 #   ... --tags postgres
 #   ... --tags redis
-#   ... --tags minio
+#   ... --tags minio-obs
+#   ... --tags minio-bulk
 #
 # Endpoints (after deploy):
-#   PostgreSQL: postgresql://postgres:<password>@10.0.0.200:5432/
-#   Redis:      redis://:<password>@10.0.0.200:6379
-#   MinIO API:  http://10.0.0.200:9000
-#   MinIO Console: http://10.0.0.200:9001
+#   PostgreSQL:        postgresql://postgres:<password>@10.0.0.200:5432/
+#   Redis:             redis://:<password>@10.0.0.200:6379
+#   MinIO Obs API:     http://10.0.0.200:9000
+#   MinIO Obs Console: http://10.0.0.200:9001
+#   MinIO Bulk API:    http://10.0.0.200:9002
+#   MinIO Bulk Console: http://10.0.0.200:9003
 
 - name: Deploy foundation data stores
   hosts: r730xd
@@ -38,6 +45,13 @@
   gather_facts: yes
 
   pre_tasks:
+    - name: Verify ZFS pool is mounted
+      ansible.builtin.command: findmnt /mnt/zfs
+      changed_when: false
+      failed_when: zfs_check.rc != 0
+      register: zfs_check
+      tags: [always]
+
     - name: Verify MergerFS pool is mounted
       ansible.builtin.command: findmnt /mnt/pool
       changed_when: false
@@ -70,5 +84,7 @@
       tags: [foundation, postgres]
     - role: r730xd-redis
       tags: [foundation, redis]
-    - role: r730xd-minio
-      tags: [foundation, minio]
+    - role: r730xd-minio-obs
+      tags: [foundation, minio-obs]
+    - role: r730xd-minio-bulk
+      tags: [foundation, minio-bulk]

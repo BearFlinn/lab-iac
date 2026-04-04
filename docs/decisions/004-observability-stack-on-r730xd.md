@@ -57,13 +57,13 @@ Deploy the Grafana LGTM stack (Loki, Grafana, Tempo, Prometheus) plus Alertmanag
 
 ### Key Decisions
 
-1. **Separate `/mnt/pool/observability/` prefix** — not under `/mnt/pool/foundation/`. These services consume foundation stores; they aren't foundation stores. The filesystem path communicates this distinction. Compose projects live under `/opt/observability/`.
+1. **Separate `/mnt/zfs/observability/` prefix** — not under `/mnt/zfs/foundation/`. These services consume foundation stores; they aren't foundation stores. The filesystem path communicates this distinction. Compose projects live under `/opt/observability/`. All observability data lives on the ZFS pool for low-latency writes (continuous-write workloads are incompatible with SnapRAID).
 
 2. **One Ansible role per service (5 roles)** — `r730xd-prometheus`, `r730xd-loki`, `r730xd-tempo`, `r730xd-grafana`, `r730xd-alloy`. Consistent with ADR-003's pattern of independent roles with independent lifecycles. Exception: Alertmanager is bundled in the Prometheus compose project since they share config and are tightly coupled.
 
 3. **Published ports, not host network** — Observability services are not latency-sensitive like database connections. Published ports avoid conflicts and match the MinIO precedent.
 
-4. **MinIO for Loki/Tempo object storage** — Both services support S3 backends. Uses the already-deployed MinIO instance with a dedicated service account (not root credentials) scoped to `observability-loki` and `observability-tempo` buckets.
+4. **MinIO Obs for Loki/Tempo object storage** — Both services support S3 backends. Uses the dedicated MinIO Obs instance (hot, ZFS-backed, ports 9000/9001) with a service account (not root credentials) scoped to `observability-loki` and `observability-tempo` buckets. A separate MinIO Bulk instance (cold, MergerFS-backed, ports 9002/9003) handles write-once workloads like container registry and build artifacts.
 
 5. **PostgreSQL for Grafana database** — Uses the already-deployed foundation PostgreSQL with a dedicated `grafana` database and user. Avoids running SQLite inside a container.
 
@@ -76,10 +76,10 @@ Deploy the Grafana LGTM stack (Loki, Grafana, Tempo, Prometheus) plus Alertmanag
 ## Consequences
 
 - **Positive:** Centralized metrics, logs, and traces. Pre-built dashboards for immediate visibility. Alert rules replace cron-based checks for monitored signals.
-- **Positive:** Loki/Tempo data durability backed by MinIO (which is on MergerFS + SnapRAID parity).
+- **Positive:** Loki/Tempo data durability backed by MinIO Obs on ZFS (checksums, lz4 compression, snapshots).
 - **Negative:** 6 additional containers on the R730xd. Memory pressure increases by ~3GB.
 - **Negative:** Observability stack itself needs monitoring (meta-monitoring). Prometheus scrapes its own services; Alertmanager watchdog alert covers the "is Prometheus alive" case.
-- **Risk:** MinIO availability becomes critical — both Loki and Tempo depend on it for chunk/block storage. Mitigation: local WAL/cache survives brief MinIO outages.
+- **Risk:** MinIO Obs availability becomes critical — both Loki and Tempo depend on it for chunk/block storage. Mitigation: local WAL/cache survives brief MinIO outages.
 
 ## Alternatives Considered
 
