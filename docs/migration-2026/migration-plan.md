@@ -2,7 +2,7 @@
 
 > **IP addresses:** Authoritative values are in `ansible/group_vars/all/network.yml`.
 
-Last updated: 2026-04-03
+Last updated: 2026-04-05
 
 ## Guiding Principles
 
@@ -107,7 +107,7 @@ Tower PC resumes the router role ([ADR-011](../decisions/011-ap630-restored-to-s
 
 ### 1D: Move Existing Machines
 
-- [x] ~~Drain MSI laptop from K8s~~ — **done 2026-03-26. Scaled down non-essential workloads (residuum-landing, coaching-website, family-dashboard, game-server-platform, advocacy-quiz, zork) to 0 replicas. Kept landing-page, resume-site, caz-portfolio, and actions-runner-controller running. Remaining pods drained to tower-pc. Node cordoned.**
+- [x] ~~Drain MSI laptop from K8s~~ — **done 2026-03-26. Scaled down non-essential workloads (residuum-landing, coaching-website, family-dashboard, game-server-platform, advocacy-quiz, zork) to 0 replicas. Kept landing-page, resume-site, caz-portfolio, and actions-runner-controller running. Remaining pods drained to tower-pc. Node fully drained and removed from cluster.**
 - [ ] **Drain Tower PC from K8s** — `kubectl drain tower-pc --ignore-daemonsets --delete-emptydata`
 - [ ] Shut down all cluster machines gracefully
 - [ ] Physically move Inspiron, Optiplex to closet
@@ -146,7 +146,7 @@ Tower PC resumes the router role ([ADR-011](../decisions/011-ap630-restored-to-s
   - Port 2: VLAN 10 (lab network)
   - Port 3-4: VLAN 20 (dedicated storage, if using storage VLAN)
 - [x] ~~Set up iDRAC remote management~~ — **SSH racadm working at `<r730xd_idrac_ip>`. Note: no Enterprise license, so no virtual media. HTTPS web UI works for basic monitoring.**
-- [ ] Install NetBird for VPN access
+- [ ] Install NetBird for remote management access (NetBird is management-only — service traffic stays on local networks)
 - [ ] Verify NFS is accessible from K8s nodes
 - [x] ~~**Stand up staging VM**~~ ([ADR-002](../decisions/002-r730-staging-vm-for-migration.md)) — **done 2026-03-28. Debian 13 VM on libvirt NAT network (`<staging_vm_ip>`), 4 vCPU / 8GB RAM. KVM/libvirt installed via `ansible/roles/r730xd-vm-host`, VM provisioned via `ansible/playbooks/create-staging-vm.yml`. Uses Debian generic cloud image + cloud-init + UEFI boot. Docker, gh CLI, and NetBird installed. Critical services deployed via `ansible/playbooks/deploy-staging-services.yml`:**
   - **landing-page** (nginx) — landing.bearflinn.com
@@ -160,10 +160,21 @@ Tower PC resumes the router role ([ADR-011](../decisions/011-ap630-restored-to-s
 
 - [x] ~~Install 4-port NIC with PCIe riser~~ — **installed (2026-03-27)** (no local storage — PXE boot from R730)
 - [ ] Configure direct connection(s) from Quanta to R730 for dedicated NFS I/O
-- [ ] PXE boot OS from R730
-- [ ] Run baseline-setup Ansible playbook
-- [ ] Configure networking (VLAN 1 + VLAN 10, match K8s node config)
-- [ ] Install NetBird
+- [x] ~~Install OS~~ — **Debian installed via preseeded ISO**
+- [x] ~~Run baseline-setup Ansible playbook~~
+- [x] ~~Configure networking~~
+- [ ] Install container runtime (containerd)
+- [ ] Join to K8s cluster: `kubeadm join`
+- [ ] Verify node is Ready: `kubectl get nodes`
+- [ ] Apply node labels
+
+### 2C: Intel NUC — K8s Worker
+
+Grandfather's NUC — thought to be bricked but the Intel ARC GPU was dead. Display output works via USB-C. i7-12700H (14C/20T) with 64 GB RAM makes it the second most powerful worker after Quanta.
+
+- [x] ~~Install OS~~ — **Debian installed via preseeded ISO (local boot — has internal storage)**
+- [x] ~~Run baseline-setup Ansible playbook~~
+- [x] ~~Configure networking~~
 - [ ] Install container runtime (containerd)
 - [ ] Join to K8s cluster: `kubeadm join`
 - [ ] Verify node is Ready: `kubectl get nodes`
@@ -199,10 +210,9 @@ Before the Optiplex can be wiped and joined to K8s, its services need new homes:
 
 - [ ] Back up anything on Optiplex that isn't already migrated
 - [ ] Remove SSD — repurpose to jumpbox
-- [ ] PXE boot OS from R730
-- [ ] Run baseline-setup Ansible playbook
-- [ ] Configure networking (VLAN 1 + VLAN 10)
-- [ ] Install NetBird
+- [x] ~~Install OS~~ — **Debian installed via preseeded ISO**
+- [x] ~~Run baseline-setup Ansible playbook~~
+- [x] ~~Configure networking~~
 - [ ] Install container runtime (containerd)
 - [ ] Join to K8s cluster: `kubeadm join`
 - [ ] Verify node is Ready
@@ -210,16 +220,16 @@ Before the Optiplex can be wiped and joined to K8s, its services need new homes:
 
 ### 3D: Remove Old Workers
 
-- [ ] Remove MSI laptop from K8s: `kubectl delete node msi-laptop`
+- [x] ~~Remove MSI laptop from K8s~~ — **fully drained and removed from cluster (2026-03-26). Now dev machine.**
 - [ ] Remove tower-pc from K8s: `kubectl delete node tower-pc`
-- [ ] Update Ansible inventory — remove MSI, move tower-pc out of k8s_workers
+- [ ] Update Ansible inventory — move tower-pc out of k8s_workers
 - [ ] Update VPS proxy config if any NetBird IPs changed
 
 ### 3E: Verify Cluster Health
 
-- [ ] `kubectl get nodes` — Inspiron (control plane), Quanta (worker), Optiplex (worker)
+- [ ] `kubectl get nodes` — Inspiron (control plane), Quanta (worker), Intel NUC (worker), Optiplex (worker)
 - [ ] All workloads running and healthy
-- [ ] Ingress working (VPS → NetBird → K8s → pods)
+- [ ] Ingress working (VPS → K8s → pods)
 - [ ] PVCs healthy on new NFS backend
 - [ ] CI/CD pipeline works (push → build → deploy)
 
@@ -281,7 +291,8 @@ Restored to stock HiveOS IQ Engine 10.6r7 on 2026-04-03. Now used as a WiFi AP a
 
 - [x] ~~Add R730 to Ansible inventory~~ — **added as `storage_servers` group in `all-nodes.yml` + dedicated `ansible/inventory/r730xd.yml`**
 - [x] ~~Add all lab machines to unified Ansible inventory~~ — **done 2026-03-28. `ansible/inventory/lab-nodes.yml` covers r730xd, tower-pc, dell-inspiron-15, optiplex, staging-vm with group structure (k8s_cluster, standalone, storage_servers, staging). All machines SSH-verified.**
-- [ ] Add Quanta to Ansible inventory (pending PXE boot / OS install)
+- [x] ~~Add Quanta to Ansible inventory~~ — **added as k8s_worker in `lab-nodes.yml`**
+- [x] ~~Add Intel NUC to Ansible inventory~~ — **added as k8s_worker in `lab-nodes.yml`**
 - [ ] Update Ansible inventory (`all-nodes.yml`) with final topology
 - [ ] Update `docs/ARCHITECTURE.md` with new cluster topology
 - [ ] Update `CLAUDE.md` with new node table, IPs, roles
@@ -311,7 +322,7 @@ Phase 1 (planned downtime)
          │
          ├─────────────────┐
          v                 v
-Phase 2A: R730 storage   Phase 2B: Quanta joins K8s
+Phase 2A: R730 storage   Phase 2B: Quanta    Phase 2C: Intel NUC
          │                 │
          v                 │
   Staging VM on R730 ────── Critical services move here, unblocks tower-pc

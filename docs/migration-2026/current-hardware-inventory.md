@@ -2,7 +2,7 @@
 
 > **IP addresses:** Authoritative values are in `ansible/group_vars/all/network.yml`.
 
-Last updated: 2026-04-02
+Last updated: 2026-04-05
 
 ---
 
@@ -35,7 +35,7 @@ Last updated: 2026-04-02
 | Network | eno1, IP `<tower_pc_ip>` |
 | Current role | K8s worker — NFS server, storage services, GPU workloads |
 
-### msi-laptop — Worker (REMOVING)
+### msi-laptop — Dev Machine (REMOVED from cluster)
 
 | Spec | Value |
 |------|-------|
@@ -46,8 +46,7 @@ Last updated: 2026-04-02
 | Storage | 1 TB SSD + 1 TB HDD — **2 TB total** |
 | GPU | NVIDIA GTX 1060 3 GB |
 | Network | enp61s0, IP 10.0.0.177 (decommissioned — see MEMORY.md) |
-| Current role | K8s worker — monitoring/observability workloads |
-| Migration note | **Being removed from cluster to repurpose as a development machine.** Workloads must be migrated before removal. |
+| Current role | Dev machine — fully removed from K8s cluster (2026-03-26) |
 
 ## Inactive / Pending Nodes
 
@@ -121,6 +120,22 @@ Last updated: 2026-04-02
 | Network | 4-port NIC via PCIe riser (installed 2026-03-27) |
 | Status | 240 GB boot drive installed, OS imaging via preseeded ISO |
 | TODO | Set BMC/IPMI static IP, check PCIe slot count/type |
+
+#### Intel NUC12SNKi72
+
+| Spec | Value |
+|------|-------|
+| Model | Intel NUC12SNKi72 |
+| Form factor | NUC (mini PC) |
+| CPU | Intel Core i7-12700H — 14C/20T (6P+8E) |
+| RAM | 64 GB |
+| Storage | Internal (local boot) |
+| GPU | Intel ARC (dead — not functional) |
+| Network | IP `<intel_nuc_ip>` |
+| Display | USB-C output (onboard GPU dead, display via USB-C) |
+| Origin | Grandfather's — thought bricked due to dead GPU |
+| Status | **OS installed, baseline applied.** Pending container runtime + K8s join. |
+| TODO | Install containerd, join K8s cluster |
 
 ### Network Equipment
 
@@ -211,13 +226,13 @@ Note: 1× 4TB was dead on arrival and discarded. Bay 8 drive had existing data, 
 
 | Resource | Estimate |
 |----------|----------|
-| CPU cores | ~30C/52T (Inspiron 2C/4T + Optiplex 4C/4T + R730 8C/16T + Quanta 16C/32T) — tower PC excluded (standalone GPU workstation) |
-| RAM | ~136 GB (8 + 32 + 32 + 64) — tower PC (24 GB) excluded |
+| CPU cores | ~44C/72T (Inspiron 2C/4T + Optiplex 4C/8T + Intel NUC 14C/20T + R730 8C/16T + Quanta 16C/32T) — tower PC excluded (standalone GPU workstation) |
+| RAM | ~200 GB (8 + 32 + 64 + 32 + 64) — tower PC (24 GB) excluded |
 | GPUs | 1080 Ti (11GB), 1060 3GB (tower), 1050 Ti (4GB), 760 (2GB) |
 | Storage (installed) | ~9.2 TB raw |
 | Storage (spare HDDs) | ~23 TB raw (2×4TB + 5×3TB, 1×3TB has data pending backup) |
-| Network | 24-port managed GbE switch, 3× WiFi APs |
-| Physical machines | 5 (Inspiron, Optiplex, R730, Quanta, Tower PC) — MSI laptop removed from cluster |
+| Network | 24-port managed GbE switch, 4× WiFi APs |
+| Physical machines | 6 (Inspiron, Optiplex, Intel NUC, R730, Quanta, Tower PC) — MSI laptop removed from cluster |
 
 ---
 

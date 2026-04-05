@@ -1,6 +1,6 @@
 # New Setup Planning
 
-Last updated: 2026-04-03
+Last updated: 2026-04-05
 
 ## Target Architecture
 
@@ -13,23 +13,25 @@ Last updated: 2026-04-03
                  |  Caddy + NetBird   |
                  +--------------------+
                             |
-                      NetBird VPN
+                      NetBird VPN (management only)
                             |
-          +-----------------+------------------+
-          |                 |                  |
-          v                 v                  v
-+------------------+ +-------------+ +------------------+
-| Quanta QSSC-2ML | | Optiplex    | | Dell Inspiron 15 |
-| K8s Worker       | | K8s Worker  | | K8s Control Plane|
-| 32C / 64GB       | | 4C / 32GB   | | 2C / 8GB         |
-+------------------+ +-------------+ +------------------+
+     +----------+-----------+-----------+-----------+
+     |          |           |           |           |
+     v          v           v           v           v
++----------+ +----------+ +----------+ +----------+ +----------+
+| Quanta   | | NUC      | | Optiplex | | Inspiron | | R730xd   |
+| K8s Wkr  | | K8s Wkr  | | K8s Wkr  | | K8s CP   | | Storage  |
+| 32C/64GB | | 14C/64GB | | 4C/32GB  | | 2C/8GB   | | + VMs    |
++----------+ +----------+ +----------+ +----------+ +----------+
 
-+------------------+ +------------------+
-| Dell R730        | | Tower PC         |
-| Storage + VMs    | | Router + GPU     |
-| Standalone       | | Standalone       |
-+------------------+ +------------------+
++------------------+
+| Tower PC         |
+| Router + GPU     |
+| Standalone       |
++------------------+
 ```
+
+**NetBird** is used as a management interface only — service traffic stays on local networks.
 
 ## Decided Role Assignments
 
@@ -59,15 +61,24 @@ Last updated: 2026-04-03
 - **Role:** Main K8s compute workhorse — 2× CPUs, 32 cores, 64 GB RAM, fully dedicated to cluster
 - **Why:** Most powerful machine in the fleet. K8s benefits from strong workers, and this gives headroom for automation/parallel workloads.
 - **No VMs** — Quanta is fully committed to K8s
-- **Boot:** PXE boot from R730 (diskless)
+- **Boot:** PXE boot from R730 (diskless). OS installed, baseline applied — pending container runtime.
 - **Network:** 4-port NIC installed via PCIe riser. 1-2 ports direct-connected to R730 for dedicated NFS I/O, remaining ports on switch
+
+### Intel NUC12SNKi72 → K8s Worker
+
+- **Role:** K8s worker node — second most powerful after Quanta
+- **Origin:** Grandfather's NUC, thought bricked — Intel ARC GPU is dead but display works via USB-C
+- **CPU:** Intel Core i7-12700H (14C/20T, 6P+8E cores) — modern hybrid architecture
+- **RAM:** 64 GB
+- **Boot:** Local (internal storage)
+- **Status:** OS installed, baseline applied. Pending container runtime + cluster join.
 
 ### Dell Optiplex 9020 → K8s Worker
 
 - **Role:** Second K8s worker node
 - **Migrating from:** Standalone deb-web duties (web hosting, Palworld, CI/CD runner) — these move into K8s workloads
 - **Specs:** i7-4790 4C/8T, 32 GB RAM
-- **Boot:** PXE boot from R730 (diskless) — SSD repurposed elsewhere
+- **Boot:** PXE boot from R730 (diskless) — SSD repurposed elsewhere. OS installed, baseline applied — pending container runtime.
 
 ### Dell Inspiron 15 → K8s Control Plane (Unchanged)
 
@@ -152,13 +163,12 @@ Last updated: 2026-04-03
 | Resource | Total |
 |----------|-------|
 | Control plane nodes | 1 (Inspiron) |
-| Worker nodes | 2 (Quanta + Optiplex) |
-| CPU cores (workers) | 36 (32 + 4) |
-| CPU threads (workers) | ~68 (depends on Quanta CPUs) |
-| RAM (workers) | 96 GB (64 + 32) |
+| Worker nodes | 3 (Quanta + Intel NUC + Optiplex) |
+| CPU cores (workers) | 34C/60T (16C/32T + 14C/20T + 4C/8T) |
+| RAM (workers) | 160 GB (64 + 64 + 32) |
 | RAM (control plane) | 8 GB |
 
-Compared to current cluster: more than 3× the compute cores, 50% more RAM, on fewer but much stronger machines.
+Compared to current cluster: more than 3× the compute cores, 2.5× the RAM, on stronger machines. The NUC brings modern hybrid cores (P+E) alongside Quanta's raw thread count.
 
 ---
 
@@ -177,7 +187,7 @@ Compared to current cluster: more than 3× the compute cores, 50% more RAM, on f
 - [x] ~~R730 drive layout~~ — **2×4TB parity (bays 0+3), 5×3TB data (bays 1+2+4+5+8). See `ansible/inventory/r730xd.yml`.**
 - [x] ~~3TB data backup~~ — **drive mounted directly into MergerFS pool (bay 8), data preserved in-place**
 - [x] ~~R730 CPU identification~~ — **Xeon E5-2630 v3, 8C/16T**
-- [ ] **Quanta CPU identification** — check BMC/IPMI/BIOS
+- [x] ~~**Quanta CPU identification**~~ — **2× Intel Xeon E5-2670 (8C/16T each = 16C/32T total @ 2.6 GHz)**
 - [ ] **Power assessment** — R730 + Quanta + tower with 3 GPUs could pull 1kW+ combined
 - [ ] **UPS strategy** — APC RS 1500 (865W, simulated sine). R730 and Quanta (likely) won't run on it. Use for: Inspiron, Optiplex, Tower PC, switch. NUT for graceful shutdown of servers via IPMI/iDRAC when power drops.
 - [ ] **UPS data cable** — need APC RJ45-to-USB cable (e.g., 940-0127) to connect to a monitoring machine. Check if one came with the unit.
