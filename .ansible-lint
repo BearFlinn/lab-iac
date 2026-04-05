@@ -13,8 +13,8 @@ exclude_paths:
 
 # Rules to skip entirely
 skip_list:
-  # Allow hyphenated role names (k8s-control-plane, k8s-worker, etc.)
-  - role-name[path]
+  # Allow hyphenated role names (k8s-containerd, r730xd-zfs, monitoring-base, etc.)
+  - role-name
 
   # Allow handlers in playbooks (we define handlers inline in some playbooks)
   - no-handler
@@ -34,7 +34,6 @@ warn_list:
 
 # Enable optional rules
 enable_list:
-  - args
   - empty-string-compare
   - no-log-password
   - no-same-owner
@@ -44,8 +43,6 @@ use_default_rules: true
 
 # Mock modules that might not be installed
 mock_modules:
-  - community.general.timezone
-  - community.general.ufw
   - ansible.utils.ipaddr
 
 # Mock roles that might not be available
@@ -54,8 +51,4 @@ mock_roles: []
 # Offline mode - don't download dependencies
 offline: false
 
-# Configure rule-specific options
-rules:
-  # Configure specific rules if needed
-  yaml[line-length]:
-    max: 200
+# yaml[line-length] is in warn_list above — no rule-specific overrides needed

@@ -1,0 +1,9 @@
+---
+# Handlers for k8s-containerd role
+
+- name: Restart containerd
+  ansible.builtin.systemd:
+    name: containerd
+    state: restarted
+    daemon_reload: yes
+  become: yes

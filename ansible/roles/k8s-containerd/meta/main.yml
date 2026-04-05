@@ -1,0 +1,15 @@
+---
+galaxy_info:
+  author: bearf
+  description: "Container runtime (containerd) and K8s networking prerequisites"
+  license: MIT
+  min_ansible_version: "2.14"
+  platforms:
+    - name: Debian
+      versions:
+        - trixie
+  galaxy_tags:
+    - kubernetes
+    - containerd
+    - container-runtime
+dependencies: []

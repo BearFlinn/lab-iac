@@ -1,0 +1,29 @@
+---
+# k8s-containerd: Container runtime and OS prerequisites for Kubernetes nodes
+#
+# Installs containerd, configures kernel modules and sysctl for K8s networking,
+# and installs CNI plugins. Targets all K8s nodes (control plane + workers).
+
+# === Containerd ===
+
+# Package name — use "containerd" for Debian repos, "containerd.io" for Docker repos
+containerd_package: "containerd"
+
+# === CNI Plugins ===
+
+# CNI binary directory — must match Cilium's expected path
+containerd_cni_bin_dir: "/opt/cni/bin"
+
+# CNI plugins version from containernetworking/plugins GitHub releases
+containerd_cni_plugins_version: "1.6.2"
+
+# Architecture for CNI plugin downloads
+containerd_cni_arch: "amd64"
+
+# === crictl ===
+
+# crictl version from kubernetes-sigs/cri-tools GitHub releases
+containerd_crictl_version: "1.32.0"
+
+# CRI CLI timeout in seconds
+containerd_crictl_timeout: 10

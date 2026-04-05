@@ -1,0 +1,309 @@
+---
+# k8s-containerd: Container runtime and OS prerequisites for Kubernetes nodes
+# Installs containerd, kernel modules, sysctl, CNI plugins, and crictl.
+# Run on all K8s nodes (control plane + workers) before kubeadm init/join.
+
+# ==========================================================================
+# Kernel Modules — required for container networking
+# ==========================================================================
+
+- name: Load required kernel modules
+  community.general.modprobe:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - overlay
+    - br_netfilter
+  become: yes
+
+- name: Persist kernel modules across reboots
+  ansible.builtin.lineinfile:
+    path: /etc/modules-load.d/k8s-containerd.conf
+    line: "{{ item }}"
+    create: yes
+    mode: "0644"
+  loop:
+    - overlay
+    - br_netfilter
+  become: yes
+
+- name: Verify kernel modules are loaded
+  ansible.builtin.shell: lsmod | grep -q {{ item }}
+  loop:
+    - overlay
+    - br_netfilter
+  changed_when: false
+  become: yes
+
+# ==========================================================================
+# Sysctl — K8s networking prerequisites (dual-stack)
+# ==========================================================================
+
+- name: Set sysctl parameters for Kubernetes networking
+  ansible.posix.sysctl:
+    name: "{{ item.name }}"
+    value: "{{ item.value }}"
+    state: present
+    sysctl_set: yes
+    sysctl_file: /etc/sysctl.d/99-k8s-containerd.conf
+    reload: yes
+  loop:
+    - { name: 'net.bridge.bridge-nf-call-iptables', value: '1' }
+    - { name: 'net.bridge.bridge-nf-call-ip6tables', value: '1' }
+    - { name: 'net.ipv4.ip_forward', value: '1' }
+    - { name: 'net.ipv6.conf.all.forwarding', value: '1' }
+    - { name: 'net.ipv6.conf.default.forwarding', value: '1' }
+    # accept_ra=2 allows accepting Router Advertisements even when forwarding is enabled
+    # Without this, nodes won't get global IPv6 addresses via SLAAC
+    # all/default only affect future interfaces; the physical interface needs it explicitly
+    - { name: 'net.ipv6.conf.all.accept_ra', value: '2' }
+    - { name: 'net.ipv6.conf.default.accept_ra', value: '2' }
+    - { name: 'net.ipv6.conf.{{ network_interface }}.accept_ra', value: '2' }
+    - { name: 'net.ipv6.conf.{{ network_interface }}.autoconf', value: '1' }
+  become: yes
+
+# ==========================================================================
+# Prerequisite Packages
+# ==========================================================================
+
+- name: Install K8s prerequisite packages
+  ansible.builtin.apt:
+    name:
+      - conntrack
+      - ethtool
+      - socat
+    state: present
+    update_cache: yes
+    cache_valid_time: 3600
+  become: yes
+
+# ==========================================================================
+# Containerd — container runtime
+# ==========================================================================
+
+- name: Install containerd and runc
+  ansible.builtin.apt:
+    name:
+      - "{{ containerd_package }}"
+      - runc
+    state: present
+  become: yes
+
+- name: Create containerd config directory
+  ansible.builtin.file:
+    path: /etc/containerd
+    state: directory
+    mode: "0755"
+  become: yes
+
+# The Debian containerd package ships a minimal config stub that lacks the
+# full TOML structure needed for patching (e.g., no SystemdCgroup field).
+# Detect this and regenerate a full default config when necessary.
+- name: Check if containerd config has full structure
+  ansible.builtin.command: grep -c 'SystemdCgroup' /etc/containerd/config.toml
+  register: containerd_config_check
+  changed_when: false
+  failed_when: false
+  become: yes
+
+- name: Remove minimal config stub if present
+  ansible.builtin.file:
+    path: /etc/containerd/config.toml
+    state: absent
+  when: containerd_config_check.rc != 0
+  become: yes
+
+- name: Generate full containerd default configuration
+  ansible.builtin.shell: containerd config default > /etc/containerd/config.toml
+  args:
+    creates: /etc/containerd/config.toml
+  become: yes
+
+- name: Configure containerd to use systemd cgroup driver
+  ansible.builtin.replace:
+    path: /etc/containerd/config.toml
+    regexp: 'SystemdCgroup = false'
+    replace: 'SystemdCgroup = true'
+  become: yes
+  notify: Restart containerd
+
+- name: Configure containerd CNI bin directory
+  ansible.builtin.replace:
+    path: /etc/containerd/config.toml
+    regexp: 'bin_dir = "/usr/lib/cni"'
+    replace: 'bin_dir = "{{ containerd_cni_bin_dir }}"'
+  become: yes
+  notify: Restart containerd
+
+- name: Validate containerd configuration
+  ansible.builtin.command: containerd config dump
+  changed_when: false
+  failed_when: containerd_config_validation.rc != 0
+  register: containerd_config_validation
+  become: yes
+
+- name: Flush handlers to ensure containerd restarts before service start
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable and start containerd
+  ansible.builtin.systemd:
+    name: containerd
+    enabled: yes
+    state: started
+  become: yes
+
+# ==========================================================================
+# CNI Plugins — base binaries (Cilium manages its own CNI config)
+# ==========================================================================
+
+- name: Create CNI directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ containerd_cni_bin_dir }}"
+    - /etc/cni/net.d
+  become: yes
+
+- name: Check for CNI version marker
+  ansible.builtin.stat:
+    path: "{{ containerd_cni_bin_dir }}/.cni-version"
+  register: cni_version_marker
+  become: yes
+
+- name: Read CNI version marker
+  ansible.builtin.slurp:
+    src: "{{ containerd_cni_bin_dir }}/.cni-version"
+  register: cni_version_file
+  when: cni_version_marker.stat.exists
+  become: yes
+
+- name: Set CNI version fact
+  ansible.builtin.set_fact:
+    cni_installed_version: "{{ (cni_version_file.content | b64decode | trim) if cni_version_marker.stat.exists else 'none' }}"
+
+- name: Download CNI plugins
+  ansible.builtin.get_url:
+    url: "https://github.com/containernetworking/plugins/releases/download/v{{ containerd_cni_plugins_version }}/cni-plugins-linux-{{ containerd_cni_arch }}-v{{ containerd_cni_plugins_version }}.tgz"
+    dest: "/tmp/cni-plugins-{{ containerd_cni_plugins_version }}.tgz"
+    mode: "0644"
+    timeout: 60
+  retries: 3
+  delay: 5
+  register: cni_download
+  until: cni_download is succeeded
+  when: cni_installed_version != containerd_cni_plugins_version
+  become: yes
+
+- name: Extract CNI plugins
+  ansible.builtin.unarchive:
+    src: "/tmp/cni-plugins-{{ containerd_cni_plugins_version }}.tgz"
+    dest: "{{ containerd_cni_bin_dir }}"
+    remote_src: yes
+  when: cni_download is changed
+  become: yes
+
+- name: Write CNI version marker
+  ansible.builtin.copy:
+    content: "{{ containerd_cni_plugins_version }}\n"
+    dest: "{{ containerd_cni_bin_dir }}/.cni-version"
+    mode: "0644"
+  when: cni_download is changed
+  become: yes
+
+- name: Clean up CNI download
+  ansible.builtin.file:
+    path: "/tmp/cni-plugins-{{ containerd_cni_plugins_version }}.tgz"
+    state: absent
+  become: yes
+
+- name: Verify CNI plugins installed
+  ansible.builtin.stat:
+    path: "{{ containerd_cni_bin_dir }}/bridge"
+  register: cni_bridge_check
+  failed_when: not cni_bridge_check.stat.exists
+  become: yes
+
+# ==========================================================================
+# crictl — CRI CLI for debugging container runtime
+# ==========================================================================
+
+- name: Check if crictl is installed at desired version
+  ansible.builtin.command: crictl --version
+  register: crictl_current
+  changed_when: false
+  failed_when: false
+  become: yes
+
+- name: Download crictl
+  ansible.builtin.get_url:
+    url: "https://github.com/kubernetes-sigs/cri-tools/releases/download/v{{ containerd_crictl_version }}/crictl-v{{ containerd_crictl_version }}-linux-{{ containerd_cni_arch }}.tar.gz"
+    dest: "/tmp/crictl-{{ containerd_crictl_version }}.tar.gz"
+    mode: "0644"
+    timeout: 60
+  retries: 3
+  delay: 5
+  register: crictl_download
+  until: crictl_download is succeeded
+  when: crictl_current.rc != 0 or ('v' + containerd_crictl_version) not in (crictl_current.stdout | default(''))
+  become: yes
+
+- name: Extract crictl to /usr/local/bin
+  ansible.builtin.unarchive:
+    src: "/tmp/crictl-{{ containerd_crictl_version }}.tar.gz"
+    dest: /usr/local/bin
+    remote_src: yes
+    mode: "0755"
+  when: crictl_download is changed
+  become: yes
+
+- name: Clean up crictl download
+  ansible.builtin.file:
+    path: "/tmp/crictl-{{ containerd_crictl_version }}.tar.gz"
+    state: absent
+  become: yes
+
+- name: Configure crictl for containerd
+  ansible.builtin.copy:
+    content: |
+      runtime-endpoint: unix:///run/containerd/containerd.sock
+      image-endpoint: unix:///run/containerd/containerd.sock
+      timeout: {{ containerd_crictl_timeout }}
+    dest: /etc/crictl.yaml
+    mode: "0644"
+  become: yes
+
+# ==========================================================================
+# Verification
+# ==========================================================================
+
+- name: Verify containerd is running
+  ansible.builtin.systemd:
+    name: containerd
+  register: containerd_active
+  failed_when: containerd_active.status.ActiveState != 'active'
+  become: yes
+
+- name: Verify containerd responds via CRI
+  ansible.builtin.command: crictl info
+  changed_when: false
+  failed_when: crictl_check.rc != 0
+  register: crictl_check
+  become: yes
+
+- name: Get containerd version
+  ansible.builtin.command: containerd --version
+  changed_when: false
+  register: containerd_version
+  become: yes
+
+- name: Display summary
+  ansible.builtin.debug:
+    msg:
+      - "=== Container Runtime Ready ==="
+      - "{{ containerd_version.stdout }}"
+      - "CNI plugins: v{{ containerd_cni_plugins_version }} ({{ containerd_cni_bin_dir }})"
+      - "Kernel modules: overlay, br_netfilter"
+      - "Cgroup driver: systemd"
+      - "CRI socket: unix:///run/containerd/containerd.sock"
