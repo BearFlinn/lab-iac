@@ -1,0 +1,5 @@
+---
+# k8s-packages: kubeadm, kubelet, kubectl from the official Kubernetes apt repository
+#
+# The kubernetes_version variable is set in group_vars/k8s_cluster/k8s.yml.
+# This role uses it for the apt repo URL; the latest patch is installed automatically.

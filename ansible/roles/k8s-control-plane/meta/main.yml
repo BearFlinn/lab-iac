@@ -1,0 +1,10 @@
+---
+dependencies:
+  - role: k8s-packages
+
+galaxy_info:
+  description: "Initialize Kubernetes control plane with kubeadm (single CP, dual-stack)"
+  platforms:
+    - name: Debian
+      versions:
+        - trixie

@@ -1,0 +1,205 @@
+---
+# K8s Control Plane Bootstrap (Phase 1 of cluster standup)
+#
+# Initializes single control plane on dell-inspiron-15 with Cilium CNI,
+# distributes kubeconfig, and registers metrics with Prometheus on R730xd.
+#
+# Prerequisites (must be run first):
+#   ansible-playbook -l dell-inspiron-15 ansible/playbooks/setup-k8s-worker.yml
+#   ansible-playbook -l dell-inspiron-15 ansible/playbooks/setup-k8s-containerd.yml
+#
+# Usage:
+#   ansible-playbook ansible/playbooks/setup-k8s-control-plane.yml
+#
+# Verification:
+#   kubectl get nodes                     # dell-inspiron-15 Ready
+#   cilium status                         # All green
+#   hubble observe --follow               # Flows visible
+#
+# See: docs/k8s-cluster-standup.md (Phase 1)
+# Decisions: ADR-014 (stack), ADR-016 (single CP)
+
+# ============================================================
+# Play 1: Bootstrap Kubernetes control plane
+# ============================================================
+- name: Bootstrap Kubernetes control plane
+  hosts: k8s_control_plane
+  gather_facts: yes
+
+  roles:
+    - k8s-control-plane
+
+# ============================================================
+# Play 2: Install Cilium CNI with Hubble
+# ============================================================
+- name: Install Cilium CNI with Hubble
+  hosts: k8s_control_plane
+  gather_facts: no
+
+  vars:
+    kubectl_env:
+      KUBECONFIG: "/home/{{ ansible_user }}/.kube/config"
+
+  roles:
+    - k8s-cilium
+
+# ============================================================
+# Play 3: Verify kubectl access from jumpbox
+# ============================================================
+- name: Verify kubectl access from jumpbox
+  hosts: k8s_control_plane
+  gather_facts: no
+
+  tasks:
+    - name: Verify kubectl works from jumpbox
+      ansible.builtin.command: kubectl get nodes -o wide
+      delegate_to: localhost
+      become: no
+      register: kubectl_check
+      environment:
+        KUBECONFIG: "{{ lookup('env', 'HOME') }}/.kube/config"
+
+    - name: Display cluster nodes
+      ansible.builtin.debug:
+        var: kubectl_check.stdout_lines
+      delegate_to: localhost
+
+    - name: Verify Cilium status from jumpbox
+      ansible.builtin.command: kubectl get pods -n kube-system -l app.kubernetes.io/part-of=cilium -o wide
+      delegate_to: localhost
+      become: no
+      register: cilium_pods
+      environment:
+        KUBECONFIG: "{{ lookup('env', 'HOME') }}/.kube/config"
+
+    - name: Display Cilium pods
+      ansible.builtin.debug:
+        var: cilium_pods.stdout_lines
+      delegate_to: localhost
+
+# ============================================================
+# Play 4: Register K8s metrics with Prometheus on R730xd
+# ============================================================
+# This play targets the control plane host but delegates all tasks to r730xd.
+# It uses facts set by the k8s-control-plane role (k8s_prometheus_bearer_token).
+- name: Register K8s control plane metrics with Prometheus
+  hosts: k8s_control_plane
+  gather_facts: no
+
+  vars:
+    prometheus_compose_dir: "/opt/observability/prometheus"
+
+  tasks:
+    # --- k8s-auth directory for apiserver bearer token + CA cert ---
+
+    - name: Create k8s-auth directory on R730xd
+      ansible.builtin.file:
+        path: "{{ prometheus_compose_dir }}/k8s-auth"
+        state: directory
+        mode: "0755"
+      delegate_to: r730xd
+      become: yes
+
+    - name: Copy K8s CA certificate to R730xd
+      ansible.builtin.copy:
+        src: /tmp/k8s-ca.crt
+        dest: "{{ prometheus_compose_dir }}/k8s-auth/ca.crt"
+        mode: "0644"
+      delegate_to: r730xd
+      become: yes
+
+    # Token is readable by the Prometheus container (runs as nobody)
+    # The token only grants /metrics read access — not a cluster admin credential
+    - name: Write Prometheus bearer token to R730xd
+      ansible.builtin.copy:
+        content: "{{ k8s_prometheus_bearer_token }}"
+        dest: "{{ prometheus_compose_dir }}/k8s-auth/token"
+        mode: "0644"
+      delegate_to: r730xd
+      become: yes
+      no_log: true
+
+    # --- etcd target (file_sd, no auth needed on :2381) ---
+
+    - name: Drop etcd metrics target file
+      ansible.builtin.copy:
+        content: |
+          - targets:
+              - "{{ k8s_control_plane_endpoint }}:2381"
+            labels:
+              env: "homelab"
+              instance: "{{ inventory_hostname }}"
+              component: "etcd"
+        dest: "{{ prometheus_compose_dir }}/targets.d/k8s-etcd.yml"
+        mode: "0644"
+      delegate_to: r730xd
+      become: yes
+
+# ============================================================
+# Play 5: Re-deploy Prometheus config with K8s apiserver target
+# ============================================================
+# Targets r730xd directly to re-template prometheus.yml with the apiserver
+# scrape job enabled. This uses the r730xd-prometheus role's template with
+# the prometheus_k8s_apiserver_target variable overridden.
+- name: Update Prometheus configuration for K8s scraping
+  hosts: r730xd
+  gather_facts: no
+
+  vars_files:
+    - "{{ playbook_dir }}/../roles/r730xd-prometheus/defaults/main.yml"
+
+  tasks:
+    - name: Set K8s apiserver target for Prometheus
+      ansible.builtin.set_fact:
+        prometheus_k8s_apiserver_target: "{{ dell_inspiron_ip }}:6443"
+
+    - name: Re-template Prometheus configuration with K8s apiserver target
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../roles/r730xd-prometheus/templates/prometheus.yml.j2"
+        dest: "/opt/observability/prometheus/prometheus.yml"
+        mode: "0644"
+      become: yes
+      register: prom_config
+
+    - name: Re-template Prometheus docker-compose with k8s-auth mount
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../roles/r730xd-prometheus/templates/docker-compose.yml.j2"
+        dest: "/opt/observability/prometheus/docker-compose.yml"
+        mode: "0644"
+      become: yes
+      register: prom_compose
+
+    - name: Re-template alert rules with K8s alerts
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../roles/r730xd-prometheus/templates/rules/homelab.yml.j2"
+        dest: "/opt/observability/prometheus/rules/homelab.yml"
+        mode: "0644"
+      become: yes
+      register: prom_rules
+
+    - name: Recreate Prometheus container if compose changed
+      ansible.builtin.command: docker compose up -d --force-recreate prometheus
+      args:
+        chdir: /opt/observability/prometheus
+      become: yes
+      when: prom_compose is changed
+
+    - name: Reload Prometheus if only config/rules changed
+      ansible.builtin.uri:
+        url: "http://localhost:9090/-/reload"
+        method: POST
+      when: (prom_config is changed or prom_rules is changed) and prom_compose is not changed
+      register: prom_reload
+      failed_when: prom_reload.status is defined and prom_reload.status != 200
+
+    - name: Wait for Prometheus to process new targets
+      ansible.builtin.pause:
+        seconds: 10
+
+    - name: Display Prometheus registration summary
+      ansible.builtin.debug:
+        msg:
+          - "=== Prometheus Integration Complete ==="
+          - "etcd target: {{ dell_inspiron_ip }}:2381 (file_sd, no auth)"
+          - "kube-apiserver target: {{ prometheus_k8s_apiserver_target }} (bearer token + TLS)"
+          - "Alert rules: KubeAPIServerDown, EtcdDown, EtcdDbSizeLarge"

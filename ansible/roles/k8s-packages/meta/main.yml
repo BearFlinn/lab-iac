@@ -1,0 +1,9 @@
+---
+dependencies: []
+
+galaxy_info:
+  description: "Install kubeadm, kubelet, and kubectl from pkgs.k8s.io"
+  platforms:
+    - name: Debian
+      versions:
+        - trixie

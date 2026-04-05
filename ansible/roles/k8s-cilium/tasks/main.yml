@@ -1,0 +1,136 @@
+---
+# k8s-cilium: Deploy Cilium CNI with Hubble via Helm
+# Requires: Helm installed (k8s-control-plane role), kubeconfig available.
+# Must run after kubeadm init with --skip-phases=addon/kube-proxy.
+
+# ==========================================================================
+# Helm Repository
+# ==========================================================================
+
+- name: Check if Cilium Helm repo exists
+  ansible.builtin.command: helm repo list -o json
+  register: helm_repos
+  changed_when: false
+  failed_when: false
+  environment: "{{ kubectl_env }}"
+
+- name: Add Cilium Helm repository
+  ansible.builtin.command: helm repo add cilium {{ cilium_helm_repo }}
+  when: "'cilium' not in (helm_repos.stdout | default('[]'))"
+  environment: "{{ kubectl_env }}"
+
+- name: Update Helm repositories
+  ansible.builtin.command: helm repo update
+  changed_when: false
+  environment: "{{ kubectl_env }}"
+
+# ==========================================================================
+# Cilium Installation
+# ==========================================================================
+
+- name: Template Cilium Helm values
+  ansible.builtin.template:
+    src: cilium-values.yml.j2
+    dest: /tmp/cilium-values.yml
+    mode: "0644"
+
+- name: Check if Cilium is already installed
+  ansible.builtin.command: helm status cilium -n kube-system -o json
+  register: cilium_status
+  changed_when: false
+  failed_when: false
+  environment: "{{ kubectl_env }}"
+
+- name: Install Cilium via Helm
+  ansible.builtin.command: >
+    helm install cilium cilium/cilium
+    --version {{ cilium_version }}
+    --namespace kube-system
+    --values /tmp/cilium-values.yml
+    --wait
+    --timeout {{ cilium_wait_timeout }}s
+  when: cilium_status.rc != 0
+  environment: "{{ kubectl_env }}"
+  register: cilium_install
+
+- name: Upgrade Cilium via Helm if already installed
+  ansible.builtin.command: >
+    helm upgrade cilium cilium/cilium
+    --version {{ cilium_version }}
+    --namespace kube-system
+    --values /tmp/cilium-values.yml
+    --wait
+    --timeout {{ cilium_wait_timeout }}s
+  when: cilium_status.rc == 0
+  environment: "{{ kubectl_env }}"
+  register: cilium_upgrade
+
+- name: Display Cilium install output
+  ansible.builtin.debug:
+    var: (cilium_install.stdout_lines | default([])) or (cilium_upgrade.stdout_lines | default([]))
+  when: cilium_install is changed or cilium_upgrade is changed
+
+- name: Clean up Cilium values file
+  ansible.builtin.file:
+    path: /tmp/cilium-values.yml
+    state: absent
+
+# ==========================================================================
+# Wait for Readiness
+# ==========================================================================
+
+- name: Wait for Cilium agent pods to be ready
+  ansible.builtin.command: >
+    kubectl wait --for=condition=Ready pods
+    -l app.kubernetes.io/name=cilium-agent
+    -n kube-system
+    --timeout={{ cilium_wait_timeout }}s
+  environment: "{{ kubectl_env }}"
+  changed_when: false
+  retries: 3
+  delay: 10
+  register: cilium_agent_ready
+  until: cilium_agent_ready.rc == 0
+
+- name: Wait for Hubble relay to be ready
+  ansible.builtin.command: >
+    kubectl wait --for=condition=Ready pods
+    -l app.kubernetes.io/name=hubble-relay
+    -n kube-system
+    --timeout=120s
+  environment: "{{ kubectl_env }}"
+  changed_when: false
+  when: cilium_hubble_relay_enabled
+
+- name: Wait for all nodes to be Ready
+  ansible.builtin.command: >
+    kubectl wait --for=condition=Ready nodes --all --timeout=120s
+  environment: "{{ kubectl_env }}"
+  changed_when: false
+  retries: 5
+  delay: 5
+  register: nodes_ready
+  until: nodes_ready.rc == 0
+
+# ==========================================================================
+# Verification (uses kubectl only — CLI tools belong on dev machines)
+# ==========================================================================
+
+- name: Get kube-system pod status
+  ansible.builtin.command: kubectl get pods -n kube-system -o wide
+  environment: "{{ kubectl_env }}"
+  changed_when: false
+  register: kube_system_pods
+
+- name: Display kube-system pods
+  ansible.builtin.debug:
+    var: kube_system_pods.stdout_lines
+
+- name: Display Cilium summary
+  ansible.builtin.debug:
+    msg:
+      - "=== Cilium CNI Deployed ==="
+      - "Version: {{ cilium_version }}"
+      - "kube-proxy replacement: {{ cilium_kube_proxy_replacement }}"
+      - "Hubble: enabled={{ cilium_hubble_enabled }}, relay={{ cilium_hubble_relay_enabled }}, ui={{ cilium_hubble_ui_enabled }}"
+      - "Prometheus metrics: enabled"

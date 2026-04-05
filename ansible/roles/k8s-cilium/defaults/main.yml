@@ -1,0 +1,27 @@
+---
+# k8s-cilium: Cilium CNI with Hubble observability
+# Deployed via Helm for reproducibility and auditable configuration.
+# Replaces kube-proxy with Cilium's eBPF datapath (ADR-014).
+
+# Cilium version — check https://github.com/cilium/cilium/releases
+cilium_version: "1.17.2"
+cilium_helm_repo: "https://helm.cilium.io/"
+
+# Hubble flow observability
+cilium_hubble_enabled: true
+cilium_hubble_relay_enabled: true
+# Hubble UI uses ~200MB RAM — disable if Inspiron (8GB) is tight on memory
+cilium_hubble_ui_enabled: true
+
+# Replace kube-proxy with Cilium eBPF (kubeadm init skips kube-proxy addon)
+cilium_kube_proxy_replacement: true
+
+# IPAM mode — "kubernetes" uses the podCIDR assigned by kubeadm
+cilium_ipam_mode: "kubernetes"
+
+# Operator replicas — 1 is correct for single-CP clusters (anti-affinity
+# prevents the second replica from scheduling on the same node)
+cilium_operator_replicas: 1
+
+# Timeouts for waiting on pod readiness
+cilium_wait_timeout: 300

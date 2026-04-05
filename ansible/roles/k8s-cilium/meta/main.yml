@@ -1,0 +1,9 @@
+---
+dependencies: []
+
+galaxy_info:
+  description: "Deploy Cilium CNI with Hubble via Helm"
+  platforms:
+    - name: Debian
+      versions:
+        - trixie

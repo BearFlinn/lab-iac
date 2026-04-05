@@ -1,0 +1,299 @@
+---
+# k8s-control-plane: Initialize single Kubernetes control plane
+# Runs kubeadm init, sets up kubeconfig, installs Helm, creates Prometheus SA.
+# Requires: k8s-containerd role already applied, k8s-packages as dependency.
+
+# ==========================================================================
+# Idempotency Check
+# ==========================================================================
+
+- name: Check if Kubernetes is already initialized
+  ansible.builtin.stat:
+    path: /etc/kubernetes/admin.conf
+  register: k8s_initialized
+  become: yes
+
+# ==========================================================================
+# kubeadm Init
+# ==========================================================================
+
+- name: Template kubeadm configuration
+  ansible.builtin.template:
+    src: kubeadm-config.yml.j2
+    dest: "{{ k8s_kubeadm_config_path }}"
+    mode: "0644"
+  become: yes
+
+- name: Initialize Kubernetes control plane
+  ansible.builtin.command: >
+    kubeadm init
+    --config={{ k8s_kubeadm_config_path }}
+    --skip-phases=addon/kube-proxy
+  become: yes
+  when: not k8s_initialized.stat.exists
+  register: kubeadm_init
+
+- name: Display kubeadm init output
+  ansible.builtin.debug:
+    var: kubeadm_init.stdout_lines
+  when: kubeadm_init is changed
+
+# ==========================================================================
+# kubeconfig Setup
+# ==========================================================================
+
+- name: Create .kube directory for ansible user
+  ansible.builtin.file:
+    path: "/home/{{ ansible_user }}/.kube"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0755"
+  become: yes
+
+- name: Copy admin.conf to ansible user's kubeconfig
+  ansible.builtin.copy:
+    src: /etc/kubernetes/admin.conf
+    dest: "/home/{{ ansible_user }}/.kube/config"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0600"
+    remote_src: yes
+  become: yes
+
+- name: Set KUBECONFIG environment for subsequent tasks
+  ansible.builtin.set_fact:
+    kubectl_env:
+      KUBECONFIG: "/home/{{ ansible_user }}/.kube/config"
+
+- name: Wait for API server to be ready
+  ansible.builtin.command: kubectl cluster-info
+  environment: "{{ kubectl_env }}"
+  retries: 30
+  delay: 2
+  register: cluster_info
+  until: cluster_info.rc == 0
+  changed_when: false
+
+# Single control plane (ADR-016) — allow all pods to schedule on this node.
+# Without this, Hubble relay/UI, operator replicas, and future infra pods
+# can't schedule until workers join.
+- name: Remove control-plane scheduling taint
+  ansible.builtin.command: >
+    kubectl taint nodes {{ inventory_hostname }}
+    node-role.kubernetes.io/control-plane:NoSchedule-
+  environment: "{{ kubectl_env }}"
+  register: taint_remove
+  changed_when: "'untainted' in taint_remove.stdout"
+  failed_when: taint_remove.rc != 0 and 'not found' not in taint_remove.stderr
+
+# ==========================================================================
+# Helm Installation
+# ==========================================================================
+
+- name: Check if Helm is installed at desired version
+  ansible.builtin.command: helm version --short
+  register: helm_current
+  changed_when: false
+  failed_when: false
+
+- name: Download Helm
+  ansible.builtin.get_url:
+    url: "https://get.helm.sh/helm-v{{ helm_version }}-linux-amd64.tar.gz"
+    dest: "/tmp/helm-v{{ helm_version }}.tar.gz"
+    mode: "0644"
+    timeout: 60
+  retries: 3
+  delay: 5
+  register: helm_download
+  until: helm_download is succeeded
+  when: helm_current.rc != 0 or ('v' + helm_version) not in (helm_current.stdout | default(''))
+  become: yes
+
+- name: Extract Helm binary
+  ansible.builtin.unarchive:
+    src: "/tmp/helm-v{{ helm_version }}.tar.gz"
+    dest: /tmp
+    remote_src: yes
+  when: helm_download is changed
+  become: yes
+
+- name: Install Helm to /usr/local/bin
+  ansible.builtin.copy:
+    src: /tmp/linux-amd64/helm
+    dest: /usr/local/bin/helm
+    mode: "0755"
+    remote_src: yes
+  when: helm_download is changed
+  become: yes
+
+- name: Clean up Helm download
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "/tmp/helm-v{{ helm_version }}.tar.gz"
+    - /tmp/linux-amd64
+  become: yes
+
+# ==========================================================================
+# Prometheus Metrics Access
+# ==========================================================================
+
+- name: Create Prometheus ServiceAccount
+  ansible.builtin.command: >
+    kubectl create serviceaccount {{ k8s_prometheus_sa_name }}
+    -n {{ k8s_prometheus_sa_namespace }}
+  environment: "{{ kubectl_env }}"
+  register: prom_sa_create
+  changed_when: prom_sa_create.rc == 0
+  failed_when: prom_sa_create.rc != 0 and 'already exists' not in prom_sa_create.stderr
+
+- name: Create ClusterRole for Prometheus metrics access
+  ansible.builtin.shell: |
+    cat <<'EOF' | kubectl apply -f -
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: ClusterRole
+    metadata:
+      name: prometheus-metrics-reader
+    rules:
+      - nonResourceURLs:
+          - /metrics
+        verbs:
+          - get
+    EOF
+  environment: "{{ kubectl_env }}"
+  changed_when: false
+
+- name: Bind ClusterRole to Prometheus ServiceAccount
+  ansible.builtin.shell: |
+    cat <<'EOF' | kubectl apply -f -
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: ClusterRoleBinding
+    metadata:
+      name: prometheus-metrics-reader
+    roleRef:
+      apiGroup: rbac.authorization.k8s.io
+      kind: ClusterRole
+      name: prometheus-metrics-reader
+    subjects:
+      - kind: ServiceAccount
+        name: {{ k8s_prometheus_sa_name }}
+        namespace: {{ k8s_prometheus_sa_namespace }}
+    EOF
+  environment: "{{ kubectl_env }}"
+  changed_when: false
+
+- name: Create long-lived token Secret for Prometheus
+  ansible.builtin.shell: |
+    cat <<'EOF' | kubectl apply -f -
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: {{ k8s_prometheus_sa_name }}-token
+      namespace: {{ k8s_prometheus_sa_namespace }}
+      annotations:
+        kubernetes.io/service-account.name: {{ k8s_prometheus_sa_name }}
+    type: kubernetes.io/service-account-token
+    EOF
+  environment: "{{ kubectl_env }}"
+  changed_when: false
+
+- name: Wait for token to be populated
+  ansible.builtin.shell: >
+    kubectl get secret {{ k8s_prometheus_sa_name }}-token
+    -n {{ k8s_prometheus_sa_namespace }}
+    -o jsonpath='{.data.token}'
+  environment: "{{ kubectl_env }}"
+  retries: 10
+  delay: 2
+  register: prom_token_check
+  until: prom_token_check.stdout | length > 0
+  changed_when: false
+
+- name: Extract Prometheus bearer token
+  ansible.builtin.shell: >
+    kubectl get secret {{ k8s_prometheus_sa_name }}-token
+    -n {{ k8s_prometheus_sa_namespace }}
+    -o jsonpath='{.data.token}' | base64 -d
+  environment: "{{ kubectl_env }}"
+  register: prom_bearer_token
+  changed_when: false
+  no_log: true
+
+- name: Set Prometheus token fact
+  ansible.builtin.set_fact:
+    k8s_prometheus_bearer_token: "{{ prom_bearer_token.stdout }}"
+  no_log: true
+
+- name: Fetch K8s CA certificate to controller
+  ansible.builtin.fetch:
+    src: /etc/kubernetes/pki/ca.crt
+    dest: /tmp/k8s-ca.crt
+    flat: yes
+  become: yes
+
+# ==========================================================================
+# Join Command (for Phase 2)
+# ==========================================================================
+
+- name: Generate join command for worker nodes
+  ansible.builtin.command: kubeadm token create --print-join-command
+  become: yes
+  register: join_command_output
+  changed_when: false
+
+- name: Save join command to local file
+  ansible.builtin.copy:
+    content: "{{ join_command_output.stdout }}\n"
+    dest: /tmp/k8s-join-command.sh
+    mode: "0600"
+  delegate_to: localhost
+  become: no
+
+# ==========================================================================
+# Kubeconfig Distribution
+# ==========================================================================
+
+- name: Fetch kubeconfig to jumpbox
+  ansible.builtin.fetch:
+    src: /etc/kubernetes/admin.conf
+    dest: "{{ lookup('env', 'HOME') }}/.kube/config"
+    flat: yes
+  become: yes
+
+- name: Set kubeconfig permissions on jumpbox
+  ansible.builtin.file:
+    path: "{{ lookup('env', 'HOME') }}/.kube/config"
+    mode: "0600"
+  delegate_to: localhost
+  become: no
+
+# ==========================================================================
+# Verification
+# ==========================================================================
+
+- name: Verify control plane components are running
+  ansible.builtin.command: kubectl get pods -n kube-system -o wide
+  environment: "{{ kubectl_env }}"
+  changed_when: false
+  register: kube_system_pods
+
+- name: Verify node has dual-stack pod CIDRs assigned
+  ansible.builtin.shell: >
+    kubectl get node {{ inventory_hostname }}
+    -o jsonpath='{.spec.podCIDRs}'
+  environment: "{{ kubectl_env }}"
+  changed_when: false
+  register: pod_cidrs
+
+- name: Display control plane summary
+  ansible.builtin.debug:
+    msg:
+      - "=== Control Plane Initialized ==="
+      - "API endpoint: {{ k8s_control_plane_endpoint }}:6443"
+      - "Pod CIDRs: {{ pod_cidrs.stdout }}"
+      - "Helm: v{{ helm_version }}"
+      - "Prometheus SA: {{ k8s_prometheus_sa_name }} (token extracted)"
+      - "Join command saved to: /tmp/k8s-join-command.sh"
+      - "Kubeconfig fetched to: ~/.kube/config"

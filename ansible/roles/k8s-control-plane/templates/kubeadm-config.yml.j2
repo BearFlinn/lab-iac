@@ -1,0 +1,29 @@
+# Managed by Ansible — k8s-control-plane role
+# kubeadm ClusterConfiguration for single control plane (ADR-016), dual-stack
+apiVersion: kubeadm.k8s.io/v1beta4
+kind: InitConfiguration
+localAPIEndpoint:
+  advertiseAddress: "{{ k8s_control_plane_endpoint }}"
+  bindPort: 6443
+nodeRegistration:
+  criSocket: unix:///run/containerd/containerd.sock
+  kubeletExtraArgs:
+    # Dual-stack: tell kubelet to advertise both IPv4 and IPv6 addresses
+    # Without this, only IPv4 is reported and Cilium IPv6 fails
+    - name: "node-ip"
+      value: "{{ k8s_control_plane_endpoint }},{{ ansible_facts.default_ipv6.address }}"
+---
+apiVersion: kubeadm.k8s.io/v1beta4
+kind: ClusterConfiguration
+kubernetesVersion: stable
+controlPlaneEndpoint: "{{ k8s_control_plane_endpoint }}:6443"
+networking:
+  podSubnet: "{{ k8s_pod_cidr_v4 }},{{ k8s_pod_cidr_v6 }}"
+  serviceSubnet: "{{ k8s_service_cidr_v4 }},{{ k8s_service_cidr_v6 }}"
+etcd:
+  local:
+    extraArgs:
+      # Expose etcd metrics on all interfaces for Prometheus (R730xd) scraping
+      # No auth required on :2381 — acceptable for trusted lab network
+      - name: "listen-metrics-urls"
+        value: "http://0.0.0.0:2381"

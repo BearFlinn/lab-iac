@@ -42,6 +42,28 @@ scrape_configs:
           env: "homelab"
 
 {% endfor %}
+  - job_name: "etcd"
+    file_sd_configs:
+      - files:
+          - "/etc/prometheus/targets.d/k8s-etcd.yml"
+        refresh_interval: 30s
+
+{% if prometheus_k8s_apiserver_target is defined and prometheus_k8s_apiserver_target %}
+  - job_name: "kube-apiserver"
+    scheme: https
+    tls_config:
+      ca_file: /etc/prometheus/k8s-auth/ca.crt
+      insecure_skip_verify: false
+    authorization:
+      credentials_file: /etc/prometheus/k8s-auth/token
+    static_configs:
+      - targets:
+          - "{{ prometheus_k8s_apiserver_target }}"
+        labels:
+          env: "homelab"
+          component: "kube-apiserver"
+{% endif %}
+
 {% if prometheus_blackbox_targets is defined and prometheus_blackbox_targets | length > 0 %}
   - job_name: "blackbox"
     metrics_path: /probe

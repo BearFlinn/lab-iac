@@ -1,0 +1,40 @@
+# Managed by Ansible — k8s-cilium role
+# Cilium Helm values for homelab K8s cluster (ADR-014)
+
+kubeProxyReplacement: {{ cilium_kube_proxy_replacement | lower }}
+k8sServiceHost: "{{ k8s_control_plane_endpoint }}"
+k8sServicePort: "6443"
+
+ipam:
+  mode: {{ cilium_ipam_mode }}
+
+ipv4:
+  enabled: true
+ipv6:
+  enabled: true
+
+hubble:
+  enabled: {{ cilium_hubble_enabled | lower }}
+  relay:
+    enabled: {{ cilium_hubble_relay_enabled | lower }}
+  ui:
+    enabled: {{ cilium_hubble_ui_enabled | lower }}
+  metrics:
+    enabled:
+      - dns
+      - drop
+      - tcp
+      - flow
+      - icmp
+      - http
+
+# Expose Cilium agent and operator metrics for Prometheus
+prometheus:
+  enabled: true
+  serviceMonitor:
+    enabled: false
+
+operator:
+  replicas: {{ cilium_operator_replicas }}
+  prometheus:
+    enabled: true

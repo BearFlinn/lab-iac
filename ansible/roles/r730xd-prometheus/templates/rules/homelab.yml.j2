@@ -205,6 +205,34 @@ groups:
             {{ '{{' }} $value {{ '}}' }} days overdue
             on {{ '{{' }} $labels.instance {{ '}}' }}
 
+  - name: kubernetes
+    rules:
+      - alert: KubeAPIServerDown
+        expr: up{job="kube-apiserver"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Kubernetes API server is unreachable"
+
+      - alert: EtcdDown
+        expr: up{job="etcd"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "etcd is unreachable on {{ '{{' }} $labels.instance {{ '}}' }}"
+
+      - alert: EtcdDbSizeLarge
+        expr: etcd_mvcc_db_total_size_in_bytes > 4294967296
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: >-
+            etcd database is {{ '{{' }} $value | humanize1024 {{ '}}' }}B
+            (threshold 4GB)
+
   - name: observability
     rules:
       - alert: TargetDown

@@ -1,0 +1,15 @@
+---
+# k8s-control-plane: Initialize single control plane with kubeadm
+#
+# Network CIDRs and kubernetes_version come from group_vars/k8s_cluster/k8s.yml
+# Control plane endpoint comes from group_vars/k8s_control_plane/control-plane.yml
+
+# kubeadm config file path on the control plane node
+k8s_kubeadm_config_path: /etc/kubernetes/kubeadm-config.yml
+
+# Helm — needed for Cilium installation
+helm_version: "3.17.3"
+
+# Prometheus metrics access — ServiceAccount for external Prometheus scraping
+k8s_prometheus_sa_name: "prometheus-metrics"
+k8s_prometheus_sa_namespace: "kube-system"

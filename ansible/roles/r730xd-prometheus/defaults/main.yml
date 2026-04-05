@@ -82,6 +82,10 @@ prometheus_blackbox_targets:
 
 prometheus_blackbox_exporter: "{{ r730xd_ip }}:9115"
 
+# K8s API server metrics (set by setup-k8s-control-plane.yml playbook)
+# Empty = disabled; the scrape job block is conditional on this being non-empty
+prometheus_k8s_apiserver_target: ""
+
 # Alertmanager — webhook receiver (optional)
 # Set monitoring_alert_webhook_url in group_vars to enable
 # monitoring_alert_webhook_url: "https://ntfy.example.com/homelab-alerts"
