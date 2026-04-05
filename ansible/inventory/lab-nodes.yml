@@ -42,23 +42,22 @@ all:
               ipmi_exporter_enabled: false
               # ARC GPU is dead — headless worker only
 
-            tower-pc:
-              ansible_host: "{{ tower_pc_ip }}"
-              model: "Custom Tower PC"
-              cpu: "Intel i7-4790 (4C/8T @ 3.6-4.0 GHz)"
-              ram_gb: 24
+            optiplex:
+              ansible_host: "{{ optiplex_ip }}"
+              model: "Dell Optiplex 9020 SFF"
+              cpu: "Intel i7-4790 (4C/8T)"
+              ram_gb: 32
               node_roles: ["worker"]
-              # To be freed: draining blocked until staging VM hosts critical workloads
+              ipmi_exporter_enabled: false
 
     standalone:
       hosts:
-        optiplex:
-          ansible_host: "{{ optiplex_ip }}"
-          model: "Dell Optiplex 9020 SFF"
-          cpu: "Intel i7-4790 (4C/8T)"
-          ram_gb: 32
-          node_roles: ["worker"]
-          ipmi_exporter_enabled: false
+        tower-pc:
+          ansible_host: "{{ tower_pc_ip }}"
+          model: "Custom Tower PC"
+          cpu: "Intel i7-4790 (4C/8T @ 3.6-4.0 GHz)"
+          ram_gb: 24
+          node_roles: ["router", "gpu-inference"]
 
     storage_servers:
       hosts:
