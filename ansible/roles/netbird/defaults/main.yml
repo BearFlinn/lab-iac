@@ -1,0 +1,4 @@
+---
+# netbird_setup_key: "" — must be provided via --extra-vars or vault
+# One-time keys: pass via -e netbird_setup_key=XXXX
+# Reusable keys: store as vault_netbird_setup_key in group_vars

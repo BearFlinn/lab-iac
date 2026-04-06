@@ -135,6 +135,11 @@
             - echo "deb [arch=amd64 signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" > /etc/apt/sources.list.d/github-cli.list
             - apt-get update
             - apt-get install -y gh
+            # Install NetBird (enrollment handled by Ansible netbird role)
+            - curl -sSL https://pkgs.netbird.io/debian/public.key | gpg --dearmor -o /usr/share/keyrings/netbird-archive-keyring.gpg
+            - echo "deb [signed-by=/usr/share/keyrings/netbird-archive-keyring.gpg] https://pkgs.netbird.io/debian stable main" > /etc/apt/sources.list.d/netbird.list
+            - apt-get update
+            - apt-get install -y netbird
 
           final_message: "staging-vm cloud-init complete after $UPTIME seconds"
         dest: "{{ cloud_init_dir }}/user-data"

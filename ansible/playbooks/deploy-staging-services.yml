@@ -14,7 +14,8 @@
 # Prerequisites:
 #   - Staging VM running and SSH-reachable (create-staging-vm.yml)
 #   - gh CLI authenticated on the staging VM (run `gh auth login` first)
-#   - NetBird installed and joined on the staging VM
+#   - NetBird setup key from dashboard (one-time use)
+#     Pass via: -e netbird_setup_key=XXXX
 #
 # Usage:
 #   ansible-playbook -i ansible/inventory/lab-nodes.yml -l staging-vm \
@@ -73,6 +74,12 @@
 
   pre_tasks:
     # --- Monitoring ---
+    - name: Install and enroll NetBird
+      ansible.builtin.include_role:
+        name: netbird
+      when: netbird_setup_key is defined and netbird_setup_key | length > 0
+      tags: [netbird]
+
     - name: Install monitoring base (node-exporter)
       ansible.builtin.include_role:
         name: monitoring-base

@@ -107,9 +107,9 @@ Tower PC resumes the router role ([ADR-011](../decisions/011-ap630-restored-to-s
 
 ### 1D: Move Existing Machines
 
-- [x] ~~Drain MSI laptop from K8s~~ — **done 2026-03-26. Scaled down non-essential workloads (residuum-landing, coaching-website, family-dashboard, game-server-platform, advocacy-quiz, zork) to 0 replicas. Kept landing-page, resume-site, caz-portfolio, and actions-runner-controller running. Remaining pods drained to tower-pc. Node fully drained and removed from cluster.**
-- [ ] **Drain Tower PC from K8s** — `kubectl drain tower-pc --ignore-daemonsets --delete-emptydata`
-- [ ] Shut down all cluster machines gracefully
+- [x] ~~Drain MSI laptop from K8s~~ — **done 2026-03-26. Scaled down non-essential workloads (residuum-landing, coaching-website, family-dashboard, game-server-platform, advocacy-quiz, zork) to 0 replicas. Kept landing-page, resume-site, caz-portfolio, and actions-runner-controller running. Remaining pods drained to tower-pc. Node cordoned.**
+- [x] ~~**Drain Tower PC from K8s**~~ — **done 2026-04-03. Tower-pc was already powered off. Node force-deleted from cluster along with msi-laptop.**
+- [x] ~~Shut down cluster~~ — **done 2026-04-03. Both workers removed from K8s. Kubelet + containerd stopped and disabled on Inspiron control plane. Staging VM serving all public traffic.**
 - [ ] Physically move Inspiron, Optiplex to closet
 - [ ] Physically move Tower PC to closet (or nearby)
 - [ ] Connect all moved machines to SR2024
@@ -145,16 +145,16 @@ Tower PC resumes the router role ([ADR-011](../decisions/011-ap630-restored-to-s
   - Port 1: VLAN 1 (general/management + internet)
   - Port 2: VLAN 10 (lab network)
   - Port 3-4: VLAN 20 (dedicated storage, if using storage VLAN)
-- [x] ~~Set up iDRAC remote management~~ — **SSH racadm working at `<r730xd_idrac_ip>`. Note: no Enterprise license, so no virtual media. HTTPS web UI works for basic monitoring.**
-- [ ] Install NetBird for remote management access (NetBird is management-only — service traffic stays on local networks)
+- [x] ~~Set up iDRAC remote management~~ — **SSH racadm working at 10.0.0.203. Note: no Enterprise license, so no virtual media. HTTPS web UI works for basic monitoring.**
+- ~~Install NetBird for VPN access~~ — **N/A: R730xd is internal-only, no NetBird needed. Staging VM has its own NetBird enrollment.**
 - [ ] Verify NFS is accessible from K8s nodes
-- [x] ~~**Stand up staging VM**~~ ([ADR-002](../decisions/002-r730-staging-vm-for-migration.md)) — **done 2026-03-28. Debian 13 VM on libvirt NAT network (`<staging_vm_ip>`), 4 vCPU / 8GB RAM. KVM/libvirt installed via `ansible/roles/r730xd-vm-host`, VM provisioned via `ansible/playbooks/create-staging-vm.yml`. Uses Debian generic cloud image + cloud-init + UEFI boot. Docker, gh CLI, and NetBird installed. Critical services deployed via `ansible/playbooks/deploy-staging-services.yml`:**
+- [x] ~~**Stand up staging VM**~~ ([ADR-002](../decisions/002-r730-staging-vm-for-migration.md)) — **done 2026-03-28. Debian 13 VM on libvirt NAT network (192.168.122.191), 4 vCPU / 8GB RAM. KVM/libvirt installed via `ansible/roles/r730xd-vm-host`, VM provisioned via `ansible/playbooks/create-staging-vm.yml`. Uses Debian generic cloud image + cloud-init + UEFI boot. Docker, gh CLI, and NetBird installed. Critical services deployed via `ansible/playbooks/deploy-staging-services.yml`:**
   - **landing-page** (nginx) — landing.bearflinn.com
   - **caz-portfolio** (Rust) — pennydreadfulsfx.com
   - **resume-site** (FastAPI + pgvector/pg16) — resume.bearflinn.com
   - **Caddy reverse proxy on port 80, routes by Host header. All repos cloned from grizzly-endeavors org, built from source on VM.**
-  - [ ] Update VPS proxy to route traffic to staging VM (staging VM NetBird IP:80)
-  - [ ] Verify all critical services are reachable from public internet before proceeding to Phase 3
+  - [x] ~~Update VPS proxy to route traffic to staging VM~~ — **done 2026-04-03. NetBird re-enrolled with setup key (new IP: 100.96.91.116). Caddy on proxy-vps updated to route to 100.96.91.116:80. All 3 services verified live.**
+  - [x] ~~Verify all critical services are reachable from public internet~~ — **done 2026-04-03. bearflinn.com (301→landing), landing.bearflinn.com (200), pennydreadfulsfx.com (200), resume.bearflinn.com (200).**
 
 ### 2B: Quanta — K8s Worker (Diskless)
 
@@ -220,10 +220,10 @@ Before the Optiplex can be wiped and joined to K8s, its services need new homes:
 
 ### 3D: Remove Old Workers
 
-- [x] ~~Remove MSI laptop from K8s~~ — **fully drained and removed from cluster (2026-03-26). Now dev machine.**
-- [ ] Remove tower-pc from K8s: `kubectl delete node tower-pc`
-- [ ] Update Ansible inventory — move tower-pc out of k8s_workers
-- [ ] Update VPS proxy config if any NetBird IPs changed
+- [x] ~~Remove MSI laptop from K8s~~ — **done 2026-04-03. Force deleted.**
+- [x] ~~Remove tower-pc from K8s~~ — **done 2026-04-03. Force deleted.**
+- [ ] Update Ansible inventory — remove MSI, move tower-pc out of k8s_workers
+- [x] ~~Update VPS proxy config~~ — **done 2026-04-03. Caddy now routes to staging VM (100.96.91.116:80).**
 
 ### 3E: Verify Cluster Health
 

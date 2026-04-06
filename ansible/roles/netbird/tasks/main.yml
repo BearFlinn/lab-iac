@@ -1,0 +1,61 @@
+---
+# netbird: Install and enroll a machine in the NetBird mesh network.
+#
+# Only for machines that need external internet access via the VPS proxy
+# (e.g., staging VM, K8s ingress nodes). Not for internal-only machines
+# like the R730xd storage server.
+#
+# Required variables:
+#   netbird_setup_key — one-time or reusable setup key from the NetBird dashboard.
+#                       Pass via --extra-vars (one-time keys) or vault (reusable keys).
+
+- name: Add NetBird GPG key
+  ansible.builtin.get_url:
+    url: https://pkgs.netbird.io/debian/public.key
+    dest: /usr/share/keyrings/netbird-archive-keyring-armored.asc
+    mode: '0644'
+
+- name: Dearmor GPG key
+  ansible.builtin.shell: >
+    gpg --dearmor < /usr/share/keyrings/netbird-archive-keyring-armored.asc
+    > /usr/share/keyrings/netbird-archive-keyring.gpg
+  args:
+    creates: /usr/share/keyrings/netbird-archive-keyring.gpg
+
+- name: Add NetBird apt repository
+  ansible.builtin.copy:
+    content: "deb [signed-by=/usr/share/keyrings/netbird-archive-keyring.gpg] https://pkgs.netbird.io/debian stable main\n"
+    dest: /etc/apt/sources.list.d/netbird.list
+    mode: '0644'
+
+- name: Install NetBird
+  ansible.builtin.apt:
+    name: netbird
+    state: present
+    update_cache: yes
+
+- name: Ensure NetBird service is running
+  ansible.builtin.systemd:
+    name: netbird
+    state: started
+    enabled: yes
+
+- name: Check NetBird connection status
+  ansible.builtin.command: netbird status
+  register: netbird_status
+  changed_when: false
+
+- name: Enroll with setup key (if not connected)
+  ansible.builtin.command: netbird up --setup-key {{ netbird_setup_key }}
+  when: "'Connected' not in netbird_status.stdout"
+  no_log: true
+
+- name: Verify NetBird enrollment
+  ansible.builtin.command: netbird status
+  register: netbird_final_status
+  changed_when: false
+  failed_when: "'Connected' not in netbird_final_status.stdout"
+
+- name: Display NetBird IP
+  ansible.builtin.debug:
+    msg: "NetBird enrolled — {{ netbird_final_status.stdout_lines | select('search', 'NetBird IP') | first | default('IP not found') }}"

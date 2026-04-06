@@ -29,7 +29,7 @@ all:
       # Caddy Prometheus metrics (scraped by R730xd Prometheus over NetBird)
       caddy_metrics_port: 2019
 
-      # K8s ingress endpoint (NetBird IP + NodePort)
+      # Ingress endpoint (NetBird IP + port)
       # All *.bearflinn.com subdomains not matched by caddy_services
       # are proxied here - K8s ingress handles routing and 404s
       k8s_ingress_endpoint: "{{ netbird_k8s_ingress_ip }}:30487"
