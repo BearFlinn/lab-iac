@@ -1,10 +1,10 @@
 ---
-- name: restart observability-prometheus
+- name: Restart observability-prometheus
   ansible.builtin.command: docker compose up -d --force-recreate
   args:
     chdir: "{{ prometheus_compose_dir }}"
 
-- name: reload prometheus
+- name: Reload prometheus
   ansible.builtin.uri:
     url: "http://localhost:{{ prometheus_port }}/-/reload"
     method: POST

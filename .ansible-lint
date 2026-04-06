@@ -41,9 +41,15 @@ enable_list:
 # Ansible-lint should use the yamllint config
 use_default_rules: true
 
-# Mock modules that might not be installed
+# Mock modules that might not be installed or not resolved by lint
 mock_modules:
   - ansible.utils.ipaddr
+  - ansible.posix.authorized_key
+  - ansible.posix.mount
+  - community.general.parted
+  - community.general.capabilities
+  - community.general.filesystem
+  - community.crypto.openssh_keypair
 
 # Mock roles that might not be available
 mock_roles: []

@@ -3,7 +3,10 @@ dependencies:
   - role: k8s-packages
 
 galaxy_info:
+  author: bearf
   description: "Initialize Kubernetes control plane with kubeadm (single CP, dual-stack)"
+  license: MIT
+  min_ansible_version: "2.14"
   platforms:
     - name: Debian
       versions:

@@ -27,15 +27,15 @@
     dest: /etc/exports
     mode: "0644"
   notify:
-    - export nfs
-    - restart nfs-server
+    - Export nfs
+    - Restart nfs-server
 
 - name: Deploy NFS server configuration
   ansible.builtin.template:
     src: nfs-kernel-server.j2
     dest: /etc/default/nfs-kernel-server
     mode: "0644"
-  notify: restart nfs-server
+  notify: Restart nfs-server
 
 - name: Enable and start NFS server
   ansible.builtin.systemd:

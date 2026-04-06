@@ -35,7 +35,7 @@
   loop:
     - { src: "targets.d/nodes.yml.j2", dest: "nodes.yml" }
     - { src: "targets.d/ipmi.yml.j2", dest: "ipmi.yml" }
-  notify: reload prometheus
+  notify: Reload prometheus
 
 - name: Deploy Prometheus configuration
   ansible.builtin.template:
@@ -44,7 +44,7 @@
     owner: root
     group: root
     mode: "0644"
-  notify: restart observability-prometheus
+  notify: Restart observability-prometheus
 
 - name: Deploy Prometheus alert rules
   ansible.builtin.template:
@@ -53,7 +53,7 @@
     owner: root
     group: root
     mode: "0644"
-  notify: restart observability-prometheus
+  notify: Restart observability-prometheus
 
 - name: Deploy Alertmanager configuration
   ansible.builtin.template:
@@ -62,7 +62,7 @@
     owner: root
     group: root
     mode: "0644"
-  notify: restart observability-prometheus
+  notify: Restart observability-prometheus
 
 - name: Deploy Prometheus docker-compose.yml
   ansible.builtin.template:
@@ -71,7 +71,7 @@
     owner: root
     group: root
     mode: "0644"
-  notify: restart observability-prometheus
+  notify: Restart observability-prometheus
 
 - name: Ensure Prometheus stack is running
   ansible.builtin.command: docker compose up -d

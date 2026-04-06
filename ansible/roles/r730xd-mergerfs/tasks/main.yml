@@ -84,7 +84,7 @@
     fstype: "fuse.mergerfs"
     opts: "{{ mergerfs_options }},nofail"
     state: mounted
-  notify: remount mergerfs
+  notify: Remount mergerfs
 
 - name: Verify MergerFS is mounted
   ansible.builtin.command: "df -h {{ mergerfs_mount_point }}"

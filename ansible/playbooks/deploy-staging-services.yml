@@ -108,6 +108,7 @@
 
     - name: Verify gh CLI is authenticated
       ansible.builtin.command: gh auth status
+      become: yes
       become_user: "{{ deploy_user }}"
       changed_when: false
       failed_when: gh_status.rc != 0
@@ -130,15 +131,18 @@
         gh repo clone {{ item.repo }} {{ deploy_dir }}/{{ item.name }}
       args:
         creates: "{{ deploy_dir }}/{{ item.name }}"
+      become: yes
       become_user: "{{ deploy_user }}"
       loop: "{{ staging_services }}"
       loop_control:
         label: "{{ item.name }}"
 
     - name: Pull latest changes for existing repos
-      ansible.builtin.command: git pull
-      args:
-        chdir: "{{ deploy_dir }}/{{ item.name }}"
+      ansible.builtin.git:
+        repo: "https://github.com/{{ item.repo }}.git"
+        dest: "{{ deploy_dir }}/{{ item.name }}"
+        update: yes
+      become: yes
       become_user: "{{ deploy_user }}"
       loop: "{{ staging_services }}"
       loop_control:
@@ -333,7 +337,7 @@
           - ""
           - "Next steps:"
           - "  1. Get staging VM NetBird IP: ssh bearf@{{ r730xd_ip }} 'netbird status'"
-          - "  2. Update k8s_ingress_endpoint in ansible/inventory/proxy-vps.yml"
+          - "  2. Update caddy_k8s_ingress_endpoint in ansible/inventory/proxy-vps.yml"
           - "     to <netbird-ip>:80"
           - "  3. Run setup-proxy-vps.yml to apply VPS routing change"
           - "  4. Verify: curl -H 'Host: landing.bearflinn.com' https://bearflinn.com"

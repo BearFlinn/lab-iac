@@ -94,7 +94,7 @@
       when: interfaces_file.stat.exists
       block:
         - name: Check interfaces file contains static config
-          ansible.builtin.shell: grep -c "inet static" /etc/network/interfaces
+          ansible.builtin.command: grep -c "inet static" /etc/network/interfaces
           register: static_check
           changed_when: false
           failed_when: false
@@ -120,6 +120,7 @@
           when: static_check.stdout | int == 0
 
     - name: Enable and configure firewall (ufw)
+      when: enable_firewall | default(false) | bool
       block:
         - name: Install ufw
           ansible.builtin.apt:
@@ -149,7 +150,6 @@
         - name: Enable ufw
           community.general.ufw:
             state: enabled
-      when: enable_firewall | default(false) | bool
 
     - name: Install Docker prerequisites
       ansible.builtin.apt:

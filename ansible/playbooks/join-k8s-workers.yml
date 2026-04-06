@@ -1,0 +1,158 @@
+---
+# K8s Worker Join (Phase 2 of cluster standup)
+#
+# Installs kubeadm/kubelet on workers, generates a join token on the
+# control plane, and joins each worker node one at a time.
+#
+# Uses a JoinConfiguration file so kubelet gets dual-stack --node-ip,
+# matching how InitConfiguration configures the control plane.
+#
+# Prerequisites (must be run first):
+#   ansible-playbook -l k8s_workers ansible/playbooks/setup-k8s-worker.yml
+#   ansible-playbook -l k8s_workers ansible/playbooks/setup-k8s-containerd.yml
+#   ansible-playbook ansible/playbooks/setup-k8s-control-plane.yml
+#
+# Usage:
+#   ansible-playbook ansible/playbooks/join-k8s-workers.yml
+#   ansible-playbook ansible/playbooks/join-k8s-workers.yml -l quanta   # single node
+#
+# Verification:
+#   kubectl get nodes                      # 4 nodes Ready
+#   kubectl -n kube-system get pods        # Cilium agents on all nodes
+#   cilium status                          # All green
+#
+# See: docs/k8s-cluster-standup.md (Phase 2)
+# Decisions: ADR-014 (stack), ADR-016 (single CP)
+
+# ============================================================
+# Play 1: Install K8s packages on workers
+# ============================================================
+- name: Install kubeadm and kubelet on worker nodes
+  hosts: k8s_workers
+  gather_facts: yes
+
+  roles:
+    - k8s-packages
+
+# ============================================================
+# Play 2: Generate join credentials on control plane
+# ============================================================
+# Token and CA hash are generated separately so the k8s-worker-join role
+# can template a JoinConfiguration with kubeletExtraArgs (dual-stack node-ip).
+- name: Generate cluster join credentials
+  hosts: k8s_control_plane
+  gather_facts: no
+
+  tasks:
+    - name: Create bootstrap token
+      ansible.builtin.command: kubeadm token create
+      become: yes
+      register: token_raw
+      changed_when: false
+      no_log: true
+
+    - name: Get CA certificate hash
+      ansible.builtin.shell: >
+        openssl x509 -pubkey -in /etc/kubernetes/pki/ca.crt
+        | openssl rsa -pubin -outform der 2>/dev/null
+        | openssl dgst -sha256 -hex
+        | sed 's/^.* //'
+      become: yes
+      register: ca_hash_raw
+      changed_when: false
+      no_log: true
+
+    - name: Store join credentials
+      ansible.builtin.set_fact:
+        k8s_join_token: "{{ token_raw.stdout }}"
+        k8s_join_ca_cert_hash: "sha256:{{ ca_hash_raw.stdout }}"
+      no_log: true
+
+# ============================================================
+# Play 3: Join workers to cluster (one at a time)
+# ============================================================
+# serial: 1 avoids overwhelming the control plane with simultaneous
+# join requests and gives Cilium time to stabilize per node.
+- name: Join worker nodes to cluster
+  hosts: k8s_workers
+  gather_facts: yes
+  serial: 1
+
+  vars:
+    k8s_join_token: "{{ hostvars[groups['k8s_control_plane'][0]]['k8s_join_token'] }}"
+    k8s_join_ca_cert_hash: "{{ hostvars[groups['k8s_control_plane'][0]]['k8s_join_ca_cert_hash'] }}"
+    k8s_control_plane_endpoint: "{{ hostvars[groups['k8s_control_plane'][0]]['k8s_control_plane_endpoint'] }}"
+
+  roles:
+    - k8s-worker-join
+
+# ============================================================
+# Play 4: Verify cluster state from jumpbox
+# ============================================================
+- name: Verify cluster state
+  hosts: k8s_control_plane
+  gather_facts: no
+
+  tasks:
+    - name: Get cluster nodes
+      ansible.builtin.command: kubectl get nodes -o wide
+      delegate_to: localhost
+      become: no
+      register: cluster_nodes
+      changed_when: false
+      environment:
+        KUBECONFIG: "{{ lookup('env', 'HOME') }}/.kube/config"
+
+    - name: Display cluster nodes
+      ansible.builtin.debug:
+        var: cluster_nodes.stdout_lines
+      delegate_to: localhost
+
+    - name: Get Cilium pods
+      ansible.builtin.command: >
+        kubectl -n kube-system get pods
+        -l app.kubernetes.io/part-of=cilium -o wide
+      delegate_to: localhost
+      become: no
+      register: cilium_pods
+      changed_when: false
+      environment:
+        KUBECONFIG: "{{ lookup('env', 'HOME') }}/.kube/config"
+
+    - name: Display Cilium pods
+      ansible.builtin.debug:
+        var: cilium_pods.stdout_lines
+      delegate_to: localhost
+
+    - name: Check for unhealthy kube-system pods
+      ansible.builtin.shell: >
+        kubectl get pods -n kube-system --no-headers
+        | grep -vE 'Running|Completed'
+      delegate_to: localhost
+      become: no
+      register: unhealthy_pods
+      changed_when: false
+      failed_when: false
+      environment:
+        KUBECONFIG: "{{ lookup('env', 'HOME') }}/.kube/config"
+
+    - name: Warn if unhealthy pods found
+      ansible.builtin.debug:
+        msg:
+          - "WARNING: Unhealthy pods in kube-system:"
+          - "{{ unhealthy_pods.stdout_lines }}"
+      delegate_to: localhost
+      when: unhealthy_pods.stdout | length > 0
+
+    - name: Display Phase 2 summary
+      ansible.builtin.debug:
+        msg:
+          - "=== Phase 2: Workers Joined ==="
+          - "Nodes: {{ cluster_nodes.stdout_lines | length - 1 }} total"
+          - "Cilium agents: {{ cilium_pods.stdout_lines | length - 1 }}"
+          - ""
+          - "Next: verify cross-node connectivity"
+          - "  kubectl run test-a --image=busybox --restart=Never --overrides='{\"spec\":{\"nodeName\":\"quanta\"}}' -- sleep 3600"
+          - "  kubectl run test-b --image=busybox --restart=Never --overrides='{\"spec\":{\"nodeName\":\"intel-nuc\"}}' -- sleep 3600"
+          - "  kubectl exec test-a -- wget -qO- <test-b-pod-ip>"
+      delegate_to: localhost

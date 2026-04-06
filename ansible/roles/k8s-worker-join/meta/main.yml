@@ -1,11 +1,15 @@
 ---
 galaxy_info:
   author: bearf
-  description: "KVM/libvirt virtualization host setup with bridged networking"
+  description: "Join a worker node to a Kubernetes cluster via kubeadm"
   license: MIT
   min_ansible_version: "2.14"
   platforms:
     - name: Debian
       versions:
         - trixie
+  galaxy_tags:
+    - kubernetes
+    - kubeadm
+    - worker
 dependencies: []

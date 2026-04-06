@@ -63,8 +63,8 @@
     dest: /etc/systemd/system/snapraid-sync.service
     mode: "0644"
   notify:
-    - reload systemd
-    - restart snapraid-sync timer
+    - Reload systemd
+    - Restart snapraid-sync timer
 
 - name: Deploy snapraid-sync systemd timer
   ansible.builtin.template:
@@ -72,8 +72,8 @@
     dest: /etc/systemd/system/snapraid-sync.timer
     mode: "0644"
   notify:
-    - reload systemd
-    - restart snapraid-sync timer
+    - Reload systemd
+    - Restart snapraid-sync timer
 
 - name: Deploy snapraid-scrub systemd service
   ansible.builtin.template:
@@ -81,8 +81,8 @@
     dest: /etc/systemd/system/snapraid-scrub.service
     mode: "0644"
   notify:
-    - reload systemd
-    - restart snapraid-scrub timer
+    - Reload systemd
+    - Restart snapraid-scrub timer
 
 - name: Deploy snapraid-scrub systemd timer
   ansible.builtin.template:
@@ -90,8 +90,8 @@
     dest: /etc/systemd/system/snapraid-scrub.timer
     mode: "0644"
   notify:
-    - reload systemd
-    - restart snapraid-scrub timer
+    - Reload systemd
+    - Restart snapraid-scrub timer
 
 - name: Enable and start SnapRAID timers
   ansible.builtin.systemd:

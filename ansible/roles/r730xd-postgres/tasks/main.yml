@@ -21,7 +21,7 @@
     group: root
     mode: "0600"
   no_log: true
-  notify: restart foundation-postgres
+  notify: Restart foundation-postgres
 
 - name: Ensure Postgres is running
   ansible.builtin.command: docker compose up -d

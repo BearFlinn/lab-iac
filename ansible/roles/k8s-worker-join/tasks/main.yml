@@ -1,0 +1,124 @@
+---
+# k8s-worker-join: Join a worker node to a Kubernetes cluster via kubeadm
+# Uses a JoinConfiguration file for dual-stack node-ip (matching InitConfiguration pattern).
+# Idempotent — skips join if the node is already a cluster member.
+
+# ==========================================================================
+# Idempotency Check
+# ==========================================================================
+
+- name: Check if node is already joined to cluster
+  ansible.builtin.stat:
+    path: /etc/kubernetes/kubelet.conf
+  register: kubelet_conf
+  become: yes
+
+- name: Set join state fact
+  ansible.builtin.set_fact:
+    node_already_joined: "{{ kubelet_conf.stat.exists }}"
+
+# ==========================================================================
+# Join Cluster (dual-stack)
+# ==========================================================================
+# Template a JoinConfiguration so kubelet gets --node-ip with both IPv4 and
+# IPv6, matching how InitConfiguration configures the control plane.
+
+- name: Template kubeadm join configuration
+  ansible.builtin.template:
+    src: kubeadm-join.yml.j2
+    dest: /tmp/kubeadm-join.yml
+    mode: "0600"
+  become: yes
+  when: not node_already_joined
+
+- name: Join worker node to Kubernetes cluster
+  ansible.builtin.command: kubeadm join --config=/tmp/kubeadm-join.yml
+  become: yes
+  when: not node_already_joined
+  register: join_result
+
+- name: Clean up join configuration
+  ansible.builtin.file:
+    path: /tmp/kubeadm-join.yml
+    state: absent
+  become: yes
+  when: not node_already_joined
+
+# Containerd must be restarted after join so it picks up the Cilium CNI
+# config written to /etc/cni/net.d/ by the cilium-agent init container.
+# Without this, containerd reports NetworkReady=false indefinitely.
+- name: Restart containerd to detect Cilium CNI
+  ansible.builtin.systemd:
+    name: containerd
+    state: restarted
+  become: yes
+  when: not node_already_joined
+
+# ==========================================================================
+# Wait for Node Registration and Ready
+# ==========================================================================
+
+- name: Wait for node to appear in cluster
+  ansible.builtin.command: kubectl get node {{ inventory_hostname }}
+  delegate_to: "{{ groups['k8s_control_plane'][0] }}"
+  become: no
+  environment:
+    KUBECONFIG: "/home/{{ hostvars[groups['k8s_control_plane'][0]]['ansible_user'] }}/.kube/config"
+  retries: 30
+  delay: 5
+  register: node_registered
+  until: node_registered.rc == 0
+  changed_when: false
+  when: not node_already_joined
+
+- name: Wait for node to be Ready
+  ansible.builtin.command: >
+    kubectl wait --for=condition=Ready
+    node/{{ inventory_hostname }}
+    --timeout={{ k8s_node_ready_timeout }}s
+  delegate_to: "{{ groups['k8s_control_plane'][0] }}"
+  become: no
+  environment:
+    KUBECONFIG: "/home/{{ hostvars[groups['k8s_control_plane'][0]]['ansible_user'] }}/.kube/config"
+  retries: "{{ k8s_node_ready_retries }}"
+  delay: 10
+  register: node_ready
+  until: node_ready.rc == 0
+  changed_when: false
+  when: not node_already_joined
+
+# ==========================================================================
+# Verify Cilium Pod CIDR Assignment
+# ==========================================================================
+
+- name: Verify pod CIDR assigned to node
+  ansible.builtin.shell: >
+    kubectl get node {{ inventory_hostname }}
+    -o jsonpath='{.spec.podCIDR}' | grep -q '.'
+  delegate_to: "{{ groups['k8s_control_plane'][0] }}"
+  become: no
+  environment:
+    KUBECONFIG: "/home/{{ hostvars[groups['k8s_control_plane'][0]]['ansible_user'] }}/.kube/config"
+  retries: 20
+  delay: 3
+  register: cidr_check
+  until: cidr_check.rc == 0
+  changed_when: false
+  when: not node_already_joined
+
+# ==========================================================================
+# Label Worker Node
+# ==========================================================================
+# Runs unconditionally — --overwrite makes it safe for re-runs and fixes
+# missing labels on already-joined nodes.
+
+- name: Label node as worker
+  ansible.builtin.command: >
+    kubectl label node {{ inventory_hostname }}
+    {{ k8s_worker_label }} --overwrite
+  delegate_to: "{{ groups['k8s_control_plane'][0] }}"
+  become: no
+  environment:
+    KUBECONFIG: "/home/{{ hostvars[groups['k8s_control_plane'][0]]['ansible_user'] }}/.kube/config"
+  register: label_result
+  changed_when: "'labeled' in label_result.stdout"

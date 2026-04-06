@@ -30,7 +30,7 @@
     owner: root
     group: root
     mode: "0644"
-  notify: restart observability-grafana
+  notify: Restart observability-grafana
 
 - name: Deploy Grafana dashboard provisioning config
   ansible.builtin.template:
@@ -39,7 +39,7 @@
     owner: root
     group: root
     mode: "0644"
-  notify: restart observability-grafana
+  notify: Restart observability-grafana
 
 - name: Deploy Grafana alerting provisioning
   ansible.builtin.template:
@@ -48,7 +48,7 @@
     owner: root
     group: root
     mode: "0644"
-  notify: restart observability-grafana
+  notify: Restart observability-grafana
 
 - name: Copy dashboard JSON files
   ansible.builtin.copy:
@@ -57,7 +57,7 @@
     owner: root
     group: root
     mode: "0644"
-  notify: restart observability-grafana
+  notify: Restart observability-grafana
 
 - name: Deploy Grafana docker-compose.yml
   ansible.builtin.template:
@@ -67,7 +67,7 @@
     group: root
     mode: "0600"
   no_log: true
-  notify: restart observability-grafana
+  notify: Restart observability-grafana
 
 - name: Ensure Grafana is running
   ansible.builtin.command: docker compose up -d

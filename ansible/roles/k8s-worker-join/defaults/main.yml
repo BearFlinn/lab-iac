@@ -1,0 +1,15 @@
+---
+# k8s-worker-join: Join a worker node to an existing Kubernetes cluster
+#
+# Required variables (set by the calling playbook):
+#   k8s_join_token         — bootstrap token from `kubeadm token create`
+#   k8s_join_ca_cert_hash  — CA cert hash from `kubeadm certs certificate-key` or init output
+
+# Seconds to wait for node Ready condition after join
+k8s_node_ready_timeout: 300
+
+# Retries for kubectl wait (each attempt uses the full timeout above)
+k8s_node_ready_retries: 3
+
+# Label applied to every worker node
+k8s_worker_label: "node-role.kubernetes.io/worker=worker"

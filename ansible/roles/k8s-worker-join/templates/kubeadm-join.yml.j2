@@ -1,0 +1,17 @@
+# Managed by Ansible — k8s-worker-join role
+# JoinConfiguration for dual-stack worker nodes (mirrors InitConfiguration pattern)
+apiVersion: kubeadm.k8s.io/v1beta4
+kind: JoinConfiguration
+discovery:
+  bootstrapToken:
+    apiServerEndpoint: "{{ k8s_control_plane_endpoint }}:6443"
+    token: "{{ k8s_join_token }}"
+    caCertHashes:
+      - "{{ k8s_join_ca_cert_hash }}"
+nodeRegistration:
+  criSocket: unix:///run/containerd/containerd.sock
+  kubeletExtraArgs:
+    # Dual-stack: tell kubelet to advertise both IPv4 and IPv6 addresses
+    # Without this, only IPv4 is reported and Cilium IPv6 fails
+    - name: "node-ip"
+      value: "{{ ansible_host }},{{ ansible_facts.default_ipv6.address }}"

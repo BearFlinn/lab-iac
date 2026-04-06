@@ -1,5 +1,5 @@
 ---
-- name: restart observability-loki
+- name: Restart observability-loki
   ansible.builtin.command: docker compose up -d --force-recreate
   args:
     chdir: "{{ loki_compose_dir }}"

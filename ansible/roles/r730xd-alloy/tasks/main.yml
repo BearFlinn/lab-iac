@@ -16,7 +16,7 @@
     owner: root
     group: root
     mode: "0644"
-  notify: restart observability-alloy
+  notify: Restart observability-alloy
 
 - name: Deploy Alloy docker-compose.yml
   ansible.builtin.template:
@@ -25,7 +25,7 @@
     owner: root
     group: root
     mode: "0644"
-  notify: restart observability-alloy
+  notify: Restart observability-alloy
 
 - name: Ensure Alloy is running
   ansible.builtin.command: docker compose up -d

@@ -27,7 +27,7 @@
     group: root
     mode: "0644"
   no_log: true
-  notify: restart observability-loki
+  notify: Restart observability-loki
 
 - name: Deploy Loki docker-compose.yml
   ansible.builtin.template:
@@ -36,7 +36,7 @@
     owner: root
     group: root
     mode: "0644"
-  notify: restart observability-loki
+  notify: Restart observability-loki
 
 - name: Ensure Loki is running
   ansible.builtin.command: docker compose up -d

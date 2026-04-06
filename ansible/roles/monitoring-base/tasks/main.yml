@@ -32,7 +32,14 @@
     content: |
       # Managed by Ansible — monitoring-base role
       # Override default filesystem excludes to include MergerFS (fuse.mergerfs) and /mnt/* mounts
-      ARGS="--collector.textfile.directory={{ node_exporter_textfile_dir }} --collector.systemd --collector.processes --collector.filesystem.fs-types-exclude=^(autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|hugetlbfs|iso9660|mqueue|nsfs|overlay|proc|procfs|pstore|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tracefs)$ --collector.filesystem.mount-points-exclude=^/(dev|proc|run/credentials/.+|sys|var/lib/docker/.+)($|/){% if node_exporter_nfsd_enabled %} --collector.nfsd{% endif %}"
+      ARGS="\
+      --collector.textfile.directory={{ node_exporter_textfile_dir }} \
+      --collector.systemd \
+      --collector.processes \
+      --collector.filesystem.fs-types-exclude=\
+      '^(autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|hugetlbfs|iso9660|mqueue|nsfs|overlay|proc|procfs|pstore|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tracefs)$' \
+      --collector.filesystem.mount-points-exclude='^/(dev|proc|run/credentials/.+|sys|var/lib/docker/.+)($|/)' \
+      {% if node_exporter_nfsd_enabled %}--collector.nfsd{% endif %}"
     dest: /etc/default/prometheus-node-exporter
     mode: "0644"
   notify: Restart node-exporter

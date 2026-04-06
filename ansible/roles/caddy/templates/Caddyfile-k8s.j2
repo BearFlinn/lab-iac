@@ -15,7 +15,7 @@
 #
 # Required variables:
 #   - caddy_root_domain: Base domain (e.g., bearflinn.com)
-#   - k8s_ingress_endpoint: K8s ingress host:port
+#   - caddy_k8s_ingress_endpoint: K8s ingress host:port
 #   - caddy_services: List of non-K8s services (static, proxy, redirect)
 #   - caddy_k8s_domains: List of external domains routed to K8s ingress (optional)
 
@@ -155,7 +155,7 @@
 {% for domain_entry in caddy_k8s_domains | default([]) %}
 # {{ domain_entry.comment | default(domain_entry.domain) }}
 {{ domain_entry.domain }} {
-    reverse_proxy http://{{ k8s_ingress_endpoint }} {
+    reverse_proxy http://{{ caddy_k8s_ingress_endpoint }} {
         header_up Host {host}
         header_up X-Real-IP {remote}
     }
@@ -199,11 +199,11 @@
 {% endif %}
 # =============================================================================
 # WILDCARD K8S PROXY - All other subdomains routed to K8s Ingress
-# Endpoint: {{ k8s_ingress_endpoint }}
+# Endpoint: {{ caddy_k8s_ingress_endpoint }}
 # =============================================================================
 
 *.{{ caddy_root_domain | default('example.com') }} {
-    reverse_proxy http://{{ k8s_ingress_endpoint }} {
+    reverse_proxy http://{{ caddy_k8s_ingress_endpoint }} {
         header_up Host {host}
         header_up X-Real-IP {remote}
     }

@@ -20,7 +20,7 @@
     group: root
     mode: "0600"
   no_log: true
-  notify: restart minio-obs
+  notify: Restart minio-obs
 
 - name: Ensure MinIO Obs is running
   ansible.builtin.command: docker compose up -d

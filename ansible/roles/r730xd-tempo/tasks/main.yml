@@ -27,7 +27,7 @@
     group: root
     mode: "0644"
   no_log: true
-  notify: restart observability-tempo
+  notify: Restart observability-tempo
 
 - name: Deploy Tempo docker-compose.yml
   ansible.builtin.template:
@@ -36,7 +36,7 @@
     owner: root
     group: root
     mode: "0644"
-  notify: restart observability-tempo
+  notify: Restart observability-tempo
 
 - name: Ensure Tempo is running
   ansible.builtin.command: docker compose up -d

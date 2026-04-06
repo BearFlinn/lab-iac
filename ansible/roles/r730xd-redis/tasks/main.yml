@@ -20,7 +20,7 @@
     group: 999
     mode: "0400"
   no_log: true
-  notify: restart foundation-redis
+  notify: Restart foundation-redis
 
 - name: Deploy Redis docker-compose.yml
   ansible.builtin.template:
@@ -30,7 +30,7 @@
     group: root
     mode: "0600"
   no_log: true
-  notify: restart foundation-redis
+  notify: Restart foundation-redis
 
 - name: Ensure Redis is running
   ansible.builtin.command: docker compose up -d

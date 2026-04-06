@@ -1,14 +1,14 @@
 ---
-- name: export nfs
+- name: Export nfs
   ansible.builtin.command: exportfs -ra
 
-- name: restart nfs-server
+- name: Restart nfs-server
   ansible.builtin.systemd:
     name: nfs-server
     state: restarted
     daemon_reload: true
 
-- name: restart nfs-idmapd
+- name: Restart nfs-idmapd
   ansible.builtin.systemd:
     name: nfs-idmapd
     state: restarted

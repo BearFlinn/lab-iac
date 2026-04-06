@@ -1,5 +1,5 @@
 ---
-- name: restart observability-tempo
+- name: Restart observability-tempo
   ansible.builtin.command: docker compose up -d --force-recreate
   args:
     chdir: "{{ tempo_compose_dir }}"

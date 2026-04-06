@@ -32,18 +32,18 @@ caddy_service_state: "started"
 # =============================================================================
 
 # Use K8s proxy template when true, otherwise use simple static template
-enable_k8s_proxy: false
+caddy_enable_k8s_proxy: false
 
 # =============================================================================
-# K8s Proxy Configuration (when enable_k8s_proxy: true)
+# K8s Proxy Configuration (when caddy_enable_k8s_proxy: true)
 # =============================================================================
 
 # K8s ingress endpoint - IP:port reachable from VPS (via VPN tunnel)
 # Example: "<netbird_k8s_ingress_ip>:30487" (NetBird IP + NodePort)
-k8s_ingress_endpoint: ""
+caddy_k8s_ingress_endpoint: ""
 
 # Non-K8s services (static sites or other reverse proxies)
-# All subdomains not matched here are proxied to k8s_ingress_endpoint
+# All subdomains not matched here are proxied to caddy_k8s_ingress_endpoint
 # Example:
 # caddy_services:
 #   - domain: "static.example.com"

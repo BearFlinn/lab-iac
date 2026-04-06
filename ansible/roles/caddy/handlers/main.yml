@@ -1,12 +1,12 @@
 ---
 # Caddy service handlers
 
-- name: reload caddy
+- name: Reload caddy
   ansible.builtin.systemd:
     name: caddy
     state: reloaded
 
-- name: restart caddy
+- name: Restart caddy
   ansible.builtin.systemd:
     name: caddy
     state: restarted

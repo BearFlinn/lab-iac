@@ -79,7 +79,7 @@
       }}
 
 - name: Create ext4 filesystem on each partition (skips existing)
-  ansible.builtin.filesystem:
+  community.general.filesystem:
     fstype: "{{ storage_filesystem }}"
     dev: "/dev/{{ item }}"
     opts: "{{ storage_mkfs_options }}"
@@ -106,7 +106,7 @@
     label: "{{ item }}"
 
 - name: Mount partitions and add to fstab
-  ansible.builtin.mount:
+  ansible.posix.mount:
     path: "{{ storage_mount_base }}/bay{{ resolved_drives[idx].bay }}"
     src: "UUID={{ item.stdout }}"
     fstype: "{{ storage_filesystem }}"
@@ -143,7 +143,7 @@
       }}
 
 - name: Remove stale fstab entries and unmount missing drives
-  ansible.builtin.mount:
+  ansible.posix.mount:
     path: "{{ item }}"
     state: absent
   loop: "{{ stale_mount_points }}"

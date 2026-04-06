@@ -79,9 +79,11 @@
       register: cloud_image_stat
 
     - name: Download Debian generic cloud image
-      ansible.builtin.command: >
-        curl -L -o {{ cloud_image_path }}
-        {{ cloud_image_url }}
+      ansible.builtin.get_url:
+        url: "{{ cloud_image_url }}"
+        dest: "{{ cloud_image_path }}"
+        mode: "0644"
+        timeout: 300
       when: vm_exists.rc != 0 and not cloud_image_stat.stat.exists
 
     # =======================================================================

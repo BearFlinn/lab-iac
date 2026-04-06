@@ -24,7 +24,7 @@ all:
       caddy_dns_provider: "cloudflare"
 
       # K8s proxy mode - routes traffic to K8s ingress via NetBird tunnel
-      enable_k8s_proxy: true
+      caddy_enable_k8s_proxy: true
 
       # Caddy Prometheus metrics (scraped by R730xd Prometheus over NetBird)
       caddy_metrics_port: 2019
@@ -32,7 +32,7 @@ all:
       # Ingress endpoint (NetBird IP + port)
       # All *.bearflinn.com subdomains not matched by caddy_services
       # are proxied here - K8s ingress handles routing and 404s
-      k8s_ingress_endpoint: "{{ netbird_k8s_ingress_ip }}:30487"
+      caddy_k8s_ingress_endpoint: "{{ netbird_k8s_ingress_ip }}:30487"
 
       # External domains routed to K8s ingress (non-bearflinn.com domains)
       caddy_k8s_domains:

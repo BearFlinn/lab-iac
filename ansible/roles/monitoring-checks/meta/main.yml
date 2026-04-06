@@ -1,5 +1,6 @@
 ---
 galaxy_info:
+  author: bearf
   description: "Cron-based health check scripts with pluggable alerting"
   license: MIT
   min_ansible_version: "2.14"

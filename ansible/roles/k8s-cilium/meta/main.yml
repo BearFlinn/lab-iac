@@ -2,7 +2,10 @@
 dependencies: []
 
 galaxy_info:
+  author: bearf
   description: "Deploy Cilium CNI with Hubble via Helm"
+  license: MIT
+  min_ansible_version: "2.14"
   platforms:
     - name: Debian
       versions:

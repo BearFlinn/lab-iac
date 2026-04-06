@@ -20,7 +20,7 @@
     group: root
     mode: "0600"
   no_log: true
-  notify: restart minio-bulk
+  notify: Restart minio-bulk
 
 - name: Ensure MinIO Bulk is running
   ansible.builtin.command: docker compose up -d

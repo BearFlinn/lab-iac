@@ -1,5 +1,5 @@
 ---
-- name: restart observability-exporters
+- name: Restart observability-exporters
   ansible.builtin.command: docker compose up -d --force-recreate
   args:
     chdir: "{{ exporters_compose_dir }}"

@@ -131,11 +131,11 @@
     mode: '0600'
   when:
     - caddy_dns_provider | default('') | length > 0
-  notify: restart caddy
+  notify: Restart caddy
 
 - name: Determine which Caddyfile template to use
   ansible.builtin.set_fact:
-    caddy_config_template_final: "{% if enable_k8s_proxy | default(false) | bool %}Caddyfile-k8s.j2{% else %}Caddyfile.j2{% endif %}"
+    caddy_config_template_final: "{% if caddy_enable_k8s_proxy | default(false) | bool %}Caddyfile-k8s.j2{% else %}Caddyfile.j2{% endif %}"
 
 - name: Deploy Caddyfile configuration
   ansible.builtin.template:
@@ -147,7 +147,7 @@
     # Note: Skipping validate when using DNS provider - requires env var at runtime
     validate: "{{ omit if (caddy_dns_provider | default('') | length > 0) else 'caddy validate --adapter caddyfile --config %s' }}"
     backup: yes
-  notify: restart caddy
+  notify: Restart caddy
 
 - name: Reload systemd daemon
   ansible.builtin.systemd:
@@ -174,6 +174,6 @@
       - "Caddy has been installed and configured"
       - "Configuration file: {{ caddy_config_dir }}/Caddyfile"
       - "Template used: {{ caddy_config_template_final }}"
-      - "K8s proxy mode: {{ enable_k8s_proxy | default(false) }}"
+      - "K8s proxy mode: {{ caddy_enable_k8s_proxy | default(false) }}"
       - "DNS provider: {{ caddy_dns_provider | default('none') }}"
       - "Service status: {{ caddy_service_state }}"

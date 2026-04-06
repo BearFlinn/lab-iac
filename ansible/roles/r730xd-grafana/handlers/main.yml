@@ -1,5 +1,5 @@
 ---
-- name: restart observability-grafana
+- name: Restart observability-grafana
   ansible.builtin.command: docker compose up -d --force-recreate
   args:
     chdir: "{{ grafana_compose_dir }}"
