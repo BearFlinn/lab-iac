@@ -30,3 +30,6 @@ minio_observability_secret_key: "{{ vault_minio_observability_secret_key }}"
 
 # Alerting — Discord webhook for Alertmanager notifications
 monitoring_discord_webhook_url: "{{ vault_monitoring_discord_webhook_url }}"
+
+# Flux CD — Discord webhook for GitOps reconciliation alerts (separate channel)
+flux_discord_webhook_url: "{{ vault_flux_discord_webhook_url }}"

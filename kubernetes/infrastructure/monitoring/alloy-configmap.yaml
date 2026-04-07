@@ -1,0 +1,48 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alloy-config
+  namespace: monitoring
+data:
+  config.alloy: |
+    // Pod log collection — ships to Loki on R730xd
+    // Path format: /var/log/pods/<namespace>_<pod>_<uid>/<container>/<restart>.log
+
+    local.file_match "pod_logs" {
+      path_targets = [{ "__path__" = "/var/log/pods/*/*/*.log" }]
+      sync_period  = "5s"
+    }
+
+    loki.source.file "pod_logs" {
+      targets    = local.file_match.pod_logs.targets
+      forward_to = [loki.process.pod_logs.receiver]
+    }
+
+    loki.process "pod_logs" {
+      stage.regex {
+        expression = "/var/log/pods/(?P<namespace>[^_]+)_(?P<pod>[^_]+)_[^/]+/(?P<container>[^/]+)/.*\\.log$"
+        source     = "filename"
+      }
+
+      stage.labels {
+        values = {
+          namespace = "",
+          pod       = "",
+          container = "",
+        }
+      }
+
+      stage.static_labels {
+        values = {
+          job = "kubernetes-pods",
+        }
+      }
+
+      forward_to = [loki.write.loki.receiver]
+    }
+
+    loki.write "loki" {
+      endpoint {
+        url = "http://10.0.0.200:3100/loki/api/v1/push"
+      }
+    }

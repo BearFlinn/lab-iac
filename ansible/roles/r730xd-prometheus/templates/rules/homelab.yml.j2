@@ -322,6 +322,28 @@ groups:
             democratic-csi pod {{ '{{' }} $labels.pod {{ '}}' }}
             has restarted {{ '{{' }} $value | printf "%.0f" {{ '}}' }} times in 15 minutes
 
+      - alert: FluxReconciliationFailure
+        expr: gotk_reconcile_condition{type="Ready",status="False"} == 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: >-
+            Flux {{ '{{' }} $labels.kind {{ '}}' }}
+            {{ '{{' }} $labels.namespace {{ '}}' }}/{{ '{{' }} $labels.name {{ '}}' }}
+            reconciliation failed
+
+      - alert: FluxSuspended
+        expr: gotk_suspend_status == 1
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: >-
+            Flux {{ '{{' }} $labels.kind {{ '}}' }}
+            {{ '{{' }} $labels.namespace {{ '}}' }}/{{ '{{' }} $labels.name {{ '}}' }}
+            is suspended
+
   - name: observability
     rules:
       - alert: TargetDown

@@ -1,0 +1,29 @@
+# Managed by Ansible — r730xd-prometheus role
+# Flux CD controller metrics exposed via NodePort (Phase 4)
+- targets:
+    - "{{ hostvars[groups['k8s_control_plane'][0]]['ansible_host'] }}:30881"
+  labels:
+    env: "homelab"
+    instance: "flux-source-controller"
+    component: "source-controller"
+
+- targets:
+    - "{{ hostvars[groups['k8s_control_plane'][0]]['ansible_host'] }}:30882"
+  labels:
+    env: "homelab"
+    instance: "flux-kustomize-controller"
+    component: "kustomize-controller"
+
+- targets:
+    - "{{ hostvars[groups['k8s_control_plane'][0]]['ansible_host'] }}:30883"
+  labels:
+    env: "homelab"
+    instance: "flux-helm-controller"
+    component: "helm-controller"
+
+- targets:
+    - "{{ hostvars[groups['k8s_control_plane'][0]]['ansible_host'] }}:30884"
+  labels:
+    env: "homelab"
+    instance: "flux-notification-controller"
+    component: "notification-controller"

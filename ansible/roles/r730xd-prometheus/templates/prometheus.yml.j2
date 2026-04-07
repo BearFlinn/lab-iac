@@ -102,6 +102,12 @@ scrape_configs:
           - "/etc/prometheus/targets.d/k8s-kube-state-metrics.yml"
         refresh_interval: 30s
 
+  - job_name: "flux-system"
+    file_sd_configs:
+      - files:
+          - "/etc/prometheus/targets.d/k8s-flux.yml"
+        refresh_interval: 30s
+
 {% if prometheus_blackbox_targets is defined and prometheus_blackbox_targets | length > 0 %}
   - job_name: "blackbox"
     metrics_path: /probe
