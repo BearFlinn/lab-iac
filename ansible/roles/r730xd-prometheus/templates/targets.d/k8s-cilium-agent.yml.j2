@@ -1,0 +1,10 @@
+# Managed by Ansible — r730xd-prometheus role
+# Cilium agent metrics targets for K8s cluster nodes (Phase 2.5)
+{% for host in groups['k8s_cluster'] %}
+- targets:
+    - "{{ hostvars[host]['ansible_host'] }}:9962"
+  labels:
+    env: "homelab"
+    instance: "{{ host }}"
+    component: "cilium-agent"
+{% endfor %}

@@ -36,6 +36,7 @@
     - check-disks
     - check-services
     - check-ipmi
+    - check-iscsi-target
     - check-snapraid
     - check-nfs
     - check-zfs

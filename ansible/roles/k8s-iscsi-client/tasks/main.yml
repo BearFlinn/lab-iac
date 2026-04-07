@@ -1,0 +1,109 @@
+---
+# k8s-iscsi-client: Install iSCSI initiator on K8s nodes for PVC mounting
+
+# ==========================================================================
+# Packages
+# ==========================================================================
+
+- name: Install iSCSI client packages
+  ansible.builtin.apt:
+    name:
+      - open-iscsi
+      - lsscsi
+      - sg3-utils
+      - multipath-tools
+    state: present
+
+# ==========================================================================
+# Kernel Modules
+# ==========================================================================
+
+- name: Persist iSCSI initiator kernel module
+  ansible.builtin.copy:
+    dest: /etc/modules-load.d/iscsi.conf
+    content: |
+      # iSCSI initiator for K8s PVC mounting
+      iscsi_tcp
+    mode: "0644"
+
+- name: Load iscsi_tcp kernel module
+  community.general.modprobe:
+    name: iscsi_tcp
+    state: present
+
+# ==========================================================================
+# Initiator Configuration
+# ==========================================================================
+
+- name: Set unique iSCSI initiator name
+  ansible.builtin.copy:
+    dest: /etc/iscsi/initiatorname.iscsi
+    content: |
+      InitiatorName={{ iscsi_initiator_iqn_prefix }}:{{ inventory_hostname }}
+    mode: "0644"
+  notify: Restart iscsid
+
+# ==========================================================================
+# Multipath — blacklist local devices, only claim iSCSI
+# ==========================================================================
+
+- name: Configure multipath for iSCSI only
+  ansible.builtin.copy:
+    dest: /etc/multipath.conf
+    content: |
+      # Managed by Ansible — k8s-iscsi-client role
+      # Only claim iSCSI devices, blacklist everything else
+      defaults {
+          user_friendly_names yes
+          find_multipaths     yes
+      }
+
+      blacklist {
+          devnode "^(sd[a-z]|nvme|vd[a-z])"
+      }
+
+      blacklist_exceptions {
+          property "(SCSI_IDENT_|ID_WWN)"
+      }
+    mode: "0644"
+  notify: Restart multipathd
+
+# ==========================================================================
+# Services
+# ==========================================================================
+
+- name: Enable and start iscsid
+  ansible.builtin.systemd:
+    name: iscsid
+    enabled: true
+    state: started
+
+- name: Enable and start open-iscsi
+  ansible.builtin.systemd:
+    name: open-iscsi
+    enabled: true
+    state: started
+
+- name: Enable and start multipathd
+  ansible.builtin.systemd:
+    name: multipathd
+    enabled: true
+    state: started
+
+# ==========================================================================
+# Verification
+# ==========================================================================
+
+- name: Verify iscsiadm is available
+  ansible.builtin.command: iscsiadm --version
+  changed_when: false
+
+- name: Read initiator name
+  ansible.builtin.command: cat /etc/iscsi/initiatorname.iscsi
+  register: initiator_name
+  changed_when: false
+
+- name: Display iSCSI client summary
+  ansible.builtin.debug:
+    msg: "iSCSI initiator ready: {{ initiator_name.stdout_lines | select('match', '^InitiatorName=') | first | default('unknown') }}"
+

@@ -1,0 +1,29 @@
+# Managed by Ansible — k8s-cilium role
+# CiliumNetworkPolicy that enables L7 DNS interception for Hubble metrics.
+# Without this, Cilium never routes DNS through its L7 proxy, so
+# hubble_dns_queries_total / hubble_dns_responses_total are never emitted.
+#
+# This policy allows all DNS queries to kube-dns and permits all other
+# egress — it enforces nothing, it only enables observability.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: dns-visibility
+  namespace: {{ item }}
+spec:
+  endpointSelector: {}
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: ANY
+          rules:
+            dns:
+              - matchPattern: "*"
+    - toEntities:
+        - world
+        - cluster

@@ -205,6 +205,38 @@ groups:
             {{ '{{' }} $value {{ '}}' }} days overdue
             on {{ '{{' }} $labels.instance {{ '}}' }}
 
+  - name: iscsi
+    rules:
+      - alert: ISCSITargetDown
+        expr: monitoring_iscsi_target_service_up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: >-
+            iSCSI target service is down
+            on {{ '{{' }} $labels.instance {{ '}}' }} — K8s block storage PVCs affected
+
+      - alert: ISCSITargetUnresponsive
+        expr: monitoring_iscsi_target_lio_responsive == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: >-
+            iSCSI LIO target subsystem is not responding
+            on {{ '{{' }} $labels.instance {{ '}}' }}
+
+      - alert: ISCSINoTargets
+        expr: monitoring_iscsi_target_count == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: >-
+            No iSCSI targets configured
+            on {{ '{{' }} $labels.instance {{ '}}' }} — democratic-csi may not be functioning
+
   - name: kubernetes
     rules:
       - alert: KubeAPIServerDown
@@ -232,6 +264,63 @@ groups:
           summary: >-
             etcd database is {{ '{{' }} $value | humanize1024 {{ '}}' }}B
             (threshold 4GB)
+
+      - alert: NodeNotReady
+        expr: kube_node_status_condition{condition="Ready",status="true"} == 0
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: >-
+            K8s node {{ '{{' }} $labels.node {{ '}}' }} is NotReady
+
+      - alert: KubeletDown
+        expr: up{job="kubelet"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: >-
+            Kubelet is unreachable on {{ '{{' }} $labels.instance {{ '}}' }}
+
+      - alert: CiliumAgentDown
+        expr: up{job="cilium-agent"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: >-
+            Cilium agent is down on {{ '{{' }} $labels.instance {{ '}}' }}
+
+      - alert: PVCPendingTooLong
+        expr: kube_persistentvolumeclaim_status_phase{phase="Pending"} == 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: >-
+            PVC {{ '{{' }} $labels.namespace {{ '}}' }}/{{ '{{' }} $labels.persistentvolumeclaim {{ '}}' }}
+            has been Pending for more than 5 minutes — check CSI driver logs
+
+      - alert: DemocraticCSIPodNotReady
+        expr: kube_pod_status_ready{namespace="democratic-csi", condition="true"} == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: >-
+            democratic-csi pod {{ '{{' }} $labels.pod {{ '}}' }}
+            is not ready for more than 5 minutes
+
+      - alert: DemocraticCSIPodCrashLooping
+        expr: increase(kube_pod_container_status_restarts_total{namespace="democratic-csi"}[15m]) > 3
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: >-
+            democratic-csi pod {{ '{{' }} $labels.pod {{ '}}' }}
+            has restarted {{ '{{' }} $value | printf "%.0f" {{ '}}' }} times in 15 minutes
 
   - name: observability
     rules:

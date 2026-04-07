@@ -1,0 +1,70 @@
+# Managed by Ansible — k8s-democratic-csi role
+# democratic-csi iSCSI driver: ZFS zvols via targetcli on R730xd
+
+csiDriver:
+  name: "{{ democratic_csi_iscsi_csi_name }}"
+
+driver:
+  config:
+    driver: zfs-generic-iscsi
+    sshConnection:
+      host: "{{ democratic_csi_ssh_host }}"
+      port: {{ democratic_csi_ssh_port }}
+      username: "{{ democratic_csi_ssh_user }}"
+      privateKey: |
+{{ democratic_csi_ssh_private_key | indent(8, true) }}
+
+    zfs:
+      cli:
+        sudoEnabled: true
+        paths:
+          zfs: /usr/sbin/zfs
+          zpool: /usr/sbin/zpool
+          sudo: /usr/bin/sudo
+      datasetParentName: "{{ democratic_csi_zfs_parent }}"
+      detachedSnapshotsDatasetParentName: "{{ democratic_csi_zfs_snap_parent }}"
+      zvolCompression: ""
+      zvolDedup: ""
+      zvolEnableReservation: false
+      zvolBlocksize: "16K"
+
+    iscsi:
+      shareStrategy: targetCli
+      shareStrategyTargetCli:
+        sudoEnabled: true
+        basename: "{{ democratic_csi_iscsi_target_iqn }}"
+        tpg:
+          attributes:
+            authentication: 0
+            generate_node_acls: 1
+            cache_dynamic_acls: 1
+            demo_mode_write_protect: 0
+      targetPortal: "{{ democratic_csi_iscsi_portal }}"
+      targetPortals: []
+      interface: ""
+      namePrefix: "csi-"
+      nameSuffix: ""
+
+node:
+  hostPID: false
+  driver:
+    iscsiDirHostPath: /etc/iscsi
+    iscsiDirHostPathType: Directory
+
+storageClasses:
+  - name: "{{ democratic_csi_iscsi_storage_class }}"
+    defaultClass: {{ democratic_csi_iscsi_default_class | lower }}
+    reclaimPolicy: Delete
+    volumeBindingMode: Immediate
+    allowVolumeExpansion: true
+    parameters:
+      fsType: ext4
+    mountOptions: []
+    secrets:
+      provisioner-secret:
+      controller-publish-secret:
+      node-stage-secret:
+      node-publish-secret:
+      controller-expand-secret:
+
+volumeSnapshotClasses: []

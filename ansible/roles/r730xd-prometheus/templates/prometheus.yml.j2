@@ -64,6 +64,44 @@ scrape_configs:
           component: "kube-apiserver"
 {% endif %}
 
+  - job_name: "kubelet"
+    scheme: https
+    tls_config:
+      ca_file: /etc/prometheus/k8s-auth/ca.crt
+      # kubelet self-signed certs use hostnames, not IPs — skip server cert verification
+      # Authentication is still enforced via bearer token + webhook authz
+      insecure_skip_verify: true
+    authorization:
+      credentials_file: /etc/prometheus/k8s-auth/token
+    file_sd_configs:
+      - files:
+          - "/etc/prometheus/targets.d/k8s-kubelet.yml"
+        refresh_interval: 30s
+
+  - job_name: "cilium-agent"
+    file_sd_configs:
+      - files:
+          - "/etc/prometheus/targets.d/k8s-cilium-agent.yml"
+        refresh_interval: 30s
+
+  - job_name: "cilium-operator"
+    file_sd_configs:
+      - files:
+          - "/etc/prometheus/targets.d/k8s-cilium-operator.yml"
+        refresh_interval: 30s
+
+  - job_name: "hubble"
+    file_sd_configs:
+      - files:
+          - "/etc/prometheus/targets.d/k8s-hubble.yml"
+        refresh_interval: 30s
+
+  - job_name: "kube-state-metrics"
+    file_sd_configs:
+      - files:
+          - "/etc/prometheus/targets.d/k8s-kube-state-metrics.yml"
+        refresh_interval: 30s
+
 {% if prometheus_blackbox_targets is defined and prometheus_blackbox_targets | length > 0 %}
   - job_name: "blackbox"
     metrics_path: /probe

@@ -1,0 +1,8 @@
+---
+# k8s-iscsi-client: iSCSI initiator for K8s nodes
+#
+# Installs open-iscsi and multipath-tools so iSCSI-backed PVCs can mount.
+# Each node gets a unique IQN based on its hostname.
+
+# IQN prefix for initiator names (each node appends its hostname)
+iscsi_initiator_iqn_prefix: "iqn.2026-04.com.bearflinn.lab"

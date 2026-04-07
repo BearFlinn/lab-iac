@@ -1,0 +1,51 @@
+# Managed by Ansible — k8s-democratic-csi role
+# democratic-csi NFS client driver: subdirectories on R730xd MergerFS pool
+
+csiDriver:
+  name: "{{ democratic_csi_nfs_csi_name }}"
+
+controller:
+  externalResizer:
+    enabled: false
+  driver:
+    extraVolumeMounts:
+      - name: nfs-storage
+        mountPath: /storage
+  extraVolumes:
+    - name: nfs-storage
+      nfs:
+        server: "{{ democratic_csi_nfs_server }}"
+        path: "{{ democratic_csi_nfs_share_path }}"
+
+driver:
+  config:
+    driver: nfs-client
+    nfs:
+      shareHost: "{{ democratic_csi_nfs_server }}"
+      shareBasePath: "{{ democratic_csi_nfs_share_path }}"
+      controllerBasePath: "/storage"
+      dirPermissionsMode: "0777"
+      dirPermissionsUser: root
+      dirPermissionsGroup: root
+
+node:
+  driver:
+    iscsiDirHostPath: ""
+
+storageClasses:
+  - name: "{{ democratic_csi_nfs_storage_class }}"
+    defaultClass: {{ democratic_csi_nfs_default_class | lower }}
+    reclaimPolicy: Delete
+    volumeBindingMode: Immediate
+    allowVolumeExpansion: false
+    parameters:
+      fsType: nfs
+    mountOptions:
+      - noatime
+      - nfsvers=4
+    secrets:
+      provisioner-secret:
+      controller-publish-secret:
+      node-stage-secret:
+      node-publish-secret:
+      controller-expand-secret:

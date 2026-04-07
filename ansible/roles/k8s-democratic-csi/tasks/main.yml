@@ -1,0 +1,214 @@
+---
+# k8s-democratic-csi: Deploy both democratic-csi Helm releases
+#
+# Runs on k8s_control_plane but delegates all helm/kubectl to localhost (jumpbox).
+# Requires: democratic_csi_ssh_private_key set (from playbook SSH key generation).
+
+# ==========================================================================
+# Helm Repository
+# ==========================================================================
+
+- name: Add democratic-csi Helm repo
+  ansible.builtin.command: helm repo add democratic-csi {{ democratic_csi_helm_repo }}
+  delegate_to: localhost
+  become: no
+  register: helm_repo_add
+  changed_when: "'has been added' in helm_repo_add.stdout"
+  failed_when: helm_repo_add.rc != 0 and 'already exists' not in helm_repo_add.stderr
+  environment: "{{ kubectl_env }}"
+
+- name: Update democratic-csi Helm repo
+  ansible.builtin.command: helm repo update democratic-csi
+  delegate_to: localhost
+  become: no
+  changed_when: false
+  environment: "{{ kubectl_env }}"
+
+# ==========================================================================
+# Namespace
+# ==========================================================================
+
+- name: Create democratic-csi namespace
+  ansible.builtin.shell: |
+    kubectl create namespace {{ democratic_csi_namespace }} --dry-run=client -o yaml | kubectl apply -f -
+  delegate_to: localhost
+  become: no
+  changed_when: false
+  environment: "{{ kubectl_env }}"
+
+- name: Label namespace as privileged (required for CSI)
+  ansible.builtin.command: >
+    kubectl label namespace {{ democratic_csi_namespace }}
+    pod-security.kubernetes.io/enforce=privileged
+    --overwrite
+  delegate_to: localhost
+  become: no
+  changed_when: false
+  environment: "{{ kubectl_env }}"
+
+# ==========================================================================
+# iSCSI Driver
+# ==========================================================================
+
+- name: Template iSCSI Helm values
+  ansible.builtin.template:
+    src: values-iscsi.yml.j2
+    dest: /tmp/democratic-csi-iscsi-values.yml
+    mode: "0600"
+  delegate_to: localhost
+  become: no
+
+- name: Check if iSCSI release exists
+  ansible.builtin.command: >
+    helm status {{ democratic_csi_iscsi_release }}
+    -n {{ democratic_csi_namespace }} -o json
+  delegate_to: localhost
+  become: no
+  register: iscsi_status
+  changed_when: false
+  failed_when: false
+  environment: "{{ kubectl_env }}"
+
+- name: Install democratic-csi iSCSI driver
+  ansible.builtin.command: >
+    helm install {{ democratic_csi_iscsi_release }}
+    democratic-csi/democratic-csi
+    {% if democratic_csi_chart_version %}--version {{ democratic_csi_chart_version }}{% endif %}
+    --namespace {{ democratic_csi_namespace }}
+    --values /tmp/democratic-csi-iscsi-values.yml
+    --wait --timeout {{ democratic_csi_helm_timeout }}
+  delegate_to: localhost
+  become: no
+  when: iscsi_status.rc != 0
+  environment: "{{ kubectl_env }}"
+
+- name: Upgrade democratic-csi iSCSI driver
+  ansible.builtin.command: >
+    helm upgrade {{ democratic_csi_iscsi_release }}
+    democratic-csi/democratic-csi
+    {% if democratic_csi_chart_version %}--version {{ democratic_csi_chart_version }}{% endif %}
+    --namespace {{ democratic_csi_namespace }}
+    --values /tmp/democratic-csi-iscsi-values.yml
+    --wait --timeout {{ democratic_csi_helm_timeout }}
+  delegate_to: localhost
+  become: no
+  when: iscsi_status.rc == 0
+  environment: "{{ kubectl_env }}"
+
+- name: Clean up iSCSI values file
+  ansible.builtin.file:
+    path: /tmp/democratic-csi-iscsi-values.yml
+    state: absent
+  delegate_to: localhost
+  become: no
+
+# ==========================================================================
+# NFS Client Driver
+# ==========================================================================
+
+- name: Template NFS Helm values
+  ansible.builtin.template:
+    src: values-nfs.yml.j2
+    dest: /tmp/democratic-csi-nfs-values.yml
+    mode: "0600"
+  delegate_to: localhost
+  become: no
+
+- name: Check if NFS release exists
+  ansible.builtin.command: >
+    helm status {{ democratic_csi_nfs_release }}
+    -n {{ democratic_csi_namespace }} -o json
+  delegate_to: localhost
+  become: no
+  register: nfs_status
+  changed_when: false
+  failed_when: false
+  environment: "{{ kubectl_env }}"
+
+- name: Install democratic-csi NFS client driver
+  ansible.builtin.command: >
+    helm install {{ democratic_csi_nfs_release }}
+    democratic-csi/democratic-csi
+    {% if democratic_csi_chart_version %}--version {{ democratic_csi_chart_version }}{% endif %}
+    --namespace {{ democratic_csi_namespace }}
+    --values /tmp/democratic-csi-nfs-values.yml
+    --wait --timeout {{ democratic_csi_helm_timeout }}
+  delegate_to: localhost
+  become: no
+  when: nfs_status.rc != 0
+  environment: "{{ kubectl_env }}"
+
+- name: Upgrade democratic-csi NFS client driver
+  ansible.builtin.command: >
+    helm upgrade {{ democratic_csi_nfs_release }}
+    democratic-csi/democratic-csi
+    {% if democratic_csi_chart_version %}--version {{ democratic_csi_chart_version }}{% endif %}
+    --namespace {{ democratic_csi_namespace }}
+    --values /tmp/democratic-csi-nfs-values.yml
+    --wait --timeout {{ democratic_csi_helm_timeout }}
+  delegate_to: localhost
+  become: no
+  when: nfs_status.rc == 0
+  environment: "{{ kubectl_env }}"
+
+- name: Clean up NFS values file
+  ansible.builtin.file:
+    path: /tmp/democratic-csi-nfs-values.yml
+    state: absent
+  delegate_to: localhost
+  become: no
+
+# ==========================================================================
+# Verification
+# ==========================================================================
+
+- name: Wait for democratic-csi controller pods
+  ansible.builtin.command: >
+    kubectl wait --for=condition=Ready pods
+    -l app.kubernetes.io/instance={{ item }}
+    -n {{ democratic_csi_namespace }}
+    --timeout=120s
+  delegate_to: localhost
+  become: no
+  loop:
+    - "{{ democratic_csi_iscsi_release }}"
+    - "{{ democratic_csi_nfs_release }}"
+  changed_when: false
+  retries: 3
+  delay: 10
+  register: pod_wait
+  until: pod_wait.rc == 0
+  environment: "{{ kubectl_env }}"
+
+- name: Verify StorageClasses exist
+  ansible.builtin.command: >
+    kubectl get storageclass {{ democratic_csi_iscsi_storage_class }} {{ democratic_csi_nfs_storage_class }}
+  delegate_to: localhost
+  become: no
+  changed_when: false
+  environment: "{{ kubectl_env }}"
+
+- name: Get democratic-csi pod status
+  ansible.builtin.command: kubectl get pods -n {{ democratic_csi_namespace }} -o wide
+  delegate_to: localhost
+  become: no
+  changed_when: false
+  register: csi_pods
+  environment: "{{ kubectl_env }}"
+
+- name: Display democratic-csi summary
+  ansible.builtin.debug:
+    msg:
+      - "=== democratic-csi Deployed ==="
+      - ""
+      - "iSCSI driver: {{ democratic_csi_iscsi_release }}"
+      - "  StorageClass: {{ democratic_csi_iscsi_storage_class }} (default={{ democratic_csi_iscsi_default_class }})"
+      - "  Target: {{ democratic_csi_iscsi_portal }}"
+      - "  ZFS parent: {{ democratic_csi_zfs_parent }}"
+      - ""
+      - "NFS client driver: {{ democratic_csi_nfs_release }}"
+      - "  StorageClass: {{ democratic_csi_nfs_storage_class }}"
+      - "  Server: {{ democratic_csi_nfs_server }}:{{ democratic_csi_nfs_share_path }}"
+      - ""
+      - "Pods:"
+      - "{{ csi_pods.stdout_lines }}"

@@ -40,4 +40,18 @@ else
     clear_alert "$CHECK" "no_exports"
 fi
 
+# Verify k8s-nfs subdirectory is accessible (democratic-csi NFS driver depends on this)
+if [ -d "/mnt/pool/k8s-nfs" ]; then
+    if touch "/mnt/pool/k8s-nfs/.monitoring-probe" 2>/dev/null && rm -f "/mnt/pool/k8s-nfs/.monitoring-probe"; then
+        write_metric "monitoring_nfs_k8s_path_accessible" "1" "Whether /mnt/pool/k8s-nfs is writable" "gauge"
+        clear_alert "$CHECK" "k8s_path"
+    else
+        write_metric "monitoring_nfs_k8s_path_accessible" "0" "Whether /mnt/pool/k8s-nfs is writable" "gauge"
+        alert "warning" "$CHECK" "k8s_path" "/mnt/pool/k8s-nfs exists but is not writable — NFS CSI driver may fail"
+    fi
+else
+    write_metric "monitoring_nfs_k8s_path_accessible" "0" "Whether /mnt/pool/k8s-nfs is writable" "gauge"
+    alert "warning" "$CHECK" "k8s_path" "/mnt/pool/k8s-nfs does not exist — NFS CSI driver will fail to provision"
+fi
+
 flush_metrics

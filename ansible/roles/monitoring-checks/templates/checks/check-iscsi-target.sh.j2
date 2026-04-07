@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# Managed by Ansible — monitoring-checks role
+# Check iSCSI target (LIO) health: service status, target subsystem, LUN count
+# Gracefully exits if targetcli is not installed
+set -euo pipefail
+
+source "{{ monitoring_lib_dir }}/lib/alert.sh"
+init_metrics "check_iscsi_target"
+
+CHECK="check-iscsi-target"
+
+# Skip if targetcli is not installed
+if ! command -v targetcli &>/dev/null; then
+    write_metric "monitoring_iscsi_target_installed" "0" "Whether iSCSI target (targetcli) is installed" "gauge"
+    flush_metrics
+    exit 0
+fi
+
+write_metric "monitoring_iscsi_target_installed" "1" "Whether iSCSI target (targetcli) is installed" "gauge"
+write_metric "monitoring_iscsi_target_check_time" "$(date +%s)" "Timestamp of last iSCSI target check" "gauge"
+
+# Check rtslib-fb-targetctl service status
+if systemctl is-active --quiet rtslib-fb-targetctl; then
+    clear_alert "$CHECK" "service"
+    write_metric "monitoring_iscsi_target_service_up" "1" "iSCSI target service status" "gauge"
+else
+    alert "critical" "$CHECK" "service" "iSCSI target service (rtslib-fb-targetctl) is not running — K8s block storage PVCs affected"
+    write_metric "monitoring_iscsi_target_service_up" "0" "iSCSI target service status" "gauge"
+    flush_metrics
+    exit 0
+fi
+
+# Verify LIO target subsystem is responsive
+if targetcli ls /iscsi &>/dev/null; then
+    clear_alert "$CHECK" "lio"
+    write_metric "monitoring_iscsi_target_lio_responsive" "1" "Whether LIO iSCSI subsystem responds" "gauge"
+else
+    alert "critical" "$CHECK" "lio" "iSCSI LIO target subsystem is not responding"
+    write_metric "monitoring_iscsi_target_lio_responsive" "0" "Whether LIO iSCSI subsystem responds" "gauge"
+    flush_metrics
+    exit 0
+fi
+
+# Count iSCSI targets via sysfs (faster than targetcli)
+iscsi_configfs="/sys/kernel/config/target/iscsi"
+if [ -d "$iscsi_configfs" ]; then
+    target_count=$(find "$iscsi_configfs" -maxdepth 1 -name 'iqn.*' -type d 2>/dev/null | wc -l)
+else
+    target_count=0
+fi
+write_metric "monitoring_iscsi_target_count" "$target_count" "Number of iSCSI targets configured" "gauge"
+
+if (( target_count == 0 )); then
+    alert "warning" "$CHECK" "no_targets" "No iSCSI targets configured — democratic-csi may not be functioning"
+else
+    clear_alert "$CHECK" "no_targets"
+fi
+
+# Count exported LUNs across all targets via sysfs
+lun_count=0
+if [ -d "$iscsi_configfs" ]; then
+    lun_count=$(find "$iscsi_configfs" -path '*/tpgt_*/lun/lun_*' -maxdepth 5 -type d 2>/dev/null | wc -l)
+fi
+write_metric "monitoring_iscsi_lun_count" "$lun_count" "Number of iSCSI LUNs exported" "gauge"
+
+flush_metrics

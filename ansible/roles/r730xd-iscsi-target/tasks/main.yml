@@ -1,0 +1,116 @@
+---
+# r730xd-iscsi-target: Install LIO iSCSI target and prepare ZFS parent dataset
+# democratic-csi manages all targetcli objects (targets, LUNs, ACLs) over SSH.
+# This role only sets up the prerequisites.
+
+# ==========================================================================
+# Packages
+# ==========================================================================
+
+- name: Install iSCSI target packages
+  ansible.builtin.apt:
+    name:
+      - targetcli-fb
+      - python3-rtslib-fb
+    state: present
+
+# ==========================================================================
+# Kernel Modules
+# ==========================================================================
+
+- name: Persist iSCSI target kernel modules
+  ansible.builtin.copy:
+    dest: /etc/modules-load.d/iscsi-target.conf
+    content: |
+      # LIO iSCSI target modules — loaded at boot for democratic-csi
+      target_core_mod
+      iscsi_target_mod
+      target_core_iblock
+    mode: "0644"
+
+- name: Load iSCSI target kernel modules
+  community.general.modprobe:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - target_core_mod
+    - iscsi_target_mod
+    - target_core_iblock
+
+# ==========================================================================
+# Service
+# ==========================================================================
+
+- name: Enable rtslib-fb-targetctl (persists LIO config across reboots)
+  ansible.builtin.systemd:
+    name: rtslib-fb-targetctl
+    enabled: true
+
+# ==========================================================================
+# Firewall
+# ==========================================================================
+
+- name: Open iSCSI port in UFW
+  community.general.ufw:
+    rule: allow
+    port: "{{ iscsi_portal_port | string }}"
+    proto: tcp
+    comment: "iSCSI target for K8s democratic-csi"
+  when: iscsi_open_firewall | bool
+
+# ==========================================================================
+# ZFS Parent Datasets
+# ==========================================================================
+
+- name: Check if iSCSI parent dataset exists
+  ansible.builtin.command: zfs list -H -o name {{ iscsi_zfs_parent_dataset }}
+  register: iscsi_dataset_check
+  changed_when: false
+  failed_when: false
+
+- name: Create iSCSI parent dataset
+  ansible.builtin.command: >
+    zfs create
+    -o mountpoint=none
+    -o compression=lz4
+    {{ iscsi_zfs_parent_dataset }}
+  when: iscsi_dataset_check.rc != 0
+
+- name: Check if snapshot dataset exists
+  ansible.builtin.command: zfs list -H -o name {{ iscsi_zfs_snapshot_dataset }}
+  register: snap_dataset_check
+  changed_when: false
+  failed_when: false
+
+- name: Create snapshot dataset
+  ansible.builtin.command: >
+    zfs create
+    -o mountpoint=none
+    -o compression=lz4
+    {{ iscsi_zfs_snapshot_dataset }}
+  when: snap_dataset_check.rc != 0
+
+# ==========================================================================
+# Verification
+# ==========================================================================
+
+- name: Verify targetcli is responsive
+  ansible.builtin.command: targetcli ls /
+  register: targetcli_ls
+  changed_when: false
+
+- name: Verify ZFS datasets exist
+  ansible.builtin.command: zfs list -H -o name {{ iscsi_zfs_parent_dataset }} {{ iscsi_zfs_snapshot_dataset }}
+  changed_when: false
+
+- name: Display iSCSI target summary
+  ansible.builtin.debug:
+    msg:
+      - "=== iSCSI Target Configuration Complete ==="
+      - ""
+      - "Target IQN: {{ iscsi_target_iqn }}"
+      - "Portal: {{ iscsi_portal_ip }}:{{ iscsi_portal_port }}"
+      - "ZFS parent dataset: {{ iscsi_zfs_parent_dataset }}"
+      - "ZFS snapshot dataset: {{ iscsi_zfs_snapshot_dataset }}"
+      - ""
+      - "democratic-csi will manage all targetcli objects over SSH."

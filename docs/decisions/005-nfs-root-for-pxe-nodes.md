@@ -1,7 +1,7 @@
 # ADR-005: NFS-Root (off ZFS) for PXE-Booted Nodes
 
 **Date:** 2026-04-02
-**Status:** Accepted
+**Status:** Superseded by [ADR-013](013-local-disk-over-pxe-boot.md)
 
 ## Context
 

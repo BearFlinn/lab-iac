@@ -1,0 +1,24 @@
+---
+# r730xd-iscsi-target: iSCSI target (LIO) for K8s block storage via democratic-csi
+#
+# Provides ZFS-backed iSCSI LUNs. democratic-csi manages the full lifecycle
+# (zvol creation, targetcli mapping, cleanup) over SSH — this role only
+# installs the target software and creates the parent ZFS dataset.
+#
+# Requires: ZFS pool 'tank' already created (r730xd-zfs role)
+
+# IQN prefix for the iSCSI target
+iscsi_target_iqn: "iqn.2026-04.com.bearflinn.lab:r730xd"
+
+# Portal bind address and port
+iscsi_portal_ip: "{{ r730xd_ip }}"
+iscsi_portal_port: 3260
+
+# Parent ZFS dataset — democratic-csi creates child zvols under this
+iscsi_zfs_parent_dataset: "tank/iscsi"
+
+# Snapshot dataset — democratic-csi stores volume snapshots here
+iscsi_zfs_snapshot_dataset: "tank/iscsi-snaps"
+
+# Open firewall port (follows enable_firewall from inventory)
+iscsi_open_firewall: "{{ enable_firewall | default(false) | bool }}"

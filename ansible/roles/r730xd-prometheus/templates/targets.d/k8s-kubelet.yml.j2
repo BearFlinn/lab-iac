@@ -1,0 +1,10 @@
+# Managed by Ansible — r730xd-prometheus role
+# Kubelet metrics targets for K8s cluster nodes (Phase 2.5)
+{% for host in groups['k8s_cluster'] %}
+- targets:
+    - "{{ hostvars[host]['ansible_host'] }}:10250"
+  labels:
+    env: "homelab"
+    instance: "{{ host }}"
+    component: "kubelet"
+{% endfor %}

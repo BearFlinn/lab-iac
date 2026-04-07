@@ -113,6 +113,24 @@
   until: nodes_ready.rc == 0
 
 # ==========================================================================
+# DNS Visibility — CiliumNetworkPolicy for Hubble DNS metrics
+# ==========================================================================
+# Cilium only routes DNS through its L7 proxy (and thus emits
+# hubble_dns_queries_total / hubble_dns_responses_total) when a
+# CiliumNetworkPolicy with DNS rules selects the pods. This policy
+# allows all DNS and all other egress — it enables observability
+# without enforcing restrictions. Applied per-namespace.
+
+- name: Apply DNS visibility CiliumNetworkPolicy
+  ansible.builtin.shell: |
+    cat <<'EOF' | kubectl apply -f -
+    {{ lookup('template', 'dns-visibility-policy.yml.j2') }}
+    EOF
+  loop: "{{ cilium_dns_visibility_namespaces }}"
+  environment: "{{ kubectl_env }}"
+  changed_when: false
+
+# ==========================================================================
 # Verification (uses kubectl only — CLI tools belong on dev machines)
 # ==========================================================================
 

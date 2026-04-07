@@ -1,0 +1,51 @@
+---
+# k8s-democratic-csi: Deploy democratic-csi for dynamic K8s storage provisioning
+#
+# Two Helm releases:
+#   1. democratic-csi-iscsi — ZFS zvols via iSCSI (zfs-generic-iscsi driver)
+#   2. democratic-csi-nfs   — MergerFS subdirs via NFS (nfs-client driver)
+#
+# Requires:
+#   - r730xd-iscsi-target role (iSCSI target + ZFS parent dataset)
+#   - k8s-iscsi-client role (iSCSI initiator on K8s nodes)
+#   - democratic-csi SSH key generated (playbook pre-task)
+#   - NFS subdirectory created on R730xd (playbook pre-task)
+
+# Helm chart
+democratic_csi_helm_repo: "https://democratic-csi.github.io/charts/"
+democratic_csi_chart_version: ""  # empty = latest
+
+# Namespace for both releases
+democratic_csi_namespace: "democratic-csi"
+
+# iSCSI driver config
+democratic_csi_iscsi_release: "democratic-csi-iscsi"
+democratic_csi_iscsi_csi_name: "org.democratic-csi.iscsi"
+democratic_csi_iscsi_storage_class: "iscsi-zfs"
+democratic_csi_iscsi_default_class: true
+
+# SSH connection to R730xd (for iSCSI driver)
+democratic_csi_ssh_host: "{{ r730xd_ip }}"
+democratic_csi_ssh_port: 22
+democratic_csi_ssh_user: "democratic-csi"
+# Private key content — set by playbook from generated key
+democratic_csi_ssh_private_key: ""
+
+# ZFS config (must match r730xd-iscsi-target role)
+democratic_csi_zfs_parent: "tank/iscsi"
+democratic_csi_zfs_snap_parent: "tank/iscsi-snaps"
+
+# iSCSI target config (must match r730xd-iscsi-target role)
+democratic_csi_iscsi_target_iqn: "iqn.2026-04.com.bearflinn.lab:r730xd"
+democratic_csi_iscsi_portal: "{{ r730xd_ip }}:3260"
+
+# NFS driver config
+democratic_csi_nfs_release: "democratic-csi-nfs"
+democratic_csi_nfs_csi_name: "org.democratic-csi.nfs-client"
+democratic_csi_nfs_storage_class: "nfs-mergerfs"
+democratic_csi_nfs_default_class: false
+democratic_csi_nfs_server: "{{ r730xd_ip }}"
+democratic_csi_nfs_share_path: "/mnt/pool/k8s-nfs"
+
+# Helm timeout
+democratic_csi_helm_timeout: "300s"

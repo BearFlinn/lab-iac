@@ -21,7 +21,7 @@ hubble:
     enabled: {{ cilium_hubble_ui_enabled | lower }}
   metrics:
     enabled:
-      - dns
+      - dns:query;ignoreAAAA
       - drop
       - tcp
       - flow

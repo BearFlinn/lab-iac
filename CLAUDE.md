@@ -11,6 +11,7 @@ Homelab Infrastructure as Code. See `README.md` for architecture, machines, repo
 # Rules
 
 - All configuration and infrastructure MUST be conducted with IaC. Manual changes must be clearly documented.
+- **Done means deployed.** Writing IaC is not the finish line — run the playbook, verify it works, then report completion. Never stop at "here's the code I wrote."
 - Warnings are blockers. Resolve before considering work complete. If a warning truly cannot be resolved, document why.
 - Decision records: When a non-obvious choice is made, write an ADR in `docs/decisions/` (use `/adr` skill).
 

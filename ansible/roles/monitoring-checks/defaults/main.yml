@@ -60,3 +60,4 @@ monitoring_required_services:
 monitoring_optional_services:
   - "nfs-server"
   - "ipmi-exporter"
+  - "rtslib-fb-targetctl"

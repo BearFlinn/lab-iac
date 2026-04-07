@@ -1,0 +1,8 @@
+# Managed by Ansible — r730xd-prometheus role
+# kube-state-metrics target exposed via NodePort (Phase 2.5)
+- targets:
+    - "{{ hostvars[groups['k8s_control_plane'][0]]['ansible_host'] }}:30080"
+  labels:
+    env: "homelab"
+    instance: "kube-state-metrics"
+    component: "kube-state-metrics"

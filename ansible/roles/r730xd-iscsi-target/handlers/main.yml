@@ -1,0 +1,5 @@
+---
+- name: Restart rtslib-fb-targetctl
+  ansible.builtin.systemd:
+    name: rtslib-fb-targetctl
+    state: restarted

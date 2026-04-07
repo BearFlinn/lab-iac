@@ -1,0 +1,492 @@
+---
+# K8s Storage Provisioning (Phase 3 of cluster standup)
+#
+# Deploys dynamic PV provisioning via democratic-csi:
+#   - iSCSI StorageClass (iscsi-zfs) backed by ZFS zvols on R730xd
+#   - NFS StorageClass (nfs-mergerfs) backed by MergerFS subdirs on R730xd
+#
+# Prerequisites:
+#   - Phase 1 + 2 complete (control plane + workers joined)
+#   - Phase 2.5 complete (cluster metrics)
+#   - R730xd storage stack running (ZFS pool, MergerFS, NFS server)
+#
+# Usage:
+#   ansible-playbook ansible/playbooks/setup-k8s-storage.yml -v
+#
+# Verification (run from jumpbox):
+#   kubectl get sc
+#   kubectl get pods -n democratic-csi
+#
+# See: docs/k8s-cluster-standup.md (Phase 3)
+# ADRs: 004 (ZFS + iSCSI), 015 (dynamic storage provisioning)
+
+# ============================================================
+# Play 1: Configure iSCSI target on R730xd
+# ============================================================
+- name: Configure iSCSI target on R730xd
+  hosts: r730xd
+  become: yes
+
+  roles:
+    - role: r730xd-iscsi-target
+
+# ============================================================
+# Play 2: Prepare NFS subdirectory + democratic-csi SSH access
+# ============================================================
+- name: Prepare R730xd for democratic-csi
+  hosts: r730xd
+  become: yes
+
+  tasks:
+    # ----------------------------------------------------------
+    # NFS subdirectory for democratic-csi nfs-client driver
+    # ----------------------------------------------------------
+    - name: Create NFS base directory for K8s PVCs
+      ansible.builtin.file:
+        path: /mnt/pool/k8s-nfs
+        state: directory
+        owner: root
+        group: root
+        mode: "0777"
+
+    - name: Verify NFS base directory is under exported path
+      ansible.builtin.command: exportfs -s
+      register: nfs_exports
+      changed_when: false
+
+    - name: Confirm /mnt/pool is exported
+      ansible.builtin.assert:
+        that:
+          - "'/mnt/pool' in nfs_exports.stdout"
+        fail_msg: "/mnt/pool is not exported via NFS. Run the r730xd-nfs-server role first."
+
+    # ----------------------------------------------------------
+    # democratic-csi service account (for iSCSI SSH access)
+    # ----------------------------------------------------------
+    - name: Create democratic-csi system user
+      ansible.builtin.user:
+        name: democratic-csi
+        system: yes
+        shell: /bin/sh
+        create_home: yes
+        home: /var/lib/democratic-csi
+        comment: "democratic-csi CSI driver — SSH access for ZFS/iSCSI management"
+
+    - name: Lock SSH access down for democratic-csi user
+      ansible.builtin.blockinfile:
+        path: /etc/ssh/sshd_config
+        marker: "# {mark} ANSIBLE MANAGED — democratic-csi SSH access"
+        block: |
+          Match User democratic-csi
+              AllowTcpForwarding no
+              X11Forwarding no
+        insertafter: EOF
+      notify: Reload sshd
+
+    - name: Create .ssh directory for democratic-csi user
+      ansible.builtin.file:
+        path: /var/lib/democratic-csi/.ssh
+        state: directory
+        owner: democratic-csi
+        group: democratic-csi
+        mode: "0700"
+
+    - name: Deploy restricted sudoers for democratic-csi
+      ansible.builtin.copy:
+        dest: /etc/sudoers.d/democratic-csi
+        content: |
+          # Managed by Ansible — restricted sudo for democratic-csi CSI driver
+          # Only allows commands needed for ZFS zvol + iSCSI target management
+          democratic-csi ALL=(ALL) NOPASSWD: /usr/sbin/zfs *
+          democratic-csi ALL=(ALL) NOPASSWD: /usr/sbin/zpool *
+          democratic-csi ALL=(ALL) NOPASSWD: /usr/bin/targetcli *
+          democratic-csi ALL=(ALL) NOPASSWD: /bin/mkdir *
+          democratic-csi ALL=(ALL) NOPASSWD: /bin/rmdir *
+          democratic-csi ALL=(ALL) NOPASSWD: /bin/chown *
+        mode: "0440"
+        validate: 'visudo -cf %s'
+
+  handlers:
+    - name: Reload sshd
+      ansible.builtin.systemd:
+        name: sshd
+        state: reloaded
+
+# ============================================================
+# Play 3: Generate SSH key + deploy to R730xd and K8s
+# ============================================================
+# Generates an ed25519 key pair on the jumpbox, deploys the public key
+# to R730xd, and passes the private key to the democratic-csi role.
+- name: Generate and deploy democratic-csi SSH key
+  hosts: r730xd
+  become: yes
+  gather_facts: no
+
+  vars:
+    ssh_key_dir: "{{ lookup('env', 'HOME') }}/.ssh"
+    ssh_key_path: "{{ ssh_key_dir }}/democratic-csi-key"
+
+  tasks:
+    - name: Generate SSH key pair on localhost
+      community.crypto.openssh_keypair:
+        path: "{{ ssh_key_path }}"
+        type: ed25519
+        comment: "democratic-csi@k8s-cluster"
+        regenerate: never
+      delegate_to: localhost
+      become: no
+
+    - name: Read generated public key
+      ansible.builtin.slurp:
+        src: "{{ ssh_key_path }}.pub"
+      delegate_to: localhost
+      become: no
+      register: ssh_public_key
+
+    - name: Read generated private key
+      ansible.builtin.slurp:
+        src: "{{ ssh_key_path }}"
+      delegate_to: localhost
+      become: no
+      register: ssh_private_key
+
+    - name: Deploy public key to democratic-csi user
+      ansible.posix.authorized_key:
+        user: democratic-csi
+        key: "{{ ssh_public_key.content | b64decode }}"
+        exclusive: yes
+
+    - name: Store private key as fact for later plays
+      ansible.builtin.set_fact:
+        democratic_csi_ssh_private_key: "{{ ssh_private_key.content | b64decode }}"
+      delegate_to: localhost
+      delegate_facts: true
+
+    - name: Verify SSH access as democratic-csi user
+      ansible.builtin.command: >
+        ssh -o StrictHostKeyChecking=no -o BatchMode=yes
+        -i {{ ssh_key_path }}
+        democratic-csi@{{ r730xd_ip }}
+        "sudo zfs list -H -o name tank/iscsi"
+      delegate_to: localhost
+      become: no
+      changed_when: false
+
+    - name: Clean up local key files
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ ssh_key_path }}"
+        - "{{ ssh_key_path }}.pub"
+      delegate_to: localhost
+      become: no
+
+# ============================================================
+# Play 4: Install iSCSI client on all K8s nodes
+# ============================================================
+- name: Install iSCSI client on K8s nodes
+  hosts: k8s_cluster
+  become: yes
+
+  roles:
+    - role: k8s-iscsi-client
+
+# ============================================================
+# Play 5: Install nfs-common on K8s nodes (for NFS PVC mounting)
+# ============================================================
+- name: Install NFS client on K8s nodes
+  hosts: k8s_cluster
+  become: yes
+
+  tasks:
+    - name: Install nfs-common
+      ansible.builtin.apt:
+        name: nfs-common
+        state: present
+
+# ============================================================
+# Play 6: Deploy democratic-csi
+# ============================================================
+- name: Deploy democratic-csi storage drivers
+  hosts: k8s_control_plane
+  gather_facts: no
+
+  vars:
+    kubeconfig: "{{ lookup('env', 'HOME') }}/.kube/config"
+    kubectl_env:
+      KUBECONFIG: "{{ kubeconfig }}"
+    democratic_csi_ssh_private_key: "{{ hostvars['localhost']['democratic_csi_ssh_private_key'] }}"
+
+  roles:
+    - role: k8s-democratic-csi
+
+# ============================================================
+# Play 7: Update Prometheus alert rules
+# ============================================================
+- name: Update Prometheus with storage provisioning alerts
+  hosts: r730xd
+  gather_facts: no
+
+  vars_files:
+    - "{{ playbook_dir }}/../roles/r730xd-prometheus/defaults/main.yml"
+
+  tasks:
+    - name: Re-template alert rules with PVC pending alert
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../roles/r730xd-prometheus/templates/rules/homelab.yml.j2"
+        dest: "/opt/observability/prometheus/rules/homelab.yml"
+        mode: "0644"
+      become: yes
+      register: prom_rules
+
+    - name: Reload Prometheus if rules changed
+      ansible.builtin.uri:
+        url: "http://localhost:9090/-/reload"
+        method: POST
+        status_code: [200, 204]
+      when: prom_rules is changed
+
+# ============================================================
+# Play 8: Verification — test PVC provisioning
+# ============================================================
+- name: Verify storage provisioning
+  hosts: k8s_control_plane
+  gather_facts: no
+
+  vars:
+    kubeconfig: "{{ lookup('env', 'HOME') }}/.kube/config"
+    kubectl_env:
+      KUBECONFIG: "{{ kubeconfig }}"
+
+  tasks:
+    # ----------------------------------------------------------
+    # Test iSCSI StorageClass
+    # ----------------------------------------------------------
+    - name: Create test iSCSI PVC
+      ansible.builtin.shell: |
+        cat <<'EOF' | kubectl apply -f -
+        apiVersion: v1
+        kind: PersistentVolumeClaim
+        metadata:
+          name: test-iscsi-phase3
+          namespace: default
+        spec:
+          storageClassName: iscsi-zfs
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 1Gi
+        EOF
+      delegate_to: localhost
+      become: no
+      changed_when: false
+      environment: "{{ kubectl_env }}"
+
+    - name: Wait for iSCSI PVC to bind
+      ansible.builtin.command: >
+        kubectl wait --for=jsonpath='{.status.phase}'=Bound
+        pvc/test-iscsi-phase3 -n default --timeout=120s
+      delegate_to: localhost
+      become: no
+      changed_when: false
+      retries: 3
+      delay: 10
+      register: iscsi_pvc_wait
+      until: iscsi_pvc_wait.rc == 0
+      environment: "{{ kubectl_env }}"
+
+    # ----------------------------------------------------------
+    # Test NFS StorageClass
+    # ----------------------------------------------------------
+    - name: Create test NFS PVC
+      ansible.builtin.shell: |
+        cat <<'EOF' | kubectl apply -f -
+        apiVersion: v1
+        kind: PersistentVolumeClaim
+        metadata:
+          name: test-nfs-phase3
+          namespace: default
+        spec:
+          storageClassName: nfs-mergerfs
+          accessModes:
+            - ReadWriteMany
+          resources:
+            requests:
+              storage: 1Gi
+        EOF
+      delegate_to: localhost
+      become: no
+      changed_when: false
+      environment: "{{ kubectl_env }}"
+
+    - name: Wait for NFS PVC to bind
+      ansible.builtin.command: >
+        kubectl wait --for=jsonpath='{.status.phase}'=Bound
+        pvc/test-nfs-phase3 -n default --timeout=120s
+      delegate_to: localhost
+      become: no
+      changed_when: false
+      retries: 3
+      delay: 10
+      register: nfs_pvc_wait
+      until: nfs_pvc_wait.rc == 0
+      environment: "{{ kubectl_env }}"
+
+    # ----------------------------------------------------------
+    # Test read/write through both PVCs
+    # ----------------------------------------------------------
+    - name: Create test pod for iSCSI PVC
+      ansible.builtin.shell: |
+        cat <<'EOF' | kubectl apply -f -
+        apiVersion: v1
+        kind: Pod
+        metadata:
+          name: test-iscsi-writer
+          namespace: default
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: writer
+              image: busybox:1.36
+              command:
+                - sh
+                - -c
+                - |
+                  echo "phase3-iscsi-test-$(date +%s)" > /data/testfile
+                  cat /data/testfile
+                  echo "SUCCESS: iSCSI write/read verified"
+              volumeMounts:
+                - name: data
+                  mountPath: /data
+          volumes:
+            - name: data
+              persistentVolumeClaim:
+                claimName: test-iscsi-phase3
+        EOF
+      delegate_to: localhost
+      become: no
+      changed_when: false
+      environment: "{{ kubectl_env }}"
+
+    - name: Create test pod for NFS PVC
+      ansible.builtin.shell: |
+        cat <<'EOF' | kubectl apply -f -
+        apiVersion: v1
+        kind: Pod
+        metadata:
+          name: test-nfs-writer
+          namespace: default
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: writer
+              image: busybox:1.36
+              command:
+                - sh
+                - -c
+                - |
+                  echo "phase3-nfs-test-$(date +%s)" > /data/testfile
+                  cat /data/testfile
+                  echo "SUCCESS: NFS write/read verified"
+              volumeMounts:
+                - name: data
+                  mountPath: /data
+          volumes:
+            - name: data
+              persistentVolumeClaim:
+                claimName: test-nfs-phase3
+        EOF
+      delegate_to: localhost
+      become: no
+      changed_when: false
+      environment: "{{ kubectl_env }}"
+
+    - name: Wait for test pods to complete
+      ansible.builtin.command: >
+        kubectl wait --for=jsonpath='{.status.phase}'=Succeeded
+        pod/{{ item }} -n default --timeout=120s
+      delegate_to: localhost
+      become: no
+      loop:
+        - test-iscsi-writer
+        - test-nfs-writer
+      changed_when: false
+      retries: 5
+      delay: 10
+      register: pod_wait
+      until: pod_wait.rc == 0
+      environment: "{{ kubectl_env }}"
+
+    - name: Get test pod logs
+      ansible.builtin.command: kubectl logs {{ item }} -n default
+      delegate_to: localhost
+      become: no
+      loop:
+        - test-iscsi-writer
+        - test-nfs-writer
+      changed_when: false
+      register: pod_logs
+      environment: "{{ kubectl_env }}"
+
+    # ----------------------------------------------------------
+    # Cleanup test resources
+    # ----------------------------------------------------------
+    - name: Delete test pods
+      ansible.builtin.command: kubectl delete pod {{ item }} -n default --ignore-not-found
+      delegate_to: localhost
+      become: no
+      loop:
+        - test-iscsi-writer
+        - test-nfs-writer
+      changed_when: false
+      environment: "{{ kubectl_env }}"
+
+    - name: Delete test PVCs
+      ansible.builtin.command: kubectl delete pvc {{ item }} -n default --ignore-not-found
+      delegate_to: localhost
+      become: no
+      loop:
+        - test-iscsi-phase3
+        - test-nfs-phase3
+      changed_when: false
+      environment: "{{ kubectl_env }}"
+
+    # ----------------------------------------------------------
+    # Summary
+    # ----------------------------------------------------------
+    - name: Get StorageClass list
+      ansible.builtin.command: kubectl get sc
+      delegate_to: localhost
+      become: no
+      changed_when: false
+      register: sc_list
+      environment: "{{ kubectl_env }}"
+
+    - name: Get democratic-csi pods
+      ansible.builtin.command: kubectl get pods -n democratic-csi -o wide
+      delegate_to: localhost
+      become: no
+      changed_when: false
+      register: csi_pods
+      environment: "{{ kubectl_env }}"
+
+    - name: Display Phase 3 summary
+      ansible.builtin.debug:
+        msg:
+          - "=== Phase 3 — Storage Provisioning Complete ==="
+          - ""
+          - "StorageClasses:"
+          - "{{ sc_list.stdout_lines }}"
+          - ""
+          - "democratic-csi pods:"
+          - "{{ csi_pods.stdout_lines }}"
+          - ""
+          - "Test results:"
+          - "  iSCSI PVC: {{ 'PASS' if iscsi_pvc_wait.rc == 0 else 'FAIL' }}"
+          - "  NFS PVC:   {{ 'PASS' if nfs_pvc_wait.rc == 0 else 'FAIL' }}"
+          - "  iSCSI pod: {{ pod_logs.results[0].stdout_lines[-1] | default('unknown') }}"
+          - "  NFS pod:   {{ pod_logs.results[1].stdout_lines[-1] | default('unknown') }}"
+          - ""
+          - "Next: Phase 4 (Flux CD & GitOps Foundation)"

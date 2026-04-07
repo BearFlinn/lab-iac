@@ -100,4 +100,12 @@ if [ -f /proc/spl/kstat/zfs/arcstats ]; then
     [ -n "$arc_misses" ] && write_metric "monitoring_zfs_arc_misses_total" "$arc_misses" "ZFS ARC cache misses" "counter"
 fi
 
+# Count CSI-provisioned zvols for capacity planning
+for parent_dataset in tank/iscsi; do
+    if zfs list -H -o name "$parent_dataset" &>/dev/null; then
+        zvol_count=$(zfs list -H -t volume -r "$parent_dataset" 2>/dev/null | wc -l)
+        write_metric_labeled "monitoring_zfs_zvol_count" "parent=\"${parent_dataset}\"" "$zvol_count"
+    fi
+done
+
 flush_metrics

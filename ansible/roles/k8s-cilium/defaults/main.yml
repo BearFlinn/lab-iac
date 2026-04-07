@@ -23,5 +23,13 @@ cilium_ipam_mode: "kubernetes"
 # prevents the second replica from scheduling on the same node)
 cilium_operator_replicas: 1
 
+# Namespaces to apply the DNS visibility CiliumNetworkPolicy.
+# This is required for Hubble to emit hubble_dns_* metrics — without it,
+# DNS bypasses Cilium's L7 proxy entirely. Add new app namespaces here
+# as they're created.
+cilium_dns_visibility_namespaces:
+  - default
+  - kube-system
+
 # Timeouts for waiting on pod readiness
 cilium_wait_timeout: 300
