@@ -8,9 +8,9 @@ spec:
   policyTypes:
     - Ingress
   ingress:
-    - from:
-        - ipBlock:
-            cidr: 10.0.0.0/24
-      ports:
+    # Allow from any source — NodePort traffic gets SNATed by Cilium,
+    # so the original lab subnet IP (10.0.0.x) is not preserved.
+    # This is safe: only metrics on port 8080, private LAN.
+    - ports:
         - port: 8080
           protocol: TCP
