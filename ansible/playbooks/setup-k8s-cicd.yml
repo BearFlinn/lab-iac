@@ -244,13 +244,30 @@
     kubeconfig: "{{ lookup('env', 'HOME') }}/.kube/config"
 
   tasks:
-    - name: Trigger Flux reconciliation
+    - name: Trigger Flux source reconciliation
+      ansible.builtin.command: >
+        flux reconcile source git flux-system --timeout=2m
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+      changed_when: false
+
+    - name: Trigger Flux infrastructure reconciliation
       ansible.builtin.command: >
         flux reconcile kustomization infrastructure --timeout=3m
       environment:
         KUBECONFIG: "{{ kubeconfig }}"
       changed_when: false
-      failed_when: false
+
+    - name: Wait for HelmReleases to appear
+      ansible.builtin.command: >
+        kubectl get helmrelease arc-controller -n flux-system
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+      changed_when: false
+      retries: 12
+      delay: 10
+      register: hr_check
+      until: hr_check.rc == 0
 
     - name: Wait for ARC controller HelmRelease
       ansible.builtin.command: >

@@ -6,8 +6,8 @@ metadata:
 spec:
   type: NodePort
   selector:
-    app.kubernetes.io/name: gha-runner-scale-set-controller
-    app.kubernetes.io/instance: arc-controller
+    app.kubernetes.io/name: gha-rs-controller
+    app.kubernetes.io/component: controller-manager
   ports:
     - port: 8080
       targetPort: 8080
