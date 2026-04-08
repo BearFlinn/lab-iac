@@ -30,7 +30,7 @@ packer/http/preseed.cfg
 
 # Ansible
 *.retry
-.ansible/roles/
+.ansible/
 venv/
 env/
 # Ansible vault password file (keep this local!)
