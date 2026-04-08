@@ -182,6 +182,36 @@ Migrate services from the staging VM to the cluster. One at a time, verify each 
 
 ---
 
+## Phase 8: Completeness — Registry, Custom Images & QoL
+
+Polish pass across the cluster infrastructure. Everything here is deferrable — the cluster is functional without it — but rounds out the platform for day-to-day use.
+
+**Delivers:**
+- In-cluster OCI registry deployed via Flux, backed by MinIO bulk storage
+- TLS for the registry via cert-manager (depends on Phase 6)
+- Custom GitHub Actions runner image (Rust, Helm, Node, gh CLI, cross-compile toolchain) built automatically via Argo Workflow when the Dockerfile changes
+- Runner scale set updated to use custom image from the in-cluster registry
+- Argo CronWorkflow or Flux-triggered rebuild pipeline for the runner image
+- Helm installed on runner image for chart-based deployments from CI
+- Flux CLI upgrade (2.7.5 → latest, `flux check` flagged this)
+
+**QoL items to audit:**
+- Resource quotas / LimitRanges on workload namespaces
+- Pod disruption budgets for critical controllers (Flux, ARC, Argo)
+- Automatic image pull secret distribution (if registry requires auth)
+- Grafana dashboard provisioning via Flux (currently copied by Ansible)
+- Argo workflow default ServiceAccount set at namespace level (currently must pass `--serviceaccount` per submission)
+- Consolidated NodePort allocation doc or ConfigMap (currently tracked in plan doc only)
+
+**Verify before considering complete:**
+- Custom runner image builds and pushes automatically on Dockerfile change
+- A workflow using Rust/Helm/Node runs successfully on the custom image
+- Registry TLS valid, containerd pulls without insecure config
+- `flux check` reports no warnings
+- All Grafana dashboards load without manual intervention after a fresh Grafana deploy
+
+---
+
 ## Not Phased (Ongoing)
 
 These happen continuously, not as a discrete phase:
