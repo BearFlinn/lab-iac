@@ -1,0 +1,8 @@
+# Managed by Ansible — r730xd-prometheus role
+# ARC v2 controller metrics exposed via NodePort (Phase 5)
+- targets:
+    - "{{ hostvars[groups['k8s_control_plane'][0]]['ansible_host'] }}:30885"
+  labels:
+    env: "homelab"
+    instance: "arc-controller"
+    component: "arc-controller"

@@ -1,0 +1,9 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespace.yaml
+  - helmrepository.yaml
+  - arc-controller-helmrelease.yaml
+  - runner-scale-set-helmrelease.yaml
+  - metrics-service.yaml
+  - network-policy.yaml

@@ -1,0 +1,389 @@
+---
+# K8s CI/CD Foundation (Phase 5 of cluster standup)
+#
+# Deploys ARC v2 (GitHub Actions runners) and Argo Workflows via Flux CD.
+# Secrets are created before Flux reconciles the HelmReleases.
+#
+# Prerequisites:
+#   - Phases 1-4 complete (control plane + workers + storage + Flux)
+#   - vault_github_runner_pat set in vault.yml (PAT with org runner scope)
+#   - vault_argo_minio_access_key / vault_argo_minio_secret_key set in vault.yml
+#
+# Usage:
+#   ansible-playbook ansible/playbooks/setup-k8s-cicd.yml
+#
+# Verification (run from jumpbox):
+#   flux get helmreleases -A
+#   kubectl get pods -n arc-systems
+#   kubectl get pods -n argo
+#
+# See: docs/k8s-cluster-standup.md (Phase 5)
+# ADR: 017 (ARC v2), 018 (Argo Workflows)
+
+# ============================================================
+# Play 1: Create ARC namespaces and secrets
+# ============================================================
+- name: Create ARC namespaces and GitHub PAT secret
+  hosts: localhost
+  connection: local
+  gather_facts: no
+
+  vars:
+    kubeconfig: "{{ lookup('env', 'HOME') }}/.kube/config"
+
+  vars_files:
+    - "{{ playbook_dir }}/../../ansible/inventory/group_vars/all/vault.yml"
+    - "{{ playbook_dir }}/../../ansible/inventory/group_vars/all/vars.yml"
+
+  tasks:
+    - name: Verify vault_github_runner_pat is set
+      ansible.builtin.assert:
+        that: vault_github_runner_pat is defined and vault_github_runner_pat | length > 0
+        fail_msg: >
+          vault_github_runner_pat is not set in vault.yml. Add a GitHub PAT with
+          Organization Self-hosted runners (R/W) scope for grizzly-endeavors.
+        success_msg: "GitHub runner PAT is set"
+
+    - name: Create ARC namespaces
+      ansible.builtin.command: >
+        kubectl create namespace {{ item }} --dry-run=client -o yaml
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+      register: ns_yaml
+      changed_when: false
+      loop:
+        - arc-systems
+        - arc-runners
+
+    - name: Apply ARC namespaces
+      ansible.builtin.shell: |
+        kubectl create namespace {{ item }} --dry-run=client -o yaml | kubectl apply -f -
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+      changed_when: false
+      loop:
+        - arc-systems
+        - arc-runners
+
+    - name: Create GitHub PAT secret for ARC runners
+      ansible.builtin.shell: |
+        kubectl create secret generic github-runner-pat \
+          --from-literal=github_token="{{ vault_github_runner_pat }}" \
+          -n arc-runners \
+          --dry-run=client -o yaml | kubectl apply -f -
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+      changed_when: false
+      no_log: true
+
+# ============================================================
+# Play 2: Create Argo namespace, secrets, and MinIO bucket
+# ============================================================
+- name: Create Argo namespace and MinIO credentials
+  hosts: localhost
+  connection: local
+  gather_facts: no
+
+  vars:
+    kubeconfig: "{{ lookup('env', 'HOME') }}/.kube/config"
+
+  vars_files:
+    - "{{ playbook_dir }}/../../ansible/inventory/group_vars/all/vault.yml"
+    - "{{ playbook_dir }}/../../ansible/inventory/group_vars/all/vars.yml"
+    - "{{ playbook_dir }}/../../ansible/inventory/group_vars/all/network.yml"
+
+  tasks:
+    - name: Verify Argo MinIO credentials are set
+      ansible.builtin.assert:
+        that:
+          - vault_argo_minio_access_key is defined and vault_argo_minio_access_key | length > 0
+          - vault_argo_minio_secret_key is defined and vault_argo_minio_secret_key | length > 0
+        fail_msg: >
+          vault_argo_minio_access_key and vault_argo_minio_secret_key must be
+          set in vault.yml. Create a MinIO user on the bulk instance for Argo.
+        success_msg: "Argo MinIO credentials are set"
+
+    - name: Create Argo namespace
+      ansible.builtin.shell: |
+        kubectl create namespace argo --dry-run=client -o yaml | kubectl apply -f -
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+      changed_when: false
+
+    - name: Create Argo MinIO credentials secret
+      ansible.builtin.shell: |
+        kubectl create secret generic argo-minio-credentials \
+          --from-literal=accesskey="{{ vault_argo_minio_access_key }}" \
+          --from-literal=secretkey="{{ vault_argo_minio_secret_key }}" \
+          -n argo \
+          --dry-run=client -o yaml | kubectl apply -f -
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+      changed_when: false
+      no_log: true
+
+    - name: Ensure argo-artifacts bucket exists on MinIO bulk
+      ansible.builtin.command: mc mb --ignore-existing minio-bulk/argo-artifacts
+      changed_when: false
+      failed_when: false
+
+    - name: Create Argo MinIO user on bulk instance
+      ansible.builtin.shell: |
+        mc admin user add minio-bulk \
+          "{{ vault_argo_minio_access_key }}" \
+          "{{ vault_argo_minio_secret_key }}" 2>&1 || true
+      changed_when: false
+      no_log: true
+
+    - name: Grant Argo user readwrite access to argo-artifacts bucket
+      ansible.builtin.shell: |
+        cat <<'EOF' | mc admin policy create minio-bulk argo-artifacts-rw /dev/stdin
+        {
+          "Version": "2012-10-17",
+          "Statement": [{
+            "Effect": "Allow",
+            "Action": ["s3:*"],
+            "Resource": [
+              "arn:aws:s3:::argo-artifacts",
+              "arn:aws:s3:::argo-artifacts/*"
+            ]
+          }]
+        }
+        EOF
+        mc admin policy attach minio-bulk argo-artifacts-rw --user "{{ vault_argo_minio_access_key }}"
+      changed_when: false
+      no_log: true
+
+# ============================================================
+# Play 3: Deploy Prometheus targets and alerts on R730xd
+# ============================================================
+- name: Deploy CI/CD Prometheus targets and alert rules
+  hosts: r730xd
+  gather_facts: no
+
+  vars_files:
+    - "{{ playbook_dir }}/../roles/r730xd-prometheus/defaults/main.yml"
+    - "{{ playbook_dir }}/../../ansible/inventory/group_vars/all/network.yml"
+
+  tasks:
+    - name: Set K8s apiserver target for Prometheus
+      ansible.builtin.set_fact:
+        prometheus_k8s_apiserver_target: "{{ dell_inspiron_ip }}:6443"
+
+    - name: Template ARC controller targets
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../roles/r730xd-prometheus/templates/targets.d/k8s-arc.yml.j2"
+        dest: "/opt/observability/prometheus/targets.d/k8s-arc.yml"
+        mode: "0644"
+      become: yes
+
+    - name: Template Argo Workflows targets
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../roles/r730xd-prometheus/templates/targets.d/k8s-argo.yml.j2"
+        dest: "/opt/observability/prometheus/targets.d/k8s-argo.yml"
+        mode: "0644"
+      become: yes
+
+    - name: Re-template Prometheus configuration
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../roles/r730xd-prometheus/templates/prometheus.yml.j2"
+        dest: "/opt/observability/prometheus/prometheus.yml"
+        mode: "0644"
+      become: yes
+      register: prom_config
+
+    - name: Re-template alert rules
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../roles/r730xd-prometheus/templates/rules/homelab.yml.j2"
+        dest: "/opt/observability/prometheus/rules/homelab.yml"
+        mode: "0644"
+      become: yes
+      register: prom_rules
+
+    - name: Recreate Prometheus container if config changed
+      ansible.builtin.command: docker compose up -d --force-recreate prometheus
+      args:
+        chdir: /opt/observability/prometheus
+      become: yes
+      when: prom_config is changed or prom_rules is changed
+
+# ============================================================
+# Play 4: Deploy Grafana dashboards on R730xd
+# ============================================================
+- name: Deploy CI/CD Grafana dashboards
+  hosts: r730xd
+  gather_facts: no
+
+  vars:
+    grafana_compose_dir: "/opt/observability/grafana"
+
+  tasks:
+    - name: Copy CI/CD runners dashboard
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../roles/r730xd-grafana/files/dashboards/cicd-runners.json"
+        dest: "{{ grafana_compose_dir }}/dashboards/cicd-runners.json"
+        mode: "0644"
+      become: yes
+
+    - name: Copy Argo Workflows dashboard
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../roles/r730xd-grafana/files/dashboards/argo-workflows.json"
+        dest: "{{ grafana_compose_dir }}/dashboards/argo-workflows.json"
+        mode: "0644"
+      become: yes
+
+# ============================================================
+# Play 5: Trigger Flux reconciliation and verify ARC
+# ============================================================
+- name: Verify ARC deployment
+  hosts: localhost
+  connection: local
+  gather_facts: no
+
+  vars:
+    kubeconfig: "{{ lookup('env', 'HOME') }}/.kube/config"
+
+  tasks:
+    - name: Trigger Flux reconciliation
+      ansible.builtin.command: >
+        flux reconcile kustomization infrastructure --timeout=3m
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+      changed_when: false
+      failed_when: false
+
+    - name: Wait for ARC controller HelmRelease
+      ansible.builtin.command: >
+        kubectl wait helmrelease/arc-controller -n flux-system
+        --for=condition=Ready --timeout=180s
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+      changed_when: false
+      register: arc_controller_hr
+
+    - name: Wait for ARC runner set HelmRelease
+      ansible.builtin.command: >
+        kubectl wait helmrelease/arc-runner-set -n flux-system
+        --for=condition=Ready --timeout=180s
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+      changed_when: false
+      register: arc_runner_hr
+
+    - name: Wait for ARC controller pod
+      ansible.builtin.command: >
+        kubectl wait --for=condition=Ready pods --all
+        -n arc-systems --timeout=120s
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+      changed_when: false
+
+    - name: Get ARC pods
+      ansible.builtin.command: kubectl get pods -n arc-systems -o wide --no-headers
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+      changed_when: false
+      register: arc_pods
+
+# ============================================================
+# Play 6: Verify Argo Workflows deployment
+# ============================================================
+- name: Verify Argo Workflows deployment
+  hosts: localhost
+  connection: local
+  gather_facts: no
+
+  vars:
+    kubeconfig: "{{ lookup('env', 'HOME') }}/.kube/config"
+
+  tasks:
+    - name: Wait for Argo Workflows HelmRelease
+      ansible.builtin.command: >
+        kubectl wait helmrelease/argo-workflows -n flux-system
+        --for=condition=Ready --timeout=180s
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+      changed_when: false
+      register: argo_hr
+
+    - name: Wait for Argo pods
+      ansible.builtin.command: >
+        kubectl wait --for=condition=Ready pods --all
+        -n argo --timeout=120s
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+      changed_when: false
+
+    - name: Get Argo pods
+      ansible.builtin.command: kubectl get pods -n argo -o wide --no-headers
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+      changed_when: false
+      register: argo_pods
+
+# ============================================================
+# Play 7: Verify observability
+# ============================================================
+- name: Verify Phase 5 observability
+  hosts: localhost
+  connection: local
+  gather_facts: no
+
+  vars:
+    kubeconfig: "{{ lookup('env', 'HOME') }}/.kube/config"
+
+  vars_files:
+    - "{{ playbook_dir }}/../../ansible/inventory/group_vars/all/network.yml"
+
+  tasks:
+    - name: Wait for Prometheus to scrape new targets
+      ansible.builtin.pause:
+        seconds: 20
+
+    - name: Check ARC metrics in Prometheus
+      ansible.builtin.uri:
+        url: "http://{{ r730xd_ip }}:9090/api/v1/query?query=up{job='arc-controller'}"
+        return_content: yes
+      register: arc_prom
+      failed_when: false
+      delegate_to: r730xd
+
+    - name: Check Argo metrics in Prometheus
+      ansible.builtin.uri:
+        url: "http://{{ r730xd_ip }}:9090/api/v1/query?query=up{job='argo-workflows'}"
+        return_content: yes
+      register: argo_prom
+      failed_when: false
+      delegate_to: r730xd
+
+    - name: Get all Flux HelmReleases
+      ansible.builtin.command: flux get helmreleases -A
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+      changed_when: false
+      register: flux_hr
+
+    - name: Display verification summary
+      ansible.builtin.debug:
+        msg:
+          - "=== Phase 5 — CI/CD Foundation ==="
+          - ""
+          - "Flux HelmReleases:"
+          - "{{ flux_hr.stdout_lines | default(['  (could not retrieve)']) }}"
+          - ""
+          - "ARC pods (arc-systems):"
+          - "  {{ arc_pods.stdout | default('none') }}"
+          - ""
+          - "Argo pods (argo):"
+          - "  {{ argo_pods.stdout | default('none') }}"
+          - ""
+          - "Prometheus — ARC controller:"
+          - "  {{ (arc_prom.json.data.result | default([])) | length }} target(s) responding"
+          - ""
+          - "Prometheus — Argo Workflows:"
+          - "  {{ (argo_prom.json.data.result | default([])) | length }} target(s) responding"
+          - ""
+          - "Next steps:"
+          - "  1. Verify runners in GitHub: grizzly-endeavors > Settings > Actions > Runners"
+          - "  2. Test ARC: dispatch a workflow with runs-on: [self-hosted, lab-runners]"
+          - "  3. Test Argo: argo submit --watch hello-world.yaml"

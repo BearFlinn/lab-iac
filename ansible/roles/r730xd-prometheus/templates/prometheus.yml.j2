@@ -108,6 +108,18 @@ scrape_configs:
           - "/etc/prometheus/targets.d/k8s-flux.yml"
         refresh_interval: 30s
 
+  - job_name: "arc-controller"
+    file_sd_configs:
+      - files:
+          - "/etc/prometheus/targets.d/k8s-arc.yml"
+        refresh_interval: 30s
+
+  - job_name: "argo-workflows"
+    file_sd_configs:
+      - files:
+          - "/etc/prometheus/targets.d/k8s-argo.yml"
+        refresh_interval: 30s
+
 {% if prometheus_blackbox_targets is defined and prometheus_blackbox_targets | length > 0 %}
   - job_name: "blackbox"
     metrics_path: /probe

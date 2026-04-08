@@ -1,0 +1,15 @@
+# Managed by Ansible — r730xd-prometheus role
+# Argo Workflows metrics exposed via NodePort (Phase 5)
+- targets:
+    - "{{ hostvars[groups['k8s_control_plane'][0]]['ansible_host'] }}:30886"
+  labels:
+    env: "homelab"
+    instance: "argo-workflow-controller"
+    component: "workflow-controller"
+
+- targets:
+    - "{{ hostvars[groups['k8s_control_plane'][0]]['ansible_host'] }}:30887"
+  labels:
+    env: "homelab"
+    instance: "argo-server"
+    component: "argo-server"

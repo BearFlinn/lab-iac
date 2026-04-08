@@ -3,3 +3,5 @@ kind: Kustomization
 resources:
   - monitoring
   - notifications
+  - github-runners
+  - argo-workflows

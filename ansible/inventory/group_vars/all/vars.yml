@@ -33,3 +33,10 @@ monitoring_discord_webhook_url: "{{ vault_monitoring_discord_webhook_url }}"
 
 # Flux CD — Discord webhook for GitOps reconciliation alerts (separate channel)
 flux_discord_webhook_url: "{{ vault_flux_discord_webhook_url }}"
+
+# GitHub Actions Runner Controller (ARC v2) — org-level PAT
+github_runner_pat: "{{ vault_github_runner_pat }}"
+
+# Argo Workflows — MinIO bulk instance credentials for artifact storage
+argo_minio_access_key: "{{ vault_argo_minio_access_key }}"
+argo_minio_secret_key: "{{ vault_argo_minio_secret_key }}"

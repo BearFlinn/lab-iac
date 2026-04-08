@@ -344,6 +344,48 @@ groups:
             {{ '{{' }} $labels.namespace {{ '}}' }}/{{ '{{' }} $labels.name {{ '}}' }}
             is suspended
 
+      - alert: ARCControllerDown
+        expr: up{job="arc-controller"} == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "ARC controller is unreachable — GitHub Actions runners cannot scale"
+
+      - alert: ARCRunnerPodCrashLooping
+        expr: increase(kube_pod_container_status_restarts_total{namespace="arc-runners"}[15m]) > 3
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: >-
+            ARC runner pod {{ '{{' }} $labels.pod {{ '}}' }}
+            has restarted {{ '{{' }} $value | printf "%.0f" {{ '}}' }} times in 15 minutes
+
+      - alert: ArgoControllerDown
+        expr: up{job="argo-workflows",component="workflow-controller"} == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Argo Workflow controller is unreachable"
+
+      - alert: ArgoServerDown
+        expr: up{job="argo-workflows",component="argo-server"} == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Argo Server is unreachable — CLI/API access unavailable"
+
+      - alert: ArgoWorkflowFailed
+        expr: increase(argo_workflows_count{status="Failed"}[15m]) > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Argo Workflow failures detected in the last 15 minutes"
+
   - name: observability
     rules:
       - alert: TargetDown

@@ -1,0 +1,16 @@
+# Allow external Prometheus (R730xd) to scrape Argo metrics
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-external-scraping
+  namespace: argo
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - ports:
+        - port: 9090
+          protocol: TCP
+        - port: 2746
+          protocol: TCP
