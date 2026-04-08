@@ -195,6 +195,10 @@ Polish pass across the cluster infrastructure. Everything here is deferrable —
 - Helm installed on runner image for chart-based deployments from CI
 - Flux CLI upgrade (2.7.5 → latest, `flux check` flagged this)
 
+**Tracing:**
+- ARC workflow-level tracing via `run-with-telemetry` GitHub Action → Tempo (controller-level tracing not supported by ARC v2)
+- Argo → Tempo tracing already wired (Phase 5); verify spans visible in Grafana and correlate with Loki logs
+
 **QoL items to audit:**
 - Resource quotas / LimitRanges on workload namespaces
 - Pod disruption budgets for critical controllers (Flux, ARC, Argo)
@@ -209,6 +213,8 @@ Polish pass across the cluster infrastructure. Everything here is deferrable —
 - Registry TLS valid, containerd pulls without insecure config
 - `flux check` reports no warnings
 - All Grafana dashboards load without manual intervention after a fresh Grafana deploy
+- Argo workflow traces visible in Tempo/Grafana with step-level span detail
+- ARC `run-with-telemetry` spans visible in Tempo for at least one test workflow
 
 ---
 
