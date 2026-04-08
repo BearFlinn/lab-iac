@@ -39,6 +39,11 @@ spec:
         requests:
           cpu: 50m
           memory: 64Mi
+    workflow:
+      serviceAccount:
+        create: true
+      rbac:
+        create: true
     artifactRepository:
       archiveLogs: true
       s3:
