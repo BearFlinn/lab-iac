@@ -21,7 +21,7 @@ spec:
         enabled: true
         path: /metrics
         port: 9090
-      env:
+      extraEnv:
         - name: OTEL_EXPORTER_OTLP_ENDPOINT
           value: "http://10.0.0.200:4317"
         - name: OTEL_EXPORTER_OTLP_PROTOCOL
