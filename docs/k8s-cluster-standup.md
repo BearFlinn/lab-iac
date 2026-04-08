@@ -197,7 +197,7 @@ Polish pass across the cluster infrastructure. Everything here is deferrable —
 
 **Tracing:**
 - ARC workflow-level tracing via `run-with-telemetry` GitHub Action → Tempo (controller-level tracing not supported by ARC v2)
-- Argo → Tempo tracing already wired (Phase 5); verify spans visible in Grafana and correlate with Loki logs
+- Argo → Tempo: OTLP env vars configured on the controller (Phase 5) and OTel metrics exporter is active. Trace spans require v4.1.0+ (PR #15585 merged to `main` Feb 2026, not backported to v4.0.x). Bump chart to v4.1+ when released — no manifest changes needed, traces will flow automatically.
 
 **QoL items to audit:**
 - Resource quotas / LimitRanges on workload namespaces
