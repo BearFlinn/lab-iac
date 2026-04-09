@@ -206,11 +206,20 @@ jobs:
           echo "pr_url=$pr_url" >> "$GITHUB_OUTPUT"
           echo "Created PR: $pr_url"
 
-      - name: Enable auto-merge
+      - name: Merge PR
         if: ${{ inputs.auto_merge }}
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          PR_URL: ${{ steps.pr.outputs.pr_url }}
         run: |
           set -euo pipefail
-          gh pr merge --auto --squash "${{ steps.pr.outputs.pr_url }}"
-          echo "Auto-merge enabled on ${{ steps.pr.outputs.pr_url }}"
+          # Try immediate merge first — works when there are no required
+          # checks (the normal case for lab-iac). Fall back to --auto so the
+          # PR merges once checks pass if branch protection gets added later.
+          if gh pr merge --squash --delete-branch "$PR_URL"; then
+            echo "Merged $PR_URL"
+          else
+            echo "Direct merge failed; enabling auto-merge"
+            gh pr merge --auto --squash --delete-branch "$PR_URL"
+            echo "Auto-merge enabled on $PR_URL"
+          fi

@@ -1,15 +1,23 @@
-apiVersion: kustomize.toolkit.fluxcd.io/v1
-kind: Kustomization
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
 metadata:
   name: ${APP_NAME}
   namespace: flux-system
 spec:
   interval: 5m
-  sourceRef:
-    kind: GitRepository
-    name: ${APP_NAME}
-  path: ${DEPLOY_PATH}
-  prune: true
-  wait: true
-  timeout: 5m
+  releaseName: ${APP_NAME}
   targetNamespace: ${NAMESPACE}
+  chart:
+    spec:
+      chart: ${DEPLOY_PATH}
+      sourceRef:
+        kind: GitRepository
+        name: ${APP_NAME}
+        namespace: flux-system
+      reconcileStrategy: Revision
+  install:
+    remediation:
+      retries: 2
+  upgrade:
+    remediation:
+      retries: 2
