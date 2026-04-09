@@ -4,3 +4,4 @@ kind: Kustomization
 # onboarding. Do not edit this list by hand unless decommissioning an app.
 resources:
   - landing-page
+  - caz-portfolio
