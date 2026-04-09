@@ -387,9 +387,8 @@ groups:
           summary: "Argo Workflow failures detected in the last 15 minutes"
 
       # --- Phase 6: ingress-nginx + cert-manager ---
-      # Metric names verified against live Prometheus once both pods are
-      # running (per feedback_verify_metric_names.md). Until then, treat
-      # expr strings as documentation-derived and confirm before merging.
+      # Metric names verified against live Prometheus (nginx_ingress v4.11.3,
+      # cert-manager v1.16.2) after initial traffic + a test Certificate.
       - alert: IngressNginxDown
         expr: up{job="ingress-nginx"} == 0
         for: 2m
@@ -399,7 +398,7 @@ groups:
           summary: "ingress-nginx controller is unreachable — external traffic broken"
 
       - alert: IngressNginx5xxRate
-        expr: sum(rate(nginx_ingress_controller_requests{status=~"5.."}[5m])) > 1
+        expr: sum(rate(nginx_ingress_controller_request_duration_seconds_count{status=~"5.."}[5m])) > 1
         for: 5m
         labels:
           severity: warning
@@ -426,15 +425,18 @@ groups:
             Certificate {{ '{{' }} $labels.namespace {{ '}}' }}/{{ '{{' }} $labels.name {{ '}}' }}
             expires in less than 14 days
 
-      - alert: CertificateIssuanceFailure
-        expr: increase(certmanager_certificate_ready_status{condition="False"}[1h]) > 0
-        for: 0m
+      # certmanager_certificate_ready_status is a gauge emitted per condition
+      # (True / False / Unknown). A value of 1 on condition="False" means the
+      # Certificate is explicitly in a failed state.
+      - alert: CertificateNotReady
+        expr: certmanager_certificate_ready_status{condition="False"} == 1
+        for: 15m
         labels:
           severity: warning
         annotations:
           summary: >-
             Certificate {{ '{{' }} $labels.namespace {{ '}}' }}/{{ '{{' }} $labels.name {{ '}}' }}
-            failed to become Ready
+            is not Ready (stuck in a failed state)
 
   - name: observability
     rules:

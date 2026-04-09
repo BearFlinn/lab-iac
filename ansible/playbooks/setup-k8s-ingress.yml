@@ -18,8 +18,10 @@
 #     (the Prometheus scrape targets won't have anything to hit otherwise)
 #
 # Usage:
-#   ansible-playbook -i ansible/inventory/r730xd.yml \
-#     ansible/playbooks/setup-k8s-ingress.yml --vault-password-file .vault_pass
+#   # Uses the default inventory (ansible/inventory/) so that lab-nodes.yml
+#   # is loaded alongside r730xd.yml — the templates reference
+#   # groups['k8s_control_plane'].
+#   ansible-playbook ansible/playbooks/setup-k8s-ingress.yml
 #
 # See: docs/k8s-cluster-standup.md (Phase 6)
 # ADR: 019 (ingress & TLS termination)
