@@ -51,14 +51,17 @@
       # Image references embedded in pod manifests use
       #   {{ k8s_registry_host }}/<image>:<tag>
       # which is a ClusterDNS name containerd can't resolve from the host.
-      # Redirect every pull to the Service's NodePort on localhost; kube-proxy
-      # routes the request into the cluster regardless of which node runs the
-      # registry pod.
-      server = "http://{{ k8s_registry_host }}"
-
+      # Point the single [host.*] entry at the Service's NodePort on
+      # localhost; kube-proxy routes the request into the cluster regardless
+      # of which node runs the registry pod.
+      #
+      # We deliberately do NOT set `server = ...` — containerd would try to
+      # resolve and dial the server URL in addition to mirrors, which fails
+      # because the host's /etc/resolv.conf can't see ClusterDNS. Omitting
+      # `server` makes the [host.*] entries the only upstream containerd
+      # will try.
       [host."http://localhost:{{ k8s_registry_nodeport }}"]
         capabilities = ["pull", "resolve"]
-        override_path = true
   become: yes
 
 # ==========================================================================
