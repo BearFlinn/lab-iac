@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: resume-site
+  labels:
+    app.kubernetes.io/name: resume-site
+    app.kubernetes.io/managed-by: flux
