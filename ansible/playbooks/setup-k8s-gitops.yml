@@ -183,8 +183,9 @@
       no_log: true
 
     # Seeds credentials used by Flux's `provider: github` GitRepository auth.
-    # Keys MUST be exactly githubAppID / githubInstallationID / githubPrivateKey
-    # — Flux fails with opaque auth errors on any other casing. See ADR-020.
+    # Keys MUST be exactly githubAppID / githubAppInstallationID / githubAppPrivateKey
+    # — Flux fails with "secretRef with github app data must be specified" on any
+    # other casing. See ADR-020 and the source-controller GitHub provider docs.
     - name: Seed GitHub App credentials for Flux GitRepository auth
       tags: github-app-secret
       block:
@@ -206,8 +207,8 @@
           ansible.builtin.shell: |
             kubectl create secret generic github-app-credentials \
               --from-literal=githubAppID="{{ vault_github_app_id }}" \
-              --from-literal=githubInstallationID="{{ vault_github_app_installation_id }}" \
-              --from-file=githubPrivateKey="{{ pem_tmpdir.path }}/key.pem" \
+              --from-literal=githubAppInstallationID="{{ vault_github_app_installation_id }}" \
+              --from-file=githubAppPrivateKey="{{ pem_tmpdir.path }}/key.pem" \
               -n flux-system \
               --dry-run=client -o yaml | kubectl apply -f -
           environment:
@@ -228,11 +229,11 @@
           ansible.builtin.assert:
             that:
               - "'githubAppID' in secret_check.stdout"
-              - "'githubInstallationID' in secret_check.stdout"
-              - "'githubPrivateKey' in secret_check.stdout"
+              - "'githubAppInstallationID' in secret_check.stdout"
+              - "'githubAppPrivateKey' in secret_check.stdout"
             fail_msg: >
               github-app-credentials secret is missing one or more required keys.
-              Flux's provider: github expects exactly: githubAppID, githubInstallationID, githubPrivateKey.
+              Flux's provider: github expects exactly: githubAppID, githubAppInstallationID, githubAppPrivateKey.
             success_msg: "github-app-credentials secret has all required keys"
       always:
         - name: Remove temporary PEM file
