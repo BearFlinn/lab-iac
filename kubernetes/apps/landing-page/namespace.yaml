@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: landing-page
+  labels:
+    app.kubernetes.io/name: landing-page
+    app.kubernetes.io/managed-by: flux
