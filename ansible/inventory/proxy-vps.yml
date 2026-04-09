@@ -23,16 +23,20 @@ all:
       caddy_email: "bearflinn@gmail.com"
       caddy_dns_provider: "cloudflare"
 
-      # K8s proxy mode - routes traffic to K8s ingress via NetBird tunnel
+      # K8s proxy mode - routes traffic to K8s ingress via dedicated
+      # WireGuard tunnel to R730xd (ingress-tunnel role). The tunnel
+      # terminates on R730xd, which iptables-DNATs 30487/30356 to a K8s
+      # NodePort on the LAN. No NetBird subnet routes — only those two
+      # ports are reachable from the VPS. See ADR-019.
       caddy_enable_k8s_proxy: true
 
       # Caddy Prometheus metrics (scraped by R730xd Prometheus over NetBird)
       caddy_metrics_port: 2019
 
-      # Ingress endpoint (NetBird IP + port)
-      # All *.bearflinn.com subdomains not matched by caddy_services
-      # are proxied here - K8s ingress handles routing and 404s
-      caddy_k8s_ingress_endpoint: "{{ netbird_k8s_ingress_ip }}:30487"
+      # Ingress endpoint — R730xd's WireGuard address + K8s HTTP NodePort.
+      # All *.bearflinn.com subdomains not matched by caddy_services are
+      # proxied here; K8s ingress handles hostname routing and 404s.
+      caddy_k8s_ingress_endpoint: "{{ k8s_ingress_ip }}:30487"
 
       # External domains routed to K8s ingress (non-bearflinn.com domains)
       caddy_k8s_domains:
@@ -94,9 +98,11 @@ all:
       - "caddy"
     monitoring_optional_services: []
 
-    # Home network public IP for monitoring firewall rules
-    # R730xd Prometheus scrapes VPS over the internet (no NetBird on R730xd)
-    # Update this if ISP assigns a new IP
+    # Home network public IP for monitoring firewall rules.
+    # R730xd Prometheus scrapes VPS over the internet from this address.
+    # R730xd has NetBird installed out-of-band as a temporary admin-group
+    # member (operator access only, never used for VPS→home ingress).
+    # Update this if the ISP assigns a new IP.
     monitoring_home_ip: "{{ home_public_ip }}"
 
     # Firewall configuration
@@ -106,3 +112,4 @@ all:
     ufw_web_rules:
       - { port: '80', proto: 'tcp', comment: 'HTTP' }
       - { port: '443', proto: 'tcp', comment: 'HTTPS' }
+      - { port: '51822', proto: 'udp', comment: 'WireGuard (ingress tunnel to R730xd)' }

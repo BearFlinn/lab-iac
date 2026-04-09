@@ -386,6 +386,56 @@ groups:
         annotations:
           summary: "Argo Workflow failures detected in the last 15 minutes"
 
+      # --- Phase 6: ingress-nginx + cert-manager ---
+      # Metric names verified against live Prometheus once both pods are
+      # running (per feedback_verify_metric_names.md). Until then, treat
+      # expr strings as documentation-derived and confirm before merging.
+      - alert: IngressNginxDown
+        expr: up{job="ingress-nginx"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "ingress-nginx controller is unreachable — external traffic broken"
+
+      - alert: IngressNginx5xxRate
+        expr: sum(rate(nginx_ingress_controller_requests{status=~"5.."}[5m])) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: >-
+            ingress-nginx serving {{ '{{' }} $value | printf "%.2f" {{ '}}' }} 5xx/s
+            (sustained over 5m)
+
+      - alert: CertManagerDown
+        expr: up{job="cert-manager"} == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "cert-manager controller is unreachable — new Certificates will not be issued or renewed"
+
+      - alert: CertificateExpiringSoon
+        expr: certmanager_certificate_expiration_timestamp_seconds - time() < 86400 * 14
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: >-
+            Certificate {{ '{{' }} $labels.namespace {{ '}}' }}/{{ '{{' }} $labels.name {{ '}}' }}
+            expires in less than 14 days
+
+      - alert: CertificateIssuanceFailure
+        expr: increase(certmanager_certificate_ready_status{condition="False"}[1h]) > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: >-
+            Certificate {{ '{{' }} $labels.namespace {{ '}}' }}/{{ '{{' }} $labels.name {{ '}}' }}
+            failed to become Ready
+
   - name: observability
     rules:
       - alert: TargetDown

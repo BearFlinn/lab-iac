@@ -1,0 +1,54 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: cert-manager
+  namespace: flux-system
+spec:
+  interval: 30m
+  chart:
+    spec:
+      chart: cert-manager
+      version: "v1.16.2"
+      sourceRef:
+        kind: HelmRepository
+        name: jetstack
+  targetNamespace: cert-manager
+  install:
+    createNamespace: false
+  values:
+    # Install CRDs alongside the chart. Alternative would be a separate
+    # Kustomization that applies CRDs first, but inline install is simpler
+    # and cert-manager's CRDs are stable.
+    installCRDs: true
+    replicaCount: 1
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 200m
+        memory: 256Mi
+    prometheus:
+      enabled: true
+      # R730xd Prometheus scrapes externally via NodePort (see metrics-service.yaml).
+      # ServiceMonitor/PodMonitor would require an in-cluster Prometheus operator.
+      servicemonitor:
+        enabled: false
+    webhook:
+      replicaCount: 1
+      resources:
+        requests:
+          cpu: 50m
+          memory: 64Mi
+        limits:
+          cpu: 100m
+          memory: 128Mi
+    cainjector:
+      replicaCount: 1
+      resources:
+        requests:
+          cpu: 50m
+          memory: 64Mi
+        limits:
+          cpu: 100m
+          memory: 128Mi

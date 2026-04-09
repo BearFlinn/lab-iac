@@ -5,3 +5,5 @@ resources:
   - notifications
   - github-runners
   - argo-workflows
+  - cert-manager
+  - ingress-nginx

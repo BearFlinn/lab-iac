@@ -120,6 +120,18 @@ scrape_configs:
           - "/etc/prometheus/targets.d/k8s-argo.yml"
         refresh_interval: 30s
 
+  - job_name: "ingress-nginx"
+    file_sd_configs:
+      - files:
+          - "/etc/prometheus/targets.d/k8s-ingress-nginx.yml"
+        refresh_interval: 30s
+
+  - job_name: "cert-manager"
+    file_sd_configs:
+      - files:
+          - "/etc/prometheus/targets.d/k8s-cert-manager.yml"
+        refresh_interval: 30s
+
 {% if prometheus_blackbox_targets is defined and prometheus_blackbox_targets | length > 0 %}
   - job_name: "blackbox"
     metrics_path: /probe

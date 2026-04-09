@@ -25,6 +25,23 @@ staging_vm_ip: "192.168.122.191"
 # External / VPN
 proxy_vps_public_ip: "178.156.217.91"
 home_public_ip: "98.251.87.200"
-netbird_k8s_ingress_ip: "100.96.94.27"
 netbird_home_assistant_ip: "100.96.217.175"
 netbird_palworld_ip: "100.96.46.7"
+
+# WireGuard point-to-point tunnel: VPS ↔ R730xd
+# Used by Caddy on VPS to reach K8s ingress via iptables DNAT on R730xd.
+# Deliberately NOT a NetBird subnet route — exposing the full home LAN to
+# a publicly-reachable box is unacceptable attack surface.
+# See docs/decisions/019-ingress-and-tls-termination.md
+wg_vps_ip: "10.200.0.1"
+wg_r730xd_ip: "10.200.0.2"
+# Port 51820 is taken by NetBird's wt0 on the VPS; 51821 is taken by a
+# legacy wg1 tunnel. 51822 is the first free WireGuard port on both hosts.
+wg_port: 51822
+
+# K8s ingress address as seen from the VPS.
+# Traffic flow: VPS Caddy → wg0 tunnel → R730xd wg0 → iptables DNAT → K8s NodePort
+# R730xd is a temporary L4 bridge until the Tower PC router (ADR-001) takes over.
+# Only ports 30487 (http) and 30356 (https) are forwarded — nothing else on
+# the LAN is reachable from the VPS through the tunnel.
+k8s_ingress_ip: "{{ wg_r730xd_ip }}"

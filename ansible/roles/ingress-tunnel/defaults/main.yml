@@ -1,0 +1,37 @@
+---
+# ingress-tunnel role defaults
+#
+# A point-to-point WireGuard tunnel between the Hetzner VPS and a home
+# bridge host (currently R730xd). On the client side, this role also
+# installs iptables DNAT rules that forward specific ingress ports to a
+# K8s NodePort on the LAN — see docs/decisions/019-ingress-and-tls-termination.md
+
+# Role mode: "server" (VPS, listens) or "client" (home, initiates).
+# Must be set by the caller — an assertion in tasks/main.yml will fail otherwise.
+tunnel_role: ""
+
+# WireGuard interface name and tunables
+wg_interface: "wg0"
+wg_mtu: 1420
+
+# Server-side
+# Port the VPS listens on. Defaults to the global wg_port from network.yml.
+wg_listen_port: "{{ wg_port | default(51820) }}"
+
+# Client-side
+# host:port of the server peer (e.g. "178.156.217.91:51820")
+wg_server_endpoint: ""
+# PersistentKeepalive interval (seconds) — keeps the NAT pinhole open
+wg_keepalive: 25
+
+# DNAT rules applied on the client side only.
+# Each item:
+#   proto:       "tcp" or "udp"
+#   port:        destination port on the wg interface
+#   target_ip:   LAN IP to forward to
+#   target_port: port on the target LAN IP
+ingress_dnat_rules: []
+
+# LAN egress interface used in FORWARD rules. Defaults to the default route
+# interface discovered by Ansible facts.
+lan_interface: "{{ ansible_default_ipv4.interface }}"

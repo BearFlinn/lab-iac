@@ -4,8 +4,14 @@
 #
 # Prerequisites:
 #   - VPS provisioned and accessible via SSH (Host proxy-vps in ~/.ssh/config)
-#   - NetBird tunnel established between VPS and K8s cluster
+#   - WireGuard keypairs generated and stored in ansible vault
+#     (vault_wg_vps_private_key, vault_wg_r730xd_public_key, etc.)
 #   - Ansible vault configured with cloudflare_api_token
+#
+# The VPS talks to the home K8s cluster via a dedicated point-to-point
+# WireGuard tunnel (ingress-tunnel role) that terminates on R730xd, which
+# iptables-DNATs only the ingress ports to a K8s NodePort. This avoids
+# exposing the full home LAN to the VPS. See ADR-019.
 #
 # Usage:
 #   ansible-playbook -i ansible/inventory/proxy-vps.yml \
@@ -130,6 +136,15 @@
         name: fail2ban
         state: started
         enabled: yes
+
+    - name: Configure ingress tunnel (WireGuard server)
+      ansible.builtin.include_role:
+        name: ingress-tunnel
+        apply:
+          tags: [wireguard, ingress-tunnel]
+      vars:
+        tunnel_role: server
+      tags: [wireguard, ingress-tunnel]
 
     - name: Install and configure Caddy
       when: enable_caddy | default(true) | bool

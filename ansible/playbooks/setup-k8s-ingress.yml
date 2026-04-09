@@ -1,0 +1,71 @@
+---
+# K8s Ingress & External Access (Phase 6 of cluster standup)
+#
+# Phase 6 has three parts:
+#   1. WireGuard tunnel (VPS ↔ R730xd) — handled by setup-proxy-vps.yml and
+#      setup-r730xd.yml via the ingress-tunnel role. Run those first.
+#   2. Flux manifests (cert-manager, ingress-nginx) — committed to git under
+#      kubernetes/infrastructure/ and reconciled by Flux automatically.
+#   3. R730xd Prometheus scrape + alert updates — this playbook.
+#
+# This playbook templates the new ingress-nginx and cert-manager target
+# files, re-templates prometheus.yml and the alert rules, and recreates
+# the Prometheus container so the new jobs and rules take effect.
+#
+# Prerequisites:
+#   - Phases 1-5 complete
+#   - Flux has reconciled cert-manager + ingress-nginx HelmReleases to Ready=True
+#     (the Prometheus scrape targets won't have anything to hit otherwise)
+#
+# Usage:
+#   ansible-playbook -i ansible/inventory/r730xd.yml \
+#     ansible/playbooks/setup-k8s-ingress.yml --vault-password-file .vault_pass
+#
+# See: docs/k8s-cluster-standup.md (Phase 6)
+# ADR: 019 (ingress & TLS termination)
+
+- name: Deploy Phase 6 Prometheus targets and alert rules
+  hosts: r730xd
+  gather_facts: no
+
+  vars_files:
+    - "{{ playbook_dir }}/../roles/r730xd-prometheus/defaults/main.yml"
+    - "{{ playbook_dir }}/../inventory/group_vars/all/network.yml"
+
+  tasks:
+    - name: Template ingress-nginx Prometheus targets
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../roles/r730xd-prometheus/templates/targets.d/k8s-ingress-nginx.yml.j2"
+        dest: "/opt/observability/prometheus/targets.d/k8s-ingress-nginx.yml"
+        mode: "0644"
+      become: yes
+
+    - name: Template cert-manager Prometheus targets
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../roles/r730xd-prometheus/templates/targets.d/k8s-cert-manager.yml.j2"
+        dest: "/opt/observability/prometheus/targets.d/k8s-cert-manager.yml"
+        mode: "0644"
+      become: yes
+
+    - name: Re-template Prometheus configuration
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../roles/r730xd-prometheus/templates/prometheus.yml.j2"
+        dest: "/opt/observability/prometheus/prometheus.yml"
+        mode: "0644"
+      become: yes
+      register: prom_config
+
+    - name: Re-template alert rules
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../roles/r730xd-prometheus/templates/rules/homelab.yml.j2"
+        dest: "/opt/observability/prometheus/rules/homelab.yml"
+        mode: "0644"
+      become: yes
+      register: prom_rules
+
+    - name: Recreate Prometheus container if config changed
+      ansible.builtin.command: docker compose up -d --force-recreate prometheus
+      args:
+        chdir: /opt/observability/prometheus
+      become: yes
+      when: prom_config is changed or prom_rules is changed

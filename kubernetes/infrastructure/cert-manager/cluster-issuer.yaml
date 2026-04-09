@@ -1,0 +1,21 @@
+# Self-signed ClusterIssuer — the only issuer installed in Phase 6.
+#
+# TLS termination for external traffic happens at the Hetzner VPS (Caddy +
+# Cloudflare DNS-01 wildcard) per ADR-014 / ADR-019, so nothing in-cluster
+# currently requires a real CA-signed certificate.
+#
+# This issuer exists to:
+#   - Prove cert-manager is installed and functional.
+#   - Satisfy any internal trust needs (webhook TLS, test certs, future
+#     end-to-end TLS for services that opt into it).
+#
+# Let's Encrypt (staging/prod) issuers are deferred until a workload
+# actually needs a browser-trusted certificate — at which point the
+# Cloudflare API token will be seeded into the cert-manager namespace as
+# a Secret and a new ClusterIssuer will be added.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: selfsigned-issuer
+spec:
+  selfSigned: {}

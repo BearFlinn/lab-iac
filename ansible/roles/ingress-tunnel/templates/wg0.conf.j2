@@ -1,0 +1,50 @@
+{#
+  WireGuard config for the ingress tunnel.
+  Managed by Ansible — ansible/roles/ingress-tunnel.
+  See docs/decisions/019-ingress-and-tls-termination.md
+#}
+{% if tunnel_role == "server" %}
+# === VPS side (server) ===
+# R730xd (behind home NAT) initiates the handshake via PersistentKeepalive.
+[Interface]
+Address = {{ wg_vps_ip }}/30
+ListenPort = {{ wg_listen_port }}
+PrivateKey = {{ vault_wg_vps_private_key }}
+MTU = {{ wg_mtu }}
+
+[Peer]
+# R730xd — ingress bridge (temporary until Tower PC router per ADR-001)
+PublicKey = {{ wg_r730xd_public_key }}
+AllowedIPs = {{ wg_r730xd_ip }}/32
+{% else %}
+# === R730xd side (client) ===
+# Initiates the handshake to the VPS and forwards specific ingress ports
+# to a K8s NodePort via iptables DNAT (scoped: only the listed ports,
+# never the whole LAN — see feedback_vps_home_exposure.md).
+[Interface]
+Address = {{ wg_r730xd_ip }}/30
+PrivateKey = {{ vault_wg_r730xd_private_key }}
+MTU = {{ wg_mtu }}
+
+{% for r in ingress_dnat_rules %}
+# {{ r.proto }}/{{ r.port }} -> {{ r.target_ip }}:{{ r.target_port }}
+PostUp = iptables -t nat -A PREROUTING -i %i -p {{ r.proto }} --dport {{ r.port }} -j DNAT --to-destination {{ r.target_ip }}:{{ r.target_port }}
+PostUp = iptables -t nat -A POSTROUTING -d {{ r.target_ip }}/32 -p {{ r.proto }} --dport {{ r.target_port }} -j MASQUERADE
+PostUp = iptables -A FORWARD -i %i -o {{ lan_interface }} -d {{ r.target_ip }}/32 -p {{ r.proto }} --dport {{ r.target_port }} -j ACCEPT
+PostDown = iptables -t nat -D PREROUTING -i %i -p {{ r.proto }} --dport {{ r.port }} -j DNAT --to-destination {{ r.target_ip }}:{{ r.target_port }}
+PostDown = iptables -t nat -D POSTROUTING -d {{ r.target_ip }}/32 -p {{ r.proto }} --dport {{ r.target_port }} -j MASQUERADE
+PostDown = iptables -D FORWARD -i %i -o {{ lan_interface }} -d {{ r.target_ip }}/32 -p {{ r.proto }} --dport {{ r.target_port }} -j ACCEPT
+{% endfor %}
+# Return-path conntrack — must come after per-rule hooks so the reverse
+# iptables -D on PostDown runs in LIFO order.
+PostUp = iptables -A FORWARD -i {{ lan_interface }} -o %i -m state --state ESTABLISHED,RELATED -j ACCEPT
+PostDown = iptables -D FORWARD -i {{ lan_interface }} -o %i -m state --state ESTABLISHED,RELATED -j ACCEPT
+
+[Peer]
+# VPS — fixed public endpoint. We initiate via keepalive because R730xd is
+# behind home NAT.
+PublicKey = {{ wg_vps_public_key }}
+Endpoint = {{ wg_server_endpoint }}
+AllowedIPs = {{ wg_vps_ip }}/32
+PersistentKeepalive = {{ wg_keepalive }}
+{% endif %}

@@ -30,3 +30,9 @@ minio_observability_secret_key: "{{ vault_minio_observability_secret_key }}"
 
 # Alerting — Discord webhook for Alertmanager notifications
 monitoring_discord_webhook_url: "{{ vault_monitoring_discord_webhook_url }}"
+
+# WireGuard ingress tunnel keys (VPS ↔ R730xd)
+# Public keys are safe to expose; private keys stay in vault.yml and are
+# only referenced directly inside the ingress-tunnel role template.
+wg_vps_public_key: "{{ vault_wg_vps_public_key }}"
+wg_r730xd_public_key: "{{ vault_wg_r730xd_public_key }}"

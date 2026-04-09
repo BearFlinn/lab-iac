@@ -198,6 +198,25 @@
         groups: docker
         append: yes
 
+    - name: Configure ingress tunnel (WireGuard client + DNAT to K8s)
+      ansible.builtin.include_role:
+        name: ingress-tunnel
+        apply:
+          tags: [wireguard, ingress-tunnel]
+      vars:
+        tunnel_role: client
+        wg_server_endpoint: "{{ proxy_vps_public_ip }}:{{ wg_port }}"
+        ingress_dnat_rules:
+          - proto: tcp
+            port: 30487
+            target_ip: "{{ dell_inspiron_ip }}"
+            target_port: 30487
+          - proto: tcp
+            port: 30356
+            target_ip: "{{ dell_inspiron_ip }}"
+            target_port: 30356
+      tags: [wireguard, ingress-tunnel]
+
     - name: Display machine info
       ansible.builtin.debug:
         msg:
@@ -210,6 +229,7 @@
           - "OS: {{ ansible_distribution }} {{ ansible_distribution_version }}"
           - "Kernel: {{ ansible_kernel }}"
           - "Swap: enabled (storage server — not a K8s node)"
+          - "Ingress tunnel: wg0 → {{ proxy_vps_public_ip }}:{{ wg_port }}"
 
 - name: R730xd monitoring setup
   hosts: all
