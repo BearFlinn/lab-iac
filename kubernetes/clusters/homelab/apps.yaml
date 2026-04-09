@@ -1,0 +1,23 @@
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: apps
+  namespace: flux-system
+spec:
+  # Applies the per-app Flux GitRepository + Kustomization pairs under
+  # kubernetes/apps/. Each subdir is onboarded via the register-app.yaml
+  # reusable workflow — see docs/decisions/020-app-delivery-model.md.
+  #
+  # wait: false is intentional. Individual app reconciles are independent;
+  # a broken app should not block this parent from reporting Ready.
+  dependsOn:
+    - name: infrastructure
+    - name: cert-manager-issuers
+  interval: 5m
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  path: ./kubernetes/apps
+  prune: true
+  wait: false
+  timeout: 5m

@@ -1,0 +1,216 @@
+name: Register App with Flux
+
+# Reusable workflow: any repo in the grizzly-endeavors org can call this to
+# onboard itself as an app on the homelab K8s cluster. It:
+#   1. Generates a short-lived GitHub App token scoped to lab-iac
+#   2. Verifies the calling repo actually has a deploy/ dir
+#   3. Renders the kubernetes/apps/<app>/ folder from templates
+#   4. Appends the app to kubernetes/apps/kustomization.yaml
+#   5. Validates the rendered manifests with kubectl kustomize
+#   6. Commits to a branch and opens a PR (optionally auto-merging)
+#
+# See docs/decisions/020-app-delivery-model.md for the architecture.
+
+on:
+  workflow_call:
+    inputs:
+      app_name:
+        description: "Short name for the app — used as Flux resource names and folder name under kubernetes/apps/"
+        required: true
+        type: string
+      repo_full_name:
+        description: "Full repo name (e.g. grizzly-endeavors/landing-page). Normally the calling repo."
+        required: true
+        type: string
+      deploy_path:
+        description: "Path to deploy manifests inside the app repo"
+        required: false
+        default: "./deploy"
+        type: string
+      namespace:
+        description: "Kubernetes namespace the app runs in"
+        required: true
+        type: string
+      auto_merge:
+        description: "Auto-merge the onboarding PR (squash) once checks pass"
+        required: false
+        default: true
+        type: boolean
+    secrets:
+      FLUX_OPS_APP_ID:
+        description: "GitHub App ID for grizzly-endeavors-flux-ops"
+        required: true
+      FLUX_OPS_APP_PRIVATE_KEY:
+        description: "GitHub App private key (PEM)"
+        required: true
+
+jobs:
+  register:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Validate inputs
+        env:
+          APP_NAME: ${{ inputs.app_name }}
+          NAMESPACE: ${{ inputs.namespace }}
+        run: |
+          set -euo pipefail
+          # App name must be DNS-1123 compatible (Flux resource names + namespace + folder name)
+          if ! [[ "$APP_NAME" =~ ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$ ]]; then
+            echo "::error::app_name must be lowercase alphanumeric with hyphens (DNS-1123), got: $APP_NAME"
+            exit 1
+          fi
+          if ! [[ "$NAMESPACE" =~ ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$ ]]; then
+            echo "::error::namespace must be DNS-1123 compatible, got: $NAMESPACE"
+            exit 1
+          fi
+
+      - name: Verify deploy path exists in target repo
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ inputs.repo_full_name }}
+          DEPLOY_PATH: ${{ inputs.deploy_path }}
+        run: |
+          set -euo pipefail
+          # Strip leading ./ for the GH API call
+          path_to_check="${DEPLOY_PATH#./}"
+          if ! gh api "repos/$REPO/contents/$path_to_check" >/dev/null 2>&1; then
+            echo "::error::deploy path '$path_to_check' not found in $REPO"
+            echo "Create a deploy/ directory with a Helm chart or Kustomization before running this workflow."
+            exit 1
+          fi
+          echo "Verified $REPO/$path_to_check exists."
+
+      - name: Generate GitHub App token for lab-iac
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.FLUX_OPS_APP_ID }}
+          private-key: ${{ secrets.FLUX_OPS_APP_PRIVATE_KEY }}
+          owner: grizzly-endeavors
+          repositories: lab-iac
+
+      - name: Checkout lab-iac
+        uses: actions/checkout@v4
+        with:
+          repository: grizzly-endeavors/lab-iac
+          token: ${{ steps.app-token.outputs.token }}
+          ref: master
+          persist-credentials: true
+
+      - name: Install mikefarah/yq
+        run: |
+          set -euo pipefail
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+          yq --version
+
+      - name: Render app templates
+        env:
+          APP_NAME: ${{ inputs.app_name }}
+          REPO_FULL_NAME: ${{ inputs.repo_full_name }}
+          DEPLOY_PATH: ${{ inputs.deploy_path }}
+          NAMESPACE: ${{ inputs.namespace }}
+        run: |
+          set -euo pipefail
+          target="kubernetes/apps/${APP_NAME}"
+          if [ -d "$target" ]; then
+            echo "::error::$target already exists — app is already registered. Remove the folder first to re-onboard."
+            exit 1
+          fi
+          mkdir -p "$target"
+          for tmpl in .github/templates/app/*.tmpl; do
+            out="$target/$(basename "${tmpl%.tmpl}")"
+            envsubst < "$tmpl" > "$out"
+          done
+          echo "Rendered files in $target:"
+          ls -la "$target"
+          echo "--- namespace.yaml ---"
+          cat "$target/namespace.yaml"
+          echo "--- source.yaml ---"
+          cat "$target/source.yaml"
+          echo "--- release.yaml ---"
+          cat "$target/release.yaml"
+          echo "--- kustomization.yaml ---"
+          cat "$target/kustomization.yaml"
+
+      - name: Append to kubernetes/apps/kustomization.yaml
+        env:
+          APP_NAME: ${{ inputs.app_name }}
+        run: |
+          set -euo pipefail
+          yq -i '.resources |= ((. // []) + [strenv(APP_NAME)] | unique)' kubernetes/apps/kustomization.yaml
+          echo "--- updated kubernetes/apps/kustomization.yaml ---"
+          cat kubernetes/apps/kustomization.yaml
+
+      - name: Validate with kubectl kustomize
+        run: |
+          set -euo pipefail
+          kubectl kustomize kubernetes/apps/ > /tmp/rendered.yaml
+          echo "kustomize build succeeded — rendered $(wc -l < /tmp/rendered.yaml) lines"
+          echo "--- first 60 lines ---"
+          head -60 /tmp/rendered.yaml
+
+      - name: Configure git identity
+        run: |
+          git config user.name  "grizzly-endeavors-flux-ops[bot]"
+          git config user.email "grizzly-endeavors-flux-ops[bot]@users.noreply.github.com"
+
+      - name: Create branch, commit, push
+        env:
+          APP_NAME: ${{ inputs.app_name }}
+          REPO_FULL_NAME: ${{ inputs.repo_full_name }}
+          DEPLOY_PATH: ${{ inputs.deploy_path }}
+          NAMESPACE: ${{ inputs.namespace }}
+        run: |
+          set -euo pipefail
+          branch="register-app/${APP_NAME}"
+          # Delete remote branch if it exists from a prior failed run
+          git push origin --delete "$branch" 2>/dev/null || true
+          git checkout -b "$branch"
+          git add kubernetes/apps/
+          git commit -m "feat(apps): register ${APP_NAME} with Flux" \
+                     -m "Automated onboarding via .github/workflows/register-app.yaml." \
+                     -m "Source repo: ${REPO_FULL_NAME}" \
+                     -m "Deploy path: ${DEPLOY_PATH}" \
+                     -m "Namespace: ${NAMESPACE}"
+          git push origin "$branch"
+
+      - name: Create PR
+        id: pr
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          APP_NAME: ${{ inputs.app_name }}
+          REPO_FULL_NAME: ${{ inputs.repo_full_name }}
+          DEPLOY_PATH: ${{ inputs.deploy_path }}
+          NAMESPACE: ${{ inputs.namespace }}
+        run: |
+          set -euo pipefail
+          body=$(cat <<EOF
+          Automated onboarding for \`${REPO_FULL_NAME}\` via \`register-app.yaml\`.
+
+          - App name: \`${APP_NAME}\`
+          - Namespace: \`${NAMESPACE}\`
+          - Deploy path: \`${DEPLOY_PATH}\`
+
+          Flux will begin reconciling within 1 minute after merge.
+          EOF
+          )
+          pr_url=$(gh pr create \
+            --repo grizzly-endeavors/lab-iac \
+            --base master \
+            --head "register-app/${APP_NAME}" \
+            --title "feat(apps): register ${APP_NAME}" \
+            --body "$body")
+          echo "pr_url=$pr_url" >> "$GITHUB_OUTPUT"
+          echo "Created PR: $pr_url"
+
+      - name: Enable auto-merge
+        if: ${{ inputs.auto_merge }}
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          set -euo pipefail
+          gh pr merge --auto --squash "${{ steps.pr.outputs.pr_url }}"
+          echo "Auto-merge enabled on ${{ steps.pr.outputs.pr_url }}"

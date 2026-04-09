@@ -158,27 +158,66 @@ Set up nginx-ingress, cert-manager, and wire traffic through the Hetzner VPS so 
 
 ---
 
-## Phase 7: Workload Migration
+## Phase 7: Workload Delivery & Migration
 
-Migrate services from the staging VM to the cluster. One at a time, verify each before moving the next.
+Establish the application delivery model, then migrate services from the staging VM and old cluster. The delivery model is load-bearing — getting it right once means every future deploy is `git push` in the app repo, with no lab-iac changes.
+
+**Delivery model (ADR-020):** each app repo owns its own manifests in a `deploy/` dir. lab-iac tracks each app as a Flux `GitRepository` + `Kustomization` under `kubernetes/apps/<app>/`. Onboarding a new app is automated via a reusable GitHub workflow in lab-iac. Tag bumps happen inside each app repo's CI — no Flux image automation.
+
+### 7a: Platform Setup
+
+Prereqs for the model itself. Done once, before any app migrates.
 
 **Delivers:**
-- Workloads containerized and deployed via Flux (Helm charts or Kustomize)
-- PVCs provisioned for any stateful services
-- DNS / VPS proxy cutover per service
-- Staging VM services shut down as each migration completes
-
-**Services to migrate (order TBD):**
-- landing-page
-- caz-portfolio
-- resume-site
-- Other services from the old cluster (Palworld, GitHub Actions runner, etc.)
+- lab-iac migrated from personal GitHub account to `grizzly-endeavors` org (local remotes updated, CI still passes, existing Flux `GitRepository` source for lab-iac repointed at new URL)
+- GitHub App created and installed org-wide with:
+  - `contents: read` on all repos (Flux uses this to pull app `deploy/` dirs)
+  - `contents: write` + `pull-requests: write` on lab-iac (onboarding workflow uses this)
+- Flux `GitRepository` auth for app repos switched to the GitHub App (replaces any per-repo deploy keys)
+- `kubernetes/apps/` directory created with a `kustomization.yaml` listing app folders
+- `kubernetes/clusters/homelab/apps.yaml` Flux Kustomization added, pointing at `./kubernetes/apps`, with `prune: true`
+- `.github/workflows/register-app.yaml` reusable workflow in lab-iac — accepts inputs (app name, repo, deploy path, namespace, ingress host, etc.), renders the `GitRepository` + `Kustomization` from a template, opens an auto-merging PR on lab-iac
+- `deploy/` template for app repos (Helm chart skeleton) with an example CI tag-bump step and an example `workflow_call` to `register-app.yaml`
 
 **Verify before moving on:**
-- Each service reachable via its production URL
-- Health checks passing
-- Logs in Loki, metrics in Prometheus
-- Rollback plan tested (Flux can revert to previous git commit)
+- `grizzly-endeavors/lab-iac` resolves; `git fetch` works from a fresh clone; CI (lint, `flux check`) passes under the new org
+- Flux is reading from at least one app repo via the GitHub App (test with a throwaway "hello-world" app); no deploy keys in use
+- `flux get kustomizations apps` shows `Ready=True`
+- End-to-end onboarding test: run `register-app.yaml` via `workflow_dispatch` from a scratch repo, PR opens on lab-iac, auto-merges, Flux picks up the app within 2 minutes, pod reaches Ready
+- Reverse test: delete the scratch app's folder from `kubernetes/apps/`, Flux prunes the in-cluster resources
+- Onboarding workflow metrics / logs visible (GitHub Actions UI is fine; no custom dashboard needed)
+- Existing non-app Flux Kustomizations (`infrastructure`, `cert-manager-issuers`) still `Ready=True` after the apps source is added
+
+### 7b: Service Migration
+
+Migrate services one at a time. Each migration exercises the 7a machinery and shakes out any template gaps.
+
+**Services to migrate (landing-page first, rest TBD):**
+- **landing-page** — migrated first because it's the simplest real workload, and the stale link to `bearflinn/lab-iac` on the site is fixed as part of this migration (new URL is `grizzly-endeavors/lab-iac`)
+- caz-portfolio
+- resume-site
+- Other services from the old cluster (Palworld, anything still on the staging VM)
+
+**Per-service delivers:**
+- App repo has a `deploy/` dir with Helm chart
+- App repo CI builds image, bumps tag in `deploy/values.yaml`, commits back with `[skip ci]`
+- App onboarded via `register-app.yaml` (single `workflow_dispatch`)
+- PVCs provisioned for any stateful services (both `iscsi-zfs` and `nfs-mergerfs` StorageClasses available from Phase 3)
+- DNS / VPS Caddy cutover to the cluster ingress
+- Staging VM / old cluster instance of the service shut down
+
+**Verify per service:**
+- Reachable via its production URL with valid TLS (via the Phase 6 VPS → cluster ingress path)
+- Health checks passing (Prometheus scraping `/metrics` if exposed, or blackbox probe against the URL)
+- Pod logs visible in Loki with correct namespace/pod/container labels
+- Flux reconciliation for the app's `Kustomization` is `Ready=True`
+- Rollback tested: `git revert` the most recent deploy-tag-bump commit in the app repo, Flux reconciles back within 2 minutes, old image running
+
+**Verify before closing Phase 7:**
+- All in-scope services migrated; staging VM / old cluster instances shut down
+- No stale DNS or Caddy routes pointing at decommissioned hosts
+- `flux get kustomizations -A` all `Ready=True`
+- All migrated services have at least one dashboard panel and one alert in Grafana (per the observability checklist in `CLAUDE.md`)
 
 ---
 

@@ -6,11 +6,20 @@
 #
 # Prerequisites:
 #   - Phases 1-3 complete (control plane + workers + storage)
-#   - GITHUB_TOKEN env var set (fine-grained PAT: Contents R/W + Administration R/W)
+#   - GITHUB_TOKEN env var set (fine-grained PAT on grizzly-endeavors org:
+#     Contents R/W + Administration R/W) — only required for re-bootstrap
 #   - vault_flux_discord_webhook_url set in vault.yml
+#   - GitHub App credentials in vault (for Phase 7a onwards — Flux runtime auth):
+#       vault_github_app_id
+#       vault_github_app_installation_id
+#       vault_github_app_private_key (multiline PEM)
 #
 # Usage:
-#   GITHUB_TOKEN=ghp_... ansible-playbook ansible/playbooks/setup-k8s-gitops.yml
+#   Full run (bootstrap + secrets):
+#     GITHUB_TOKEN=ghp_... ansible-playbook ansible/playbooks/setup-k8s-gitops.yml
+#
+#   Seed/rotate GitHub App secret only (no bootstrap):
+#     ansible-playbook ansible/playbooks/setup-k8s-gitops.yml --tags github-app-secret
 #
 # Verification (run from jumpbox):
 #   flux check
@@ -18,8 +27,8 @@
 #   kubectl get ds -n monitoring
 #   logcli query '{namespace="flux-system"}' --limit=5
 #
-# See: docs/k8s-cluster-standup.md (Phase 4)
-# ADR: 014 (Flux CD chosen for CLI-first GitOps)
+# See: docs/k8s-cluster-standup.md (Phase 4 + Phase 7a)
+# ADRs: 014 (Flux CD chosen for CLI-first GitOps), 020 (per-repo app delivery)
 
 # ============================================================
 # Play 1: Install Flux CLI
@@ -111,11 +120,10 @@
     - name: Bootstrap Flux with GitHub
       ansible.builtin.command: >
         flux bootstrap github
-        --owner=BearFlinn
+        --owner=grizzly-endeavors
         --repository=lab-iac
         --branch=master
         --path=kubernetes/clusters/homelab
-        --personal
         --reconcile
       environment:
         KUBECONFIG: "{{ kubeconfig }}"
@@ -173,6 +181,66 @@
         KUBECONFIG: "{{ kubeconfig }}"
       changed_when: false
       no_log: true
+
+    # Seeds credentials used by Flux's `provider: github` GitRepository auth.
+    # Keys MUST be exactly githubAppID / githubInstallationID / githubPrivateKey
+    # — Flux fails with opaque auth errors on any other casing. See ADR-020.
+    - name: Seed GitHub App credentials for Flux GitRepository auth
+      tags: github-app-secret
+      block:
+        - name: Create temporary directory for PEM
+          ansible.builtin.tempfile:
+            state: directory
+            suffix: flux-github-app
+          register: pem_tmpdir
+          no_log: true
+
+        - name: Write GitHub App private key to tmp file
+          ansible.builtin.copy:
+            content: "{{ vault_github_app_private_key }}"
+            dest: "{{ pem_tmpdir.path }}/key.pem"
+            mode: "0600"
+          no_log: true
+
+        - name: Create/update github-app-credentials secret
+          ansible.builtin.shell: |
+            kubectl create secret generic github-app-credentials \
+              --from-literal=githubAppID="{{ vault_github_app_id }}" \
+              --from-literal=githubInstallationID="{{ vault_github_app_installation_id }}" \
+              --from-file=githubPrivateKey="{{ pem_tmpdir.path }}/key.pem" \
+              -n flux-system \
+              --dry-run=client -o yaml | kubectl apply -f -
+          environment:
+            KUBECONFIG: "{{ kubeconfig }}"
+          changed_when: false
+          no_log: true
+
+        - name: Verify secret has correct keys
+          ansible.builtin.command: >
+            kubectl get secret github-app-credentials -n flux-system
+            -o jsonpath={.data}
+          environment:
+            KUBECONFIG: "{{ kubeconfig }}"
+          changed_when: false
+          register: secret_check
+
+        - name: Assert all three keys present
+          ansible.builtin.assert:
+            that:
+              - "'githubAppID' in secret_check.stdout"
+              - "'githubInstallationID' in secret_check.stdout"
+              - "'githubPrivateKey' in secret_check.stdout"
+            fail_msg: >
+              github-app-credentials secret is missing one or more required keys.
+              Flux's provider: github expects exactly: githubAppID, githubInstallationID, githubPrivateKey.
+            success_msg: "github-app-credentials secret has all required keys"
+      always:
+        - name: Remove temporary PEM file
+          ansible.builtin.file:
+            path: "{{ pem_tmpdir.path }}"
+            state: absent
+          when: pem_tmpdir is defined and pem_tmpdir.path is defined
+          no_log: true
 
     - name: Create NodePort services for Flux controller metrics
       ansible.builtin.shell: |
