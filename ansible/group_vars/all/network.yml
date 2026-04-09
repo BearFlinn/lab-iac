@@ -20,7 +20,8 @@ dell_inspiron_ip: "10.0.0.226"
 intel_nuc_ip: "10.0.0.46"
 tower_pc_ip: "10.0.0.249"
 optiplex_ip: "10.0.0.187"
-staging_vm_ip: "192.168.122.191"
+# staging_vm_ip removed 2026-04-09 — staging VM decommissioned after
+# Phase 7b migration; see ADR-002 (Superseded) and archive/staging-vm/.
 
 # External / VPN
 proxy_vps_public_ip: "178.156.217.91"

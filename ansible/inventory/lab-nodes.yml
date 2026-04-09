@@ -68,22 +68,10 @@ all:
           ram_gb: 32
           node_roles: ["storage", "vm-host"]
 
-    # Temporary staging VM on R730xd — hosts critical workloads during migration
-    # See ADR-002. Remove after migration Phase 5.
-    # VM is on NAT network, reachable via R730xd jump host
-    staging:
-      hosts:
-        staging-vm:
-          ansible_host: "{{ staging_vm_ip }}"
-          ansible_ssh_common_args: '-o ProxyJump=bearf@{{ r730xd_ip }}'
-          node_roles: ["staging"]
-          # Monitoring — VM has no IPMI/BMC or SMART-capable disks
-          ipmi_exporter_enabled: false
-          smartd_enabled: false
-          monitoring_required_services:
-            - "prometheus-node-exporter"
-            - "docker"
-          monitoring_optional_services: []
+    # (staging VM removed 2026-04-09 after Phase 7b migrated landing-page,
+    # caz-portfolio, and resume-site onto the new K8s cluster. See
+    # archive/staging-vm/ for the historical create/deploy/destroy
+    # playbooks. ADR-002 is Superseded.)
 
   vars:
     ansible_user: bearf

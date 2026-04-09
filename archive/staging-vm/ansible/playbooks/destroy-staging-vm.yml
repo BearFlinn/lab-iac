@@ -1,0 +1,75 @@
+---
+# destroy-staging-vm.yml — Tear down the temporary staging VM
+#
+# The staging VM (ADR-002) hosted critical workloads during the K8s cluster
+# rebuild. After Phase 7b migrates landing-page, caz-portfolio, and
+# resume-site onto the new cluster, the VM has nothing left to do and its
+# disk (~20GB) can be reclaimed.
+#
+# This playbook is IRREVERSIBLE — it removes the VM's definition AND its
+# storage. The create-staging-vm.yml companion playbook can rebuild the VM
+# from scratch if ever needed again, at the cost of re-running the
+# deploy-staging-services flow.
+#
+# Prerequisites:
+#   - All services previously hosted on the staging VM are verified live
+#     on their production URLs from somewhere else (K8s cluster).
+#   - User has explicitly confirmed they want the VM destroyed.
+#
+# Usage:
+#   ansible-playbook -i ansible/inventory/lab-nodes.yml \
+#     ansible/playbooks/destroy-staging-vm.yml
+#
+# See: ADR-002 (staging VM), docs/k8s-cluster-standup.md (Phase 7b.4)
+
+- name: Destroy staging VM on R730xd
+  hosts: r730xd
+  become: yes
+  gather_facts: no
+
+  vars:
+    staging_vm_name: "staging-vm"
+
+  tasks:
+    - name: Check if staging VM is defined
+      ansible.builtin.command: virsh domstate {{ staging_vm_name }}
+      register: domstate
+      changed_when: false
+      failed_when: false
+
+    - name: Note absent VM and exit
+      when: domstate.rc != 0
+      ansible.builtin.debug:
+        msg: "staging-vm is not defined on this host — nothing to do."
+
+    - name: Confirm the VM still exists before tearing it down
+      when: domstate.rc == 0
+      ansible.builtin.debug:
+        msg: "staging-vm current state: {{ domstate.stdout | trim }}"
+
+    - name: Force-stop the staging VM
+      when: domstate.rc == 0 and (domstate.stdout | trim) != 'shut off'
+      ansible.builtin.command: virsh destroy {{ staging_vm_name }}
+      register: vm_destroy
+      changed_when: vm_destroy.rc == 0
+
+    - name: Remove the VM definition and its storage
+      when: domstate.rc == 0
+      ansible.builtin.command: virsh undefine {{ staging_vm_name }} --remove-all-storage --nvram
+      register: vm_undefine
+      changed_when: vm_undefine.rc == 0
+
+    - name: Verify staging VM is gone
+      ansible.builtin.command: virsh domstate {{ staging_vm_name }}
+      register: domstate_after
+      changed_when: false
+      failed_when: domstate_after.rc == 0
+
+    - name: Summary
+      ansible.builtin.debug:
+        msg:
+          - "=== staging-vm decommissioned ==="
+          - "virsh domstate now returns nonzero (VM no longer defined)."
+          - "Storage reclaimed; follow-up: remove staging-vm from"
+          - "ansible/inventory/lab-nodes.yml and archive"
+          - "ansible/playbooks/{create,deploy}-staging-*.yml."
