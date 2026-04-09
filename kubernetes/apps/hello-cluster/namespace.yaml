@@ -1,7 +1,0 @@
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: hello-cluster
-  labels:
-    app.kubernetes.io/name: hello-cluster
-    app.kubernetes.io/managed-by: flux
