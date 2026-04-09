@@ -61,7 +61,26 @@ spec:
         containers:
           - name: runner
             image: ghcr.io/actions/actions-runner:latest
-            command: ["/home/runner/run.sh"]
+            # Wait for the dind sidecar to open its socket before starting
+            # the GitHub Actions runner. Both containers start in parallel
+            # in a pod, so without this wait the runner can start before
+            # dockerd is accepting connections and any `docker ...` command
+            # in the workflow fails immediately with "no such file or directory".
+            command:
+              - /bin/bash
+              - -c
+              - |
+                set -e
+                echo "Waiting for dind sidecar to open docker.sock..."
+                for i in $(seq 1 60); do
+                  if docker info >/dev/null 2>&1; then
+                    echo "dind ready after ${i}s"
+                    break
+                  fi
+                  sleep 1
+                done
+                docker info >/dev/null || { echo "dind never came up"; exit 1; }
+                exec /home/runner/run.sh
             env:
               - name: DOCKER_HOST
                 value: unix:///run/docker/docker.sock
