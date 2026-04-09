@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: registry
+  namespace: registry
+  labels:
+    app.kubernetes.io/name: registry
+spec:
+  # NodePort (not ClusterIP) so containerd on each node can pull from
+  # localhost:30500 via a registry-mirror entry in
+  # /etc/containerd/certs.d. ARC runners (inside pods) still reach the
+  # registry via the ClusterIP path at registry.registry.svc.cluster.local:5000.
+  # See ansible/roles/k8s-registry-trust/ for the node-side containerd config.
+  type: NodePort
+  selector:
+    app.kubernetes.io/name: registry
+  ports:
+    - name: http
+      port: 5000
+      targetPort: http
+      nodePort: 30500
+      protocol: TCP

@@ -23,8 +23,13 @@ spec:
     runnerScaleSetName: "lab-runners"
     minRunners: 0
     maxRunners: 4
-    containerMode:
-      type: "dind"
+    # NOTE: we do NOT use `containerMode.type: dind` — that shortcut would
+    # inject a default dind sidecar whose dockerd has no insecure-registry
+    # config, which prevents pushing to the in-cluster OCI registry at
+    # registry.registry.svc.cluster.local:5000 (served over plain HTTP, see
+    # kubernetes/infrastructure/registry/). Instead we define both runner
+    # and dind containers explicitly below, with --insecure-registry on
+    # dockerd's args.
     listenerMetrics:
       counters:
         gha_started_jobs_total:
@@ -46,9 +51,20 @@ spec:
           labels: ["name", "namespace"]
     template:
       spec:
+        initContainers:
+          - name: init-dind-externals
+            image: ghcr.io/actions/actions-runner:latest
+            command: ["cp", "-r", "-v", "/home/runner/externals/.", "/home/runner/tmpDir/"]
+            volumeMounts:
+              - name: dind-externals
+                mountPath: /home/runner/tmpDir
         containers:
           - name: runner
             image: ghcr.io/actions/actions-runner:latest
+            command: ["/home/runner/run.sh"]
+            env:
+              - name: DOCKER_HOST
+                value: unix:///run/docker/docker.sock
             resources:
               limits:
                 cpu: "2"
@@ -56,3 +72,37 @@ spec:
               requests:
                 cpu: "1"
                 memory: 2Gi
+            volumeMounts:
+              - name: work
+                mountPath: /home/runner/_work
+              - name: dind-sock
+                mountPath: /run/docker
+                readOnly: true
+          - name: dind
+            image: docker:dind
+            args:
+              - dockerd
+              - --host=unix:///run/docker/docker.sock
+              - --group=$(DOCKER_GROUP_GID)
+              # Allow pushing to the in-cluster OCI registry over plain HTTP.
+              # Matches kubernetes/infrastructure/registry/service.yaml.
+              - --insecure-registry=registry.registry.svc.cluster.local:5000
+            env:
+              - name: DOCKER_GROUP_GID
+                value: "123"
+            securityContext:
+              privileged: true
+            volumeMounts:
+              - name: work
+                mountPath: /home/runner/_work
+              - name: dind-sock
+                mountPath: /run/docker
+              - name: dind-externals
+                mountPath: /home/runner/externals
+        volumes:
+          - name: work
+            emptyDir: {}
+          - name: dind-sock
+            emptyDir: {}
+          - name: dind-externals
+            emptyDir: {}

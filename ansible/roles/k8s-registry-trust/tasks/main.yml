@@ -1,0 +1,86 @@
+---
+# Configure containerd on every K8s node to pull from the in-cluster OCI
+# registry via a localhost NodePort mirror. The registry's image reference
+# uses a ClusterDNS name that containerd can't resolve from the host, so we
+# rewrite it at pull time.
+#
+# Changes here require a containerd restart (only the first time, to pick up
+# `config_path`). Subsequent hosts.toml changes are re-read live.
+
+# ==========================================================================
+# Enable containerd's hosts.toml config directory
+# ==========================================================================
+
+- name: Check current containerd config_path setting
+  ansible.builtin.command: grep -E '^\s*config_path\s*=' /etc/containerd/config.toml
+  register: containerd_config_path_check
+  changed_when: false
+  failed_when: false
+  become: yes
+
+- name: Enable hosts.toml config_path in containerd config.toml
+  # The default Debian config.toml contains an empty config_path = "" line
+  # inside [plugins."io.containerd.grpc.v1.cri".registry]. Replace it with
+  # the directory we want containerd to read per-host settings from.
+  ansible.builtin.replace:
+    path: /etc/containerd/config.toml
+    regexp: '^(\s*)config_path\s*=\s*""'
+    replace: '\1config_path = "/etc/containerd/certs.d"'
+  when: '"/etc/containerd/certs.d" not in containerd_config_path_check.stdout'
+  become: yes
+  notify: Restart containerd
+
+# ==========================================================================
+# Write the registry-mirror hosts.toml
+# ==========================================================================
+
+- name: Ensure certs.d directory exists for the in-cluster registry
+  ansible.builtin.file:
+    path: "/etc/containerd/certs.d/{{ k8s_registry_host }}"
+    state: directory
+    mode: "0755"
+  become: yes
+
+- name: Write hosts.toml redirecting in-cluster registry to localhost NodePort
+  ansible.builtin.copy:
+    dest: "/etc/containerd/certs.d/{{ k8s_registry_host }}/hosts.toml"
+    mode: "0644"
+    content: |
+      # Managed by ansible/roles/k8s-registry-trust.
+      #
+      # Image references embedded in pod manifests use
+      #   {{ k8s_registry_host }}/<image>:<tag>
+      # which is a ClusterDNS name containerd can't resolve from the host.
+      # Redirect every pull to the Service's NodePort on localhost; kube-proxy
+      # routes the request into the cluster regardless of which node runs the
+      # registry pod.
+      server = "http://{{ k8s_registry_host }}"
+
+      [host."http://localhost:{{ k8s_registry_nodeport }}"]
+        capabilities = ["pull", "resolve"]
+        override_path = true
+  become: yes
+
+# ==========================================================================
+# Verify
+# ==========================================================================
+
+- name: Flush handlers so containerd restarts before probe
+  ansible.builtin.meta: flush_handlers
+
+- name: Verify containerd is running after config change
+  ansible.builtin.systemd:
+    name: containerd
+  register: containerd_state
+  failed_when: containerd_state.status.ActiveState != 'active'
+  become: yes
+
+- name: Display containerd registry trust summary
+  ansible.builtin.debug:
+    msg:
+      - "=== containerd registry trust ==="
+      - "Image ref host:  {{ k8s_registry_host }}"
+      - "Mirror target:   http://localhost:{{ k8s_registry_nodeport }}"
+      - "hosts.toml:      /etc/containerd/certs.d/{{ k8s_registry_host }}/hosts.toml"
+      - "Note: new hosts.toml files are re-read on every pull. Changing the"
+      - "      containerd main config.toml (e.g. config_path) requires restart."

@@ -1,0 +1,17 @@
+---
+# k8s-registry-trust — make the in-cluster OCI registry pullable by containerd
+#
+# The in-cluster registry lives at registry.registry.svc.cluster.local:5000
+# (ClusterIP) with a NodePort exposed on every node at 30500. Pods push to it
+# via ClusterDNS, but containerd on the host can't resolve ClusterDNS names —
+# so this role configures a registry-mirror in containerd's hosts.toml that
+# rewrites the image reference to http://localhost:30500 at pull time.
+#
+# See kubernetes/infrastructure/registry/ for the cluster-side deployment.
+
+# Image-reference hostname used in pod manifests. Must match the registry
+# Service DNS name + port.
+k8s_registry_host: "registry.registry.svc.cluster.local:5000"
+
+# NodePort the registry Service exposes on every node.
+k8s_registry_nodeport: 30500

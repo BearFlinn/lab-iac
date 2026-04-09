@@ -1,0 +1,28 @@
+---
+# Configure containerd on every K8s node to pull from the in-cluster OCI
+# registry via a localhost NodePort mirror.
+#
+# Run this AFTER the registry Deployment is Ready in the cluster
+# (kubectl get deploy -n registry → 1/1). The first run restarts containerd
+# on each node, which briefly disrupts pod lifecycles on that node — run
+# against control plane and workers sequentially, not in parallel, if you
+# want to preserve tight SLO-style availability.
+#
+# Usage:
+#   ansible-playbook -i ansible/inventory/lab-nodes.yml \
+#     ansible/playbooks/setup-k8s-registry-trust.yml
+#
+# See:
+#   kubernetes/infrastructure/registry/      — cluster-side registry
+#   ansible/roles/k8s-registry-trust/        — the role this playbook invokes
+#   docs/decisions/020-app-delivery-model.md — delivery model context
+#   docs/k8s-cluster-standup.md              — Phase 7b registry detour
+
+- name: Configure containerd to trust the in-cluster OCI registry
+  hosts: k8s_cluster
+  become: yes
+  gather_facts: yes
+  serial: 1  # roll one node at a time to avoid a cluster-wide containerd blip
+
+  roles:
+    - k8s-registry-trust
