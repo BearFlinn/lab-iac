@@ -32,6 +32,7 @@ prometheus_scrape_interval: "15s"
 prometheus_evaluation_interval: "15s"
 
 # Scrape targets — node_exporter
+# (staging-vm entry removed 2026-04-09 with ADR-002 teardown.)
 prometheus_node_targets:
   - target: "{{ r730xd_ip }}:9100"
     labels:
@@ -39,9 +40,6 @@ prometheus_node_targets:
   - target: "{{ proxy_vps_public_ip }}:9100"
     labels:
       instance: "proxy-vps"
-  - target: "{{ staging_vm_ip }}:9100"
-    labels:
-      instance: "staging-vm"
 
 # Scrape targets — ipmi_exporter
 prometheus_ipmi_targets:

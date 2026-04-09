@@ -554,3 +554,64 @@ groups:
           summary: >-
             Container {{ '{{' }} $labels.name {{ '}}' }} restarted
             {{ '{{' }} $value {{ '}}' }} times in 15 minutes
+
+  # Phase 7b app-level alerts. One pair per service:
+  #   - <App>IngressErrors  — 5xx ratio > 1% for 5m (ingress-nginx host label)
+  #   - <App>Down           — Deployment has zero Available replicas for 2m
+  # Hosts are matched against ingress-nginx's `host` label, which comes
+  # from the Ingress resource (see the respective app's deploy/values.yaml).
+  - name: apps
+    rules:
+      - alert: LandingPageIngressErrors
+        expr: |
+          sum(rate(nginx_ingress_controller_requests{host="landing.bearflinn.com",status=~"5.."}[5m]))
+            / clamp_min(sum(rate(nginx_ingress_controller_requests{host="landing.bearflinn.com"}[5m])), 1e-9) > 0.01
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "landing.bearflinn.com 5xx rate > 1% for 5m"
+
+      - alert: LandingPageDown
+        expr: kube_deployment_status_replicas_available{namespace="landing-page",deployment="landing-page"} < 1
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "landing-page has no available replicas"
+
+      - alert: CazPortfolioIngressErrors
+        expr: |
+          sum(rate(nginx_ingress_controller_requests{host=~"(www\\.)?pennydreadfulsfx\\.com",status=~"5.."}[5m]))
+            / clamp_min(sum(rate(nginx_ingress_controller_requests{host=~"(www\\.)?pennydreadfulsfx\\.com"}[5m])), 1e-9) > 0.01
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "pennydreadfulsfx.com 5xx rate > 1% for 5m"
+
+      - alert: CazPortfolioDown
+        expr: kube_deployment_status_replicas_available{namespace="caz-portfolio",deployment="caz-portfolio"} < 1
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "caz-portfolio has no available replicas"
+
+      - alert: ResumeSiteIngressErrors
+        expr: |
+          sum(rate(nginx_ingress_controller_requests{host="resume.bearflinn.com",status=~"5.."}[5m]))
+            / clamp_min(sum(rate(nginx_ingress_controller_requests{host="resume.bearflinn.com"}[5m])), 1e-9) > 0.01
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "resume.bearflinn.com 5xx rate > 1% for 5m"
+
+      - alert: ResumeSiteDown
+        expr: kube_deployment_status_replicas_available{namespace="resume-site",deployment="resume-site"} < 1
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "resume-site has no available replicas"

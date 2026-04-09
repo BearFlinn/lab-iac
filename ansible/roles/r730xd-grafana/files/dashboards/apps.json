@@ -1,0 +1,95 @@
+{
+  "uid": "apps-overview",
+  "title": "K8s Apps (Phase 7b)",
+  "tags": ["apps", "ingress-nginx"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "templating": { "list": [] },
+  "annotations": { "list": [] },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Request rate by host",
+      "description": "requests/sec observed by ingress-nginx, grouped by Host header. Covers landing.bearflinn.com, pennydreadfulsfx.com + www, resume.bearflinn.com.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "color": { "mode": "palette-classic" },
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10 }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "expr": "sum by (host) (rate(nginx_ingress_controller_requests{host=~\"landing.bearflinn.com|resume.bearflinn.com|(www\\\\.)?pennydreadfulsfx\\\\.com\"}[5m]))",
+          "legendFormat": "{{host}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "5xx rate by host",
+      "description": "5xx-status responses per second. Alert LandingPageIngressErrors / CazPortfolioIngressErrors / ResumeSiteIngressErrors fire when the 5xx ratio is > 1% for 5m.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 0, "y": 8, "w": 24, "h": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "color": { "mode": "palette-classic" },
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10 }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "expr": "sum by (host) (rate(nginx_ingress_controller_requests{host=~\"landing.bearflinn.com|resume.bearflinn.com|(www\\\\.)?pennydreadfulsfx\\\\.com\",status=~\"5..\"}[5m]))",
+          "legendFormat": "{{host}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "p95 latency by host",
+      "description": "95th percentile request latency (seconds), measured by ingress-nginx's request_duration histogram.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 0, "y": 16, "w": 24, "h": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": { "mode": "palette-classic" },
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10 }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (host, le) (rate(nginx_ingress_controller_request_duration_seconds_bucket{host=~\"landing.bearflinn.com|resume.bearflinn.com|(www\\\\.)?pennydreadfulsfx\\\\.com\"}[5m])))",
+          "legendFormat": "{{host}}",
+          "refId": "A"
+        }
+      ]
+    }
+  ]
+}
