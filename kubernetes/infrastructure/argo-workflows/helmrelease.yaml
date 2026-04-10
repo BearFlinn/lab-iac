@@ -27,6 +27,8 @@ spec:
       workflowDefaults:
         spec:
           serviceAccountName: argo-workflow
+          podGC:
+            strategy: OnPodCompletion
       extraEnv:
         - name: OTEL_EXPORTER_OTLP_ENDPOINT
           value: "http://10.0.0.200:4317"
