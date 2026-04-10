@@ -4,7 +4,7 @@
 # IP addresses: see ansible/group_vars/all/network.yml (single source of truth)
 
 # Kubernetes minor version — latest patch installed automatically
-kubernetes_version: "1.32"
+kubernetes_version: "1.33"
 
 # Pod network CIDRs (dual-stack)
 k8s_pod_cidr_v4: "10.244.0.0/16"

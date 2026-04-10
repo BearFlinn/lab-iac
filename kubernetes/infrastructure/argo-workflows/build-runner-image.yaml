@@ -1,0 +1,65 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: build-runner-image
+  namespace: argo
+spec:
+  entrypoint: build
+  arguments:
+    parameters:
+      - name: git-ref
+        value: master
+  volumeClaimTemplates:
+    - metadata:
+        name: workspace
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: iscsi-zfs
+        resources:
+          requests:
+            storage: 10Gi
+  templates:
+    - name: build
+      steps:
+        - - name: clone
+            template: git-clone
+        - - name: build-push
+            template: kaniko
+
+    - name: git-clone
+      inputs:
+        parameters:
+          - name: git-ref
+            value: "{{workflow.parameters.git-ref}}"
+      container:
+        image: alpine/git:latest
+        command: [sh, -c]
+        args:
+          - |
+            git clone --depth 1 --branch {{inputs.parameters.git-ref}} \
+              https://github.com/grizzly-endeavors/lab-iac.git /workspace/src
+        volumeMounts:
+          - name: workspace
+            mountPath: /workspace
+
+    - name: kaniko
+      container:
+        image: gcr.io/kaniko-project/executor:latest
+        args:
+          - --context=/workspace/src/docker/github-runner
+          - --dockerfile=/workspace/src/docker/github-runner/Dockerfile
+          - --destination=registry.registry.svc.cluster.local:5000/github-runner:latest
+          - --destination=registry.registry.svc.cluster.local:5000/github-runner:{{workflow.uid}}
+          - --insecure
+          - --cache=true
+          - --cache-repo=registry.registry.svc.cluster.local:5000/github-runner/cache
+        volumeMounts:
+          - name: workspace
+            mountPath: /workspace
+        resources:
+          requests:
+            cpu: "2"
+            memory: 4Gi
+          limits:
+            cpu: "4"
+            memory: 8Gi

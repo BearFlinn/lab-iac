@@ -8,6 +8,9 @@ spec:
   chart:
     spec:
       chart: argo-workflows
+      # TODO(phase-8d): Bump to chart shipping app v4.1.0+ when released.
+      # Trace spans require v4.1.0+ (PR #15585). OTLP env vars below are
+      # already configured; only the version bump is needed for spans to flow.
       version: "1.0.7"
       sourceRef:
         kind: HelmRepository
@@ -21,6 +24,9 @@ spec:
         enabled: true
         path: /metrics
         port: 9090
+      workflowDefaults:
+        spec:
+          serviceAccountName: argo-workflow
       extraEnv:
         - name: OTEL_EXPORTER_OTLP_ENDPOINT
           value: "http://10.0.0.200:4317"
@@ -49,6 +55,7 @@ spec:
     workflow:
       serviceAccount:
         create: true
+        name: argo-workflow
       rbac:
         create: true
     artifactRepository:

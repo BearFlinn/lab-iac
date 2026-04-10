@@ -4,7 +4,7 @@
 # Replaces kube-proxy with Cilium's eBPF datapath (ADR-014).
 
 # Cilium version — check https://github.com/cilium/cilium/releases
-cilium_version: "1.17.2"
+cilium_version: "1.18.8"
 cilium_helm_repo: "https://helm.cilium.io/"
 
 # Hubble flow observability

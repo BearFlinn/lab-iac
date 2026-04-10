@@ -7,3 +7,4 @@ resources:
   - runner-scale-set-helmrelease.yaml
   - metrics-service.yaml
   - network-policy.yaml
+  - limitrange.yaml

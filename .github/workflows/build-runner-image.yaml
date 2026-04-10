@@ -1,0 +1,76 @@
+name: Build Custom Runner Image
+
+# Triggers an Argo Workflows build when the runner Dockerfile changes.
+# The actual build runs in-cluster via Kaniko (see
+# kubernetes/infrastructure/argo-workflows/build-runner-image.yaml).
+#
+# Bootstrap: the first build must be run manually because this workflow
+# needs self-hosted runners that don't exist yet:
+#   argo submit --from workflowtemplate/build-runner-image -n argo
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "docker/github-runner/**"
+  workflow_dispatch: {}
+
+jobs:
+  trigger-build:
+    runs-on: self-hosted
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Submit Argo WorkflowTemplate
+        env:
+          ARGO_SERVER: "http://argo-argo-workflows-server.argo.svc.cluster.local:2746"
+        run: |
+          set -euo pipefail
+
+          echo "Submitting build-runner-image WorkflowTemplate..."
+          RESPONSE=$(curl -sf -X POST \
+            "${ARGO_SERVER}/api/v1/workflows/argo" \
+            -H 'Content-Type: application/json' \
+            -d '{
+              "resourceKind": "WorkflowTemplate",
+              "resourceName": "build-runner-image",
+              "submitOptions": {
+                "parameters": ["git-ref='"${GITHUB_SHA}"'"]
+              }
+            }')
+
+          WORKFLOW_NAME=$(echo "$RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin)['metadata']['name'])")
+          echo "Workflow submitted: ${WORKFLOW_NAME}"
+          echo "workflow_name=${WORKFLOW_NAME}" >> "$GITHUB_OUTPUT"
+
+          # Poll until the workflow completes (timeout after 30 minutes)
+          TIMEOUT=1800
+          ELAPSED=0
+          while [ "$ELAPSED" -lt "$TIMEOUT" ]; do
+            STATUS=$(curl -sf "${ARGO_SERVER}/api/v1/workflows/argo/${WORKFLOW_NAME}" \
+              | python3 -c "import sys,json; w=json.load(sys.stdin); print(w.get('status',{}).get('phase','Unknown'))")
+
+            echo "  ${ELAPSED}s — status: ${STATUS}"
+            case "$STATUS" in
+              Succeeded) echo "Build succeeded."; exit 0 ;;
+              Failed|Error) echo "::error::Argo workflow ${WORKFLOW_NAME} ${STATUS}"; exit 1 ;;
+            esac
+
+            sleep 15
+            ELAPSED=$((ELAPSED + 15))
+          done
+
+          echo "::error::Timed out waiting for workflow ${WORKFLOW_NAME}"
+          exit 1
+
+      # Export workflow run as an OTLP trace to Tempo.
+      # Runs as a post-job step so it captures the full workflow duration.
+      - name: Export trace to Tempo
+        if: always()
+        uses: inception-health/otel-export-trace-action@v1
+        with:
+          otlpEndpoint: grpc://10.0.0.200:4317/
+          otlpHeaders: ""
+          githubToken: ${{ secrets.GITHUB_TOKEN }}
+          otelServiceName: arc-workflows

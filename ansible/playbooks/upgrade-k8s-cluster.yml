@@ -1,0 +1,398 @@
+---
+# K8s Cluster Version Upgrade
+#
+# Upgrades kubeadm, kubelet, kubectl, and the cluster components to the
+# version specified by `kubernetes_version` in group_vars/k8s_cluster/k8s.yml.
+# Also upgrades Cilium to the version specified by `cilium_version` in
+# roles/k8s-cilium/defaults/main.yml.
+#
+# Sequence: control plane first, then workers one at a time (serial: 1).
+# Single control plane (ADR-016) means brief API downtime during Play 1.
+#
+# Prerequisites:
+#   - Update `kubernetes_version` in ansible/inventory/group_vars/k8s_cluster/k8s.yml
+#   - Update `cilium_version` in ansible/roles/k8s-cilium/defaults/main.yml (if needed)
+#   - Verify Cilium version supports the target K8s version
+#
+# Usage:
+#   ansible-playbook ansible/playbooks/upgrade-k8s-cluster.yml
+#
+# Verification:
+#   kubectl get nodes         # all at new version, all Ready
+#   kubectl get pods -n kube-system
+#   cilium status
+#   flux check
+
+# ============================================================
+# Play 1: Upgrade Control Plane
+# ============================================================
+- name: Upgrade control plane packages and components
+  hosts: k8s_control_plane
+  gather_facts: yes
+  become: yes
+
+  tasks:
+    # --- Pre-flight ---
+    - name: Record current kubelet version
+      ansible.builtin.command: kubelet --version
+      changed_when: false
+      register: kubelet_before
+
+    - name: Display pre-upgrade version
+      ansible.builtin.debug:
+        msg: "Current: {{ kubelet_before.stdout }} → Target: v{{ kubernetes_version }}.x"
+
+    # --- Switch apt repo to new version ---
+    - name: Remove old Kubernetes GPG keyring
+      ansible.builtin.file:
+        path: /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+        state: absent
+
+    - name: Download GPG key for new version
+      ansible.builtin.get_url:
+        url: "https://pkgs.k8s.io/core:/stable:/v{{ kubernetes_version }}/deb/Release.key"
+        dest: /tmp/kubernetes-release.key
+        mode: "0644"
+        timeout: 60
+      retries: 3
+      delay: 5
+      register: gpg_download
+      until: gpg_download is succeeded
+
+    - name: Install new GPG key to keyring
+      ansible.builtin.shell: gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg < /tmp/kubernetes-release.key
+      args:
+        creates: /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+
+    - name: Clean up GPG key download
+      ansible.builtin.file:
+        path: /tmp/kubernetes-release.key
+        state: absent
+
+    - name: Update apt repository to new version
+      ansible.builtin.apt_repository:
+        repo: "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v{{ kubernetes_version }}/deb/ /"
+        filename: kubernetes
+        state: present
+
+    # --- Upgrade kubeadm first ---
+    - name: Unhold kubeadm
+      ansible.builtin.dpkg_selections:
+        name: kubeadm
+        selection: install
+
+    - name: Install latest kubeadm for target version
+      ansible.builtin.apt:
+        name: kubeadm
+        state: latest
+        update_cache: yes
+
+    - name: Hold kubeadm
+      ansible.builtin.dpkg_selections:
+        name: kubeadm
+        selection: hold
+
+    # --- kubeadm upgrade ---
+    - name: Get target kubeadm version
+      ansible.builtin.command: kubeadm version -o short
+      changed_when: false
+      register: kubeadm_version
+
+    - name: Display kubeadm upgrade plan
+      ansible.builtin.command: kubeadm upgrade plan
+      changed_when: false
+      register: upgrade_plan
+
+    - name: Show upgrade plan
+      ansible.builtin.debug:
+        var: upgrade_plan.stdout_lines
+
+    - name: Apply kubeadm upgrade
+      ansible.builtin.command: "kubeadm upgrade apply {{ kubeadm_version.stdout }} --yes"
+      register: upgrade_result
+
+    - name: Display upgrade result
+      ansible.builtin.debug:
+        var: upgrade_result.stdout_lines
+
+    # --- Upgrade kubelet + kubectl ---
+    - name: Unhold kubelet and kubectl
+      ansible.builtin.dpkg_selections:
+        name: "{{ item }}"
+        selection: install
+      loop:
+        - kubelet
+        - kubectl
+
+    - name: Install latest kubelet and kubectl for target version
+      ansible.builtin.apt:
+        name:
+          - kubelet
+          - kubectl
+        state: latest
+        update_cache: yes
+
+    - name: Hold kubelet and kubectl
+      ansible.builtin.dpkg_selections:
+        name: "{{ item }}"
+        selection: hold
+      loop:
+        - kubelet
+        - kubectl
+
+    - name: Restart kubelet
+      ansible.builtin.systemd:
+        name: kubelet
+        state: restarted
+        daemon_reload: yes
+
+    # --- Wait for CP to recover ---
+    - name: Wait for API server to be ready
+      ansible.builtin.command: kubectl cluster-info
+      environment:
+        KUBECONFIG: "/home/{{ ansible_user }}/.kube/config"
+      retries: 30
+      delay: 5
+      register: api_ready
+      until: api_ready.rc == 0
+      changed_when: false
+      become: no
+
+    - name: Wait for control plane node Ready
+      ansible.builtin.command: >
+        kubectl wait --for=condition=Ready
+        node/{{ inventory_hostname }} --timeout=120s
+      environment:
+        KUBECONFIG: "/home/{{ ansible_user }}/.kube/config"
+      changed_when: false
+      become: no
+
+    - name: Record post-upgrade version
+      ansible.builtin.command: kubelet --version
+      changed_when: false
+      register: kubelet_after
+
+    - name: Display control plane upgrade summary
+      ansible.builtin.debug:
+        msg:
+          - "=== Control Plane Upgraded ==="
+          - "Before: {{ kubelet_before.stdout }}"
+          - "After:  {{ kubelet_after.stdout }}"
+
+# ============================================================
+# Play 2: Upgrade Cilium CNI
+# ============================================================
+- name: Upgrade Cilium CNI
+  hosts: k8s_control_plane
+  gather_facts: no
+
+  vars:
+    kubectl_env:
+      KUBECONFIG: "/home/{{ ansible_user }}/.kube/config"
+
+  roles:
+    - k8s-cilium
+
+# ============================================================
+# Play 3: Upgrade Workers (one at a time)
+# ============================================================
+- name: Upgrade worker nodes
+  hosts: k8s_workers
+  gather_facts: yes
+  serial: 1
+  become: yes
+
+  vars:
+    kubectl_env:
+      KUBECONFIG: "{{ lookup('env', 'HOME') }}/.kube/config"
+
+  tasks:
+    # --- Drain ---
+    - name: Drain node {{ inventory_hostname }}
+      ansible.builtin.command: >
+        kubectl drain {{ inventory_hostname }}
+        --ignore-daemonsets
+        --delete-emptydir-data
+        --timeout=300s
+      delegate_to: localhost
+      become: no
+      environment: "{{ kubectl_env }}"
+
+    # --- Switch apt repo ---
+    - name: Remove old Kubernetes GPG keyring
+      ansible.builtin.file:
+        path: /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+        state: absent
+
+    - name: Download GPG key for new version
+      ansible.builtin.get_url:
+        url: "https://pkgs.k8s.io/core:/stable:/v{{ kubernetes_version }}/deb/Release.key"
+        dest: /tmp/kubernetes-release.key
+        mode: "0644"
+        timeout: 60
+      retries: 3
+      delay: 5
+      register: gpg_download
+      until: gpg_download is succeeded
+
+    - name: Install new GPG key to keyring
+      ansible.builtin.shell: gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg < /tmp/kubernetes-release.key
+      args:
+        creates: /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+
+    - name: Clean up GPG key download
+      ansible.builtin.file:
+        path: /tmp/kubernetes-release.key
+        state: absent
+
+    - name: Update apt repository to new version
+      ansible.builtin.apt_repository:
+        repo: "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v{{ kubernetes_version }}/deb/ /"
+        filename: kubernetes
+        state: present
+
+    # --- Upgrade kubeadm ---
+    - name: Unhold kubeadm
+      ansible.builtin.dpkg_selections:
+        name: kubeadm
+        selection: install
+
+    - name: Install latest kubeadm for target version
+      ansible.builtin.apt:
+        name: kubeadm
+        state: latest
+        update_cache: yes
+
+    - name: Hold kubeadm
+      ansible.builtin.dpkg_selections:
+        name: kubeadm
+        selection: hold
+
+    - name: Run kubeadm upgrade node
+      ansible.builtin.command: kubeadm upgrade node
+
+    # --- Upgrade kubelet + kubectl ---
+    - name: Unhold kubelet and kubectl
+      ansible.builtin.dpkg_selections:
+        name: "{{ item }}"
+        selection: install
+      loop:
+        - kubelet
+        - kubectl
+
+    - name: Install latest kubelet and kubectl for target version
+      ansible.builtin.apt:
+        name:
+          - kubelet
+          - kubectl
+        state: latest
+        update_cache: yes
+
+    - name: Hold kubelet and kubectl
+      ansible.builtin.dpkg_selections:
+        name: "{{ item }}"
+        selection: hold
+      loop:
+        - kubelet
+        - kubectl
+
+    - name: Restart kubelet
+      ansible.builtin.systemd:
+        name: kubelet
+        state: restarted
+        daemon_reload: yes
+
+    # --- Uncordon ---
+    - name: Uncordon node {{ inventory_hostname }}
+      ansible.builtin.command: kubectl uncordon {{ inventory_hostname }}
+      delegate_to: localhost
+      become: no
+      environment: "{{ kubectl_env }}"
+
+    - name: Wait for node {{ inventory_hostname }} Ready
+      ansible.builtin.command: >
+        kubectl wait --for=condition=Ready
+        node/{{ inventory_hostname }} --timeout=120s
+      delegate_to: localhost
+      become: no
+      environment: "{{ kubectl_env }}"
+      changed_when: false
+
+    - name: Display worker upgrade summary
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }} upgraded and uncordoned"
+
+# ============================================================
+# Play 4: Post-Upgrade Verification
+# ============================================================
+- name: Verify cluster upgrade
+  hosts: localhost
+  gather_facts: no
+  connection: local
+
+  vars:
+    kubectl_env:
+      KUBECONFIG: "{{ lookup('env', 'HOME') }}/.kube/config"
+
+  tasks:
+    - name: Get cluster nodes
+      ansible.builtin.command: kubectl get nodes -o wide
+      environment: "{{ kubectl_env }}"
+      changed_when: false
+      register: cluster_nodes
+
+    - name: Display cluster nodes
+      ansible.builtin.debug:
+        var: cluster_nodes.stdout_lines
+
+    - name: Get kube-system pods
+      ansible.builtin.command: kubectl get pods -n kube-system -o wide
+      environment: "{{ kubectl_env }}"
+      changed_when: false
+      register: kube_system_pods
+
+    - name: Display kube-system pods
+      ansible.builtin.debug:
+        var: kube_system_pods.stdout_lines
+
+    - name: Check for unhealthy kube-system pods
+      ansible.builtin.shell: >
+        kubectl get pods -n kube-system --no-headers
+        | grep -vE 'Running|Completed'
+      environment: "{{ kubectl_env }}"
+      changed_when: false
+      failed_when: false
+      register: unhealthy_pods
+
+    - name: Fail if unhealthy pods found
+      ansible.builtin.fail:
+        msg: |
+          Unhealthy pods in kube-system after upgrade:
+          {{ unhealthy_pods.stdout }}
+      when: unhealthy_pods.stdout | length > 0
+
+    - name: Verify all nodes are Ready
+      ansible.builtin.shell: >
+        kubectl get nodes --no-headers | grep -v ' Ready ' || true
+      environment: "{{ kubectl_env }}"
+      changed_when: false
+      register: not_ready_nodes
+
+    - name: Fail if any nodes not Ready
+      ansible.builtin.fail:
+        msg: |
+          Nodes not Ready after upgrade:
+          {{ not_ready_nodes.stdout }}
+      when: not_ready_nodes.stdout | length > 0
+
+    - name: Display upgrade complete summary
+      ansible.builtin.debug:
+        msg:
+          - "=== Cluster Upgrade Complete ==="
+          - "All nodes:"
+          - "{{ cluster_nodes.stdout_lines }}"
+          - ""
+          - "Next steps:"
+          - "  kubectl get nodes                  # verify versions"
+          - "  cilium status                      # verify CNI"
+          - "  flux check                         # verify GitOps"

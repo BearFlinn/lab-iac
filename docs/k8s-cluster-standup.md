@@ -226,34 +226,35 @@ Migrate services one at a time. Each migration exercises the 7a machinery and sh
 Polish pass across the cluster infrastructure. Everything here is deferrable — the cluster is functional without it — but rounds out the platform for day-to-day use.
 
 **Delivers:**
-- In-cluster OCI registry deployed via Flux, backed by MinIO bulk storage
-- TLS for the registry via cert-manager (depends on Phase 6)
-- Custom GitHub Actions runner image (Rust, Helm, Node, gh CLI, cross-compile toolchain) built automatically via Argo Workflow when the Dockerfile changes
+- In-cluster OCI registry deployed via Flux, backed by MinIO bulk storage *(done in Phase 7b)*
+- Custom GitHub Actions runner image (Rust, Helm, Node, gh CLI, cross-compile toolchain) built automatically via Argo WorkflowTemplate + Kaniko when the Dockerfile changes (`docker/github-runner/Dockerfile`)
 - Runner scale set updated to use custom image from the in-cluster registry
-- Argo CronWorkflow or Flux-triggered rebuild pipeline for the runner image
-- Helm installed on runner image for chart-based deployments from CI
-- Flux CLI upgrade (2.7.5 → latest, `flux check` flagged this)
+- GitHub Actions workflow (`.github/workflows/build-runner-image.yaml`) triggers the Argo build on Dockerfile push to master
+- K8s cluster upgraded from v1.32.13 to v1.33.10, Cilium from v1.17.2 to v1.18.8
+- Flux CLI upgraded from v2.7.5 to v2.8.5 (required K8s 1.33+; API resources migrated via `flux migrate`)
+- LimitRanges on `arc-runners` and `argo` namespaces (default resource requests/limits for ephemeral pods)
+- Argo default ServiceAccount (`argo-workflow`) — operators no longer need `--serviceaccount` per submission
+- Consolidated NodePort allocation doc (`docs/nodeport-allocation.md`)
 
 **Tracing:**
-- ARC workflow-level tracing via `run-with-telemetry` GitHub Action → Tempo (controller-level tracing not supported by ARC v2)
+- ARC workflow-level tracing via `inception-health/otel-export-trace-action` → Tempo (controller-level tracing not supported by ARC v2)
 - Argo → Tempo: OTLP env vars configured on the controller (Phase 5) and OTel metrics exporter is active. Trace spans require v4.1.0+ (PR #15585 merged to `main` Feb 2026, not backported to v4.0.x). Bump chart to v4.1+ when released — no manifest changes needed, traces will flow automatically.
 
-**QoL items to audit:**
-- Resource quotas / LimitRanges on workload namespaces
-- Pod disruption budgets for critical controllers (Flux, ARC, Argo)
-- Automatic image pull secret distribution (if registry requires auth)
-- Grafana dashboard provisioning via Flux (currently copied by Ansible)
-- Argo workflow default ServiceAccount set at namespace level (currently must pass `--serviceaccount` per submission)
-- Consolidated NodePort allocation doc or ConfigMap (currently tracked in plan doc only)
+**Deferred / Skipped:**
+- **Registry TLS** — Deferred. The registry is internal-only, served over plain HTTP behind the containerd `hosts.toml` mirror and DinD `--insecure-registry`. Adding self-signed TLS via cert-manager would require CA distribution to all nodes and DinD containers for no external benefit. Revisit if registry auth is ever needed.
+- **PodDisruptionBudgets** — Skipped. All critical controllers (Flux, ARC, Argo, cert-manager) are single-replica. PDBs for `replicas: 1` either block all drains or are meaningless. Cluster has a single control plane (ADR-016); node drains are manual, deliberate. Add PDBs if any controller scales to 2+.
+- **Image pull secrets** — Not applicable. Registry is unauthenticated; containerd uses `hosts.toml` mirror. Revisit if auth is added.
+- **Grafana dashboards via Flux** — Skipped. Grafana runs on R730xd Docker Compose, not in K8s. Ansible provisioning (JSON files, 30s auto-reload) works well.
+- **Argo chart bump** — Deferred pending upstream release of chart shipping app v4.1.0+. TODO tracked in `kubernetes/infrastructure/argo-workflows/helmrelease.yaml`.
+- ~~**Flux CLI upgrade**~~ — Done. K8s upgraded to 1.33.10, Flux to v2.8.5.
 
 **Verify before considering complete:**
 - Custom runner image builds and pushes automatically on Dockerfile change
 - A workflow using Rust/Helm/Node runs successfully on the custom image
-- Registry TLS valid, containerd pulls without insecure config
-- `flux check` reports no warnings
-- All Grafana dashboards load without manual intervention after a fresh Grafana deploy
-- Argo workflow traces visible in Tempo/Grafana with step-level span detail
-- ARC `run-with-telemetry` spans visible in Tempo for at least one test workflow
+- `argo submit` works without `--serviceaccount` flag
+- LimitRanges applied in `arc-runners` and `argo` namespaces
+- ARC `otel-export-trace-action` spans visible in Tempo for at least one test workflow
+- Argo workflow traces visible in Tempo/Grafana once chart v4.1+ is available
 
 ---
 
