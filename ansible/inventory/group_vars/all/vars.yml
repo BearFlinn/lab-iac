@@ -41,6 +41,10 @@ github_runner_pat: "{{ vault_github_runner_pat }}"
 argo_minio_access_key: "{{ vault_argo_minio_access_key }}"
 argo_minio_secret_key: "{{ vault_argo_minio_secret_key }}"
 
+# sccache — MinIO bulk instance credentials for Rust build cache
+sccache_minio_access_key: "{{ vault_sccache_minio_access_key }}"
+sccache_minio_secret_key: "{{ vault_sccache_minio_secret_key }}"
+
 # WireGuard ingress tunnel keys (VPS ↔ R730xd)
 # Public keys are safe to expose; private keys stay in vault.yml and are
 # only referenced directly inside the ingress-tunnel role template.

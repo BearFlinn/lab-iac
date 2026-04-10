@@ -8,6 +8,7 @@
 #   - Phases 1-4 complete (control plane + workers + storage + Flux)
 #   - vault_github_runner_pat set in vault.yml (PAT with org runner scope)
 #   - vault_argo_minio_access_key / vault_argo_minio_secret_key set in vault.yml
+#   - vault_sccache_minio_access_key / vault_sccache_minio_secret_key set in vault.yml
 #
 # Usage:
 #   ansible-playbook ansible/playbooks/setup-k8s-cicd.yml
@@ -155,7 +156,78 @@
       no_log: true
 
 # ============================================================
-# Play 3: Deploy Prometheus targets and alerts on R730xd
+# Play 3: Create sccache build-cache bucket and credentials
+# ============================================================
+- name: Create sccache build-cache bucket and credentials
+  hosts: localhost
+  connection: local
+  gather_facts: no
+
+  vars:
+    kubeconfig: "{{ lookup('env', 'HOME') }}/.kube/config"
+
+  vars_files:
+    - "{{ playbook_dir }}/../../ansible/inventory/group_vars/all/vault.yml"
+    - "{{ playbook_dir }}/../../ansible/inventory/group_vars/all/vars.yml"
+    - "{{ playbook_dir }}/../../ansible/inventory/group_vars/all/network.yml"
+
+  tasks:
+    - name: Verify sccache MinIO credentials are set
+      ansible.builtin.assert:
+        that:
+          - vault_sccache_minio_access_key is defined and vault_sccache_minio_access_key | length > 0
+          - vault_sccache_minio_secret_key is defined and vault_sccache_minio_secret_key | length > 0
+        fail_msg: >
+          vault_sccache_minio_access_key and vault_sccache_minio_secret_key must be
+          set in vault.yml. These are used for sccache S3 build cache on MinIO bulk.
+        success_msg: "sccache MinIO credentials are set"
+
+    - name: Ensure build-cache bucket exists on MinIO bulk
+      ansible.builtin.command: mc mb --ignore-existing minio-bulk/build-cache
+      changed_when: false
+      failed_when: false
+
+    - name: Create sccache MinIO user on bulk instance
+      ansible.builtin.shell: |
+        mc admin user add minio-bulk \
+          "{{ vault_sccache_minio_access_key }}" \
+          "{{ vault_sccache_minio_secret_key }}" 2>&1 || true
+      changed_when: false
+      no_log: true
+
+    - name: Grant sccache user readwrite access to build-cache bucket
+      ansible.builtin.shell: |
+        cat <<'EOF' | mc admin policy create minio-bulk build-cache-rw /dev/stdin
+        {
+          "Version": "2012-10-17",
+          "Statement": [{
+            "Effect": "Allow",
+            "Action": ["s3:*"],
+            "Resource": [
+              "arn:aws:s3:::build-cache",
+              "arn:aws:s3:::build-cache/*"
+            ]
+          }]
+        }
+        EOF
+        mc admin policy attach minio-bulk build-cache-rw --user "{{ vault_sccache_minio_access_key }}"
+      changed_when: false
+      no_log: true
+
+    - name: Create sccache S3 credentials secret
+      ansible.builtin.shell: |
+        kubectl create secret generic sccache-s3-credentials \
+          --from-literal=accesskey="{{ vault_sccache_minio_access_key }}" \
+          --from-literal=secretkey="{{ vault_sccache_minio_secret_key }}" \
+          -n arc-runners \
+          --dry-run=client -o yaml | kubectl apply -f -
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+      changed_when: false
+      no_log: true
+
+# ============================================================
+# Play 4: Deploy Prometheus targets and alerts on R730xd (was Play 3)
 # ============================================================
 - name: Deploy CI/CD Prometheus targets and alert rules
   hosts: r730xd
@@ -208,7 +280,7 @@
       when: prom_config is changed or prom_rules is changed
 
 # ============================================================
-# Play 4: Deploy Grafana dashboards on R730xd
+# Play 5: Deploy Grafana dashboards on R730xd
 # ============================================================
 - name: Deploy CI/CD Grafana dashboards
   hosts: r730xd
@@ -233,7 +305,7 @@
       become: yes
 
 # ============================================================
-# Play 5: Trigger Flux reconciliation and verify ARC
+# Play 6: Trigger Flux reconciliation and verify ARC
 # ============================================================
 - name: Verify ARC deployment
   hosts: localhost
@@ -303,7 +375,7 @@
       register: arc_pods
 
 # ============================================================
-# Play 6: Verify Argo Workflows deployment
+# Play 7: Verify Argo Workflows deployment
 # ============================================================
 - name: Verify Argo Workflows deployment
   hosts: localhost
@@ -339,7 +411,7 @@
       register: argo_pods
 
 # ============================================================
-# Play 7: Verify observability
+# Play 8: Verify observability
 # ============================================================
 - name: Verify Phase 5 observability
   hosts: localhost

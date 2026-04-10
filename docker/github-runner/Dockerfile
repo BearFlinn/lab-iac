@@ -50,7 +50,7 @@ ENV RUSTUP_HOME=/home/runner/.rustup \
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile default && \
     rustup component add clippy rustfmt && \
     rustup target add aarch64-unknown-linux-gnu && \
-    cargo install cargo-deny --locked
+    cargo install cargo-deny sccache --locked
 
 # Symlink Rust binaries into /usr/local/bin so they're on PATH regardless of
 # how the runner spawns shell steps
@@ -65,6 +65,7 @@ RUN helm version && \
     rustc --version && \
     cargo --version && \
     cargo deny --version && \
+    sccache --version && \
     node --version && \
     npm --version && \
     gh --version
