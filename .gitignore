@@ -76,7 +76,6 @@ logs/
 
 # Claude Code
 packer/http/preseed.cfg
-ansible/group_vars/all/vault.yml
 kubernetes/github-runner/values.yaml
 
 # Kustomize
