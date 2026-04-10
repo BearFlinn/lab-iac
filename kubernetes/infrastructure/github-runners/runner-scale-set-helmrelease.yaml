@@ -53,14 +53,16 @@ spec:
       spec:
         initContainers:
           - name: init-dind-externals
-            image: ghcr.io/actions/actions-runner:latest
+            image: registry.registry.svc.cluster.local:5000/github-runner:latest
+            imagePullPolicy: Always
             command: ["cp", "-r", "-v", "/home/runner/externals/.", "/home/runner/tmpDir/"]
             volumeMounts:
               - name: dind-externals
                 mountPath: /home/runner/tmpDir
         containers:
           - name: runner
-            image: ghcr.io/actions/actions-runner:latest
+            image: registry.registry.svc.cluster.local:5000/github-runner:latest
+            imagePullPolicy: Always
             # Wait for the dind sidecar to open its socket before starting
             # the GitHub Actions runner. Both containers start in parallel
             # in a pod, so without this wait the runner can start before
