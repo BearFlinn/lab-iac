@@ -30,7 +30,7 @@ jobs:
 
           echo "Submitting build-runner-image WorkflowTemplate..."
           RESPONSE=$(curl -sf -X POST \
-            "${ARGO_SERVER}/api/v1/workflows/argo" \
+            "${ARGO_SERVER}/api/v1/workflows/argo/submit" \
             -H 'Content-Type: application/json' \
             -d '{
               "resourceKind": "WorkflowTemplate",
