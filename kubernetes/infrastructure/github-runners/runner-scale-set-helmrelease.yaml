@@ -109,11 +109,11 @@ spec:
                     key: secretkey
             resources:
               limits:
-                cpu: "2"
-                memory: 4Gi
+                cpu: "8"
+                memory: 16Gi
               requests:
-                cpu: "1"
-                memory: 2Gi
+                cpu: "4"
+                memory: 8Gi
             volumeMounts:
               - name: work
                 mountPath: /home/runner/_work
