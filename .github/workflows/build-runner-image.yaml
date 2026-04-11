@@ -17,7 +17,7 @@ on:
 
 jobs:
   trigger-build:
-    runs-on: self-hosted
+    runs-on: lab-runners
     permissions:
       contents: read
       actions: read
