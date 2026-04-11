@@ -68,6 +68,7 @@ jobs:
       # Runs as a post-job step so it captures the full workflow duration.
       - name: Export trace to Tempo
         if: always()
+        continue-on-error: true
         uses: inception-health/otel-export-trace-action@v1
         with:
           otlpEndpoint: grpc://10.0.0.200:4317/
