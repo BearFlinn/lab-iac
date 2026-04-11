@@ -36,8 +36,9 @@ spec:
         command: [sh, -c]
         args:
           - |
-            git clone --depth 1 --branch {{inputs.parameters.git-ref}} \
-              https://github.com/grizzly-endeavors/lab-iac.git /workspace/src
+            git clone https://github.com/grizzly-endeavors/lab-iac.git /workspace/src
+            cd /workspace/src
+            git checkout {{inputs.parameters.git-ref}}
         volumeMounts:
           - name: workspace
             mountPath: /workspace

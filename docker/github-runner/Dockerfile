@@ -50,7 +50,15 @@ ENV RUSTUP_HOME=/home/runner/.rustup \
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile default && \
     rustup component add clippy rustfmt && \
     rustup target add aarch64-unknown-linux-gnu && \
-    cargo install cargo-deny sccache --locked
+    cargo install cargo-deny --locked
+
+# sccache — prebuilt static binary (much faster than cargo install)
+USER root
+RUN curl -fsSL https://github.com/mozilla/sccache/releases/download/v0.14.0/sccache-v0.14.0-x86_64-unknown-linux-musl.tar.gz \
+      | tar xz -C /tmp && \
+    mv /tmp/sccache-v0.14.0-x86_64-unknown-linux-musl/sccache /usr/local/bin/sccache && \
+    chmod 755 /usr/local/bin/sccache && \
+    rm -rf /tmp/sccache-*
 
 # Symlink Rust binaries into /usr/local/bin so they're on PATH regardless of
 # how the runner spawns shell steps
