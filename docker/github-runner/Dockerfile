@@ -7,8 +7,9 @@ FROM ghcr.io/actions/actions-runner:latest
 USER root
 
 # Build tools and GitHub CLI
-# GTK4 / gtk4-layer-shell / WebKitGTK 6.0 are required by grizzly-widget-builder
-# (see grizzly-widget-builder/CLAUDE.md "System packages" section).
+# GTK4 and WebKitGTK 6.0 come from apt; gtk4-layer-shell is built from source
+# below because Ubuntu 24.04 (Noble) doesn't package it yet. Required by
+# grizzly-widget-builder (see grizzly-widget-builder/CLAUDE.md "System packages").
 RUN apt-get update -qq && \
     apt-get install -y -qq --no-install-recommends \
       build-essential \
@@ -19,8 +20,10 @@ RUN apt-get update -qq && \
       gcc-aarch64-linux-gnu \
       libc6-dev-arm64-cross \
       libgtk-4-dev \
-      libgtk4-layer-shell-dev \
-      libwebkitgtk-6.0-dev && \
+      libwebkitgtk-6.0-dev \
+      meson \
+      ninja-build \
+      libwayland-dev && \
     (type -p wget >/dev/null || apt-get install -y -qq wget) && \
     mkdir -p -m 755 /etc/apt/keyrings && \
     wget -qO- https://cli.github.com/packages/githubcli-archive-keyring.gpg \
@@ -30,6 +33,20 @@ RUN apt-get update -qq && \
     apt-get update -qq && \
     apt-get install -y -qq gh && \
     rm -rf /var/lib/apt/lists/*
+
+# gtk4-layer-shell from source — not yet packaged on Ubuntu 24.04 (Noble).
+# Pinned to a tagged release so rebuilds are reproducible. Introspection and
+# docs are disabled because the Rust `gtk4-layer-shell` crate only needs the
+# C library and pkg-config file.
+ARG GTK4_LAYER_SHELL_VERSION=1.3.0
+RUN git clone --depth 1 --branch v${GTK4_LAYER_SHELL_VERSION} \
+      https://github.com/wmww/gtk4-layer-shell.git /tmp/gtk4-layer-shell && \
+    cd /tmp/gtk4-layer-shell && \
+    meson setup build -Dexamples=false -Ddocs=false -Dtests=false -Dintrospection=false && \
+    ninja -C build && \
+    ninja -C build install && \
+    ldconfig && \
+    rm -rf /tmp/gtk4-layer-shell
 
 # kubectl (not included in ARC v2 base image)
 RUN curl -fsSL -o /usr/local/bin/kubectl \
