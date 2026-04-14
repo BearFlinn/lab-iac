@@ -7,6 +7,8 @@ FROM ghcr.io/actions/actions-runner:latest
 USER root
 
 # Build tools and GitHub CLI
+# GTK4 / gtk4-layer-shell / WebKitGTK 6.0 are required by grizzly-widget-builder
+# (see grizzly-widget-builder/CLAUDE.md "System packages" section).
 RUN apt-get update -qq && \
     apt-get install -y -qq --no-install-recommends \
       build-essential \
@@ -15,7 +17,10 @@ RUN apt-get update -qq && \
       openssh-client \
       rsync \
       gcc-aarch64-linux-gnu \
-      libc6-dev-arm64-cross && \
+      libc6-dev-arm64-cross \
+      libgtk-4-dev \
+      libgtk4-layer-shell-dev \
+      libwebkitgtk-6.0-dev && \
     (type -p wget >/dev/null || apt-get install -y -qq wget) && \
     mkdir -p -m 755 /etc/apt/keyrings && \
     wget -qO- https://cli.github.com/packages/githubcli-archive-keyring.gpg \
