@@ -23,7 +23,8 @@ RUN apt-get update -qq && \
       libwebkitgtk-6.0-dev \
       meson \
       ninja-build \
-      libwayland-dev && \
+      libwayland-dev \
+      valac && \
     (type -p wget >/dev/null || apt-get install -y -qq wget) && \
     mkdir -p -m 755 /etc/apt/keyrings && \
     wget -qO- https://cli.github.com/packages/githubcli-archive-keyring.gpg \
