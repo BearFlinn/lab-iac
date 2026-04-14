@@ -23,8 +23,7 @@ RUN apt-get update -qq && \
       libwebkitgtk-6.0-dev \
       meson \
       ninja-build \
-      libwayland-dev \
-      valac && \
+      libwayland-dev && \
     (type -p wget >/dev/null || apt-get install -y -qq wget) && \
     mkdir -p -m 755 /etc/apt/keyrings && \
     wget -qO- https://cli.github.com/packages/githubcli-archive-keyring.gpg \
@@ -43,7 +42,12 @@ ARG GTK4_LAYER_SHELL_VERSION=1.3.0
 RUN git clone --depth 1 --branch v${GTK4_LAYER_SHELL_VERSION} \
       https://github.com/wmww/gtk4-layer-shell.git /tmp/gtk4-layer-shell && \
     cd /tmp/gtk4-layer-shell && \
-    meson setup build -Dexamples=false -Ddocs=false -Dtests=false -Dintrospection=false && \
+    meson setup build \
+      -Dexamples=false \
+      -Ddocs=false \
+      -Dtests=false \
+      -Dintrospection=false \
+      -Dvapi=false && \
     ninja -C build && \
     ninja -C build install && \
     ldconfig && \
