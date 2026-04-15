@@ -34,15 +34,15 @@ Add an A record for `residuum-feedback.bearflinn.com` pointing at the Hetzner pr
 
 ## Tempo multi-tenancy
 
-The ingest service sends report traces to a dedicated tenant `residuum-reports` via `X-Scope-OrgID: residuum-reports`, keeping them completely isolated from existing homelab traces.
+The ingest service sends report traces to a dedicated tenant `residuum-feedback` via `X-Scope-OrgID: residuum-feedback`, keeping them completely isolated from existing homelab traces.
 
 **Required changes:**
 
 1. **Verify or enable multi-tenancy in the `r730xd-tempo` role.** By default Tempo runs single-tenant; multi-tenancy requires `multitenancy_enabled: true` in `tempo-config.yml`. Check the current template and add the flag if absent, then re-deploy with `deploy-observability.yml`.
 
-2. **Add a second Grafana data source** (via the `r730xd-grafana` role's datasource provisioning) pointed at Tempo with `X-Scope-OrgID: residuum-reports`. This keeps report traces queryable without polluting the existing homelab Tempo data source or dashboards.
+2. **Add a second Grafana data source** (via the `r730xd-grafana` role's datasource provisioning) pointed at Tempo with `X-Scope-OrgID: residuum-feedback`. This keeps report traces queryable without polluting the existing homelab Tempo data source or dashboards.
 
-3. **Document the tenant** in `docs/monitoring-integration.md` so it's clear the `residuum-reports` tenant is reserved for report traces and shouldn't be used for anything else.
+3. **Document the tenant** in `docs/monitoring-integration.md` so it's clear the `residuum-feedback` tenant is reserved for report traces and shouldn't be used for anything else.
 
 ---
 
@@ -61,7 +61,7 @@ Match the pattern every other K8s workload in the lab follows:
 
 - Prometheus scrape annotations on the Deployment pod template (`prometheus.io/scrape`, `prometheus.io/port`)
 - No Alloy changes needed — Alloy already tails all pod logs from `/var/log/pods/` into Loki; the `residuum-feedback` namespace will appear automatically under `namespace=residuum-feedback`
-- The service exports its own operational traces to the **default** Tempo tenant (not `residuum-reports`), so service health is visible alongside the rest of the lab
+- The service exports its own operational traces to the **default** Tempo tenant (not `residuum-feedback`), so service health is visible alongside the rest of the lab
 
 A Grafana dashboard for request rate, error rate, latency, and Tempo forward success rate can be added in a follow-up once the service is running and generating real traffic.
 
@@ -73,7 +73,7 @@ Write `docs/decisions/NNN-residuum-feedback-ingestion.md` covering:
 
 - Why the ingestion service lives in K8s rather than as a Compose service on r730xd alongside the observability stack
 - The decision to route public traffic through the relay rather than exposing the ingest path directly
-- The dedicated Tempo tenant `residuum-reports` for trace isolation
+- The dedicated Tempo tenant `residuum-feedback` for trace isolation
 - The shared-secret-only trust model for relay → ingestion authentication
 - The reuse of the existing Caddy → WG → ingress path (no new tunnel)
 

@@ -1,31 +1,41 @@
-# Residuum Feedback — Database Schema Workshop
+# Residuum Feedback — Database Schema
 
-Starting point for the Postgres schema and provisioning work for the residuum feedback ingestion feature. See `residuum-feedback-plan.md` for the broader lab-side plan and the cross-cutting architectural decisions at `~/Projects/residuum-feedback-decisions.md`.
+Locked spec for the Postgres schema backing the residuum feedback ingestion
+feature. See `residuum-feedback-plan.md` for the broader lab-side plan and
+the cross-cutting architectural decisions at `~/Projects/residuum-feedback-decisions.md`.
 
-This is a **workshop doc, not a spec.** The schema is not locked. What's captured here:
-
-- What data needs to be stored
-- The design goals the schema must satisfy
-- A proposed starting sketch
-- Open questions to resolve before migrations are written
-- Things that are already locked and shouldn't be re-litigated
+This is a **spec, not a workshop.** The DDL below is committed to and
+lands as the first sqlx migration in the `feedback-ingest` service repo
+(not in `lab-iac`). The `residuum_feedback` database, role, and
+connection secret are provisioned separately — see the "Provisioning"
+section below.
 
 ---
 
 ## Purpose
 
-The new `feedback-ingest` service needs a Postgres database in the lab to store bug report and feedback submission metadata. This database must be:
+The `feedback-ingest` service stores bug report and feedback submission
+metadata in a Postgres database on the lab's existing `r730xd-postgres`
+instance. The database is:
 
-- **Dedicated** to the feature — separate from any other lab-data database, so backups, versioning, and future migrations move independently
-- **Normalized** — built to support analysis and investigation tooling, not just write-once logging
-- **Isolated** on the existing `r730xd-postgres` instance under a new database and a scoped role
-- **Write-oriented now, query-oriented later** — the first pass is write-only from the ingest service, but the schema must not box out the read API / investigation UI that'll be built on top
+- **Dedicated** to the feature — separate from any other lab-data
+  database, so backups, versioning, and future migrations move
+  independently
+- **Normalized** — built to support analysis and investigation tooling,
+  not just write-once logging
+- **Isolated** on the existing `r730xd-postgres` instance under a new
+  database and a scoped role
+- **Write-oriented now, query-oriented later** — the first pass is
+  write-only from the ingest service, but the schema does not box out
+  the read API / investigation UI that'll be built on top
 
-Trace data lives in Tempo under the dedicated `residuum-reports` tenant. Postgres stores only metadata, with `trace_id` as the join key back into Tempo.
+Trace data lives in Tempo under the dedicated `residuum-feedback` tenant.
+Postgres stores only metadata, with `trace_id` as the join key back into
+Tempo. Only bug reports carry a trace; feedback reports do not.
 
 ---
 
-## What needs to be stored
+## What is stored
 
 ### Shared across both kinds
 
@@ -40,8 +50,6 @@ Every report has:
 - Residuum commit (nullable — not every build captures it)
 - Triage status — one of `new`, `triaged`, `investigating`, `resolved`, `wontfix`
 - Developer notes (nullable; populated during triage, not at submission)
-- Tempo tenant name (nullable; only populated when traces are attached)
-- Trace ID (nullable; only populated when traces are attached)
 
 ### Bug-report-only
 
@@ -50,7 +58,10 @@ User-typed, always present:
 - `what_happened` — required free text
 - `what_expected` — required free text
 - `what_doing` — required free text
-- `severity` — enum: `crash`, `wrong_output`, `confusing`, `slow`
+- `severity` — enum: `broken`, `wrong`, `annoying`
+  - **`broken`** — crashes or completely unusable features
+  - **`wrong`** — does or doesn't do something it should
+  - **`annoying`** — slow, visual, or QoL; doesn't affect usability
 
 Client context captured at submission:
 
@@ -59,21 +70,37 @@ Client context captured at submission:
 - Model provider (e.g. `anthropic`) — nullable
 - Model name (e.g. `claude-opus-4-6`) — nullable
 
+Trace join keys (**required** — every bug report arrives with a trace,
+or the submission is rejected at input validation):
+
+- `trace_id` — Tempo trace ID for the submission
+- `tempo_tenant` — always `residuum-feedback` at insert time; stored as
+  a plain column so a future tenant rename is a data migration, not a
+  schema one
+
 Variable-arity snapshots:
 
-- **Active subagents** — zero-to-many `{name, status}` entries, per-report, never updated after submission
-- **Config flags** — zero-to-many `{key, value}` entries from a pre-curated allowlist of configuration toggles, per-report, never updated
+- **Active subagents** — zero-to-many `{name, status}` entries,
+  per-report, never updated after submission
+- **Config flags** — zero-to-many `{key, value}` entries from a
+  pre-curated allowlist of configuration toggles, per-report, never
+  updated
 
 ### Feedback-only
 
 - `message` — required free text
 - `category` — nullable free text or short enum
 
-Feedback carries **no** client-context fields beyond the shared `version` on the parent. No OS, no arch, no subagent snapshot, no config flags. This is intentional — feedback is low-overhead by design. "This thing is confusing" doesn't need a full data dump.
+Feedback carries **no** client-context fields beyond the shared
+`version` on the parent, and **no** trace. No OS, no arch, no subagent
+snapshot, no config flags, no `trace_id`. This is intentional —
+feedback is low-overhead by design. "This thing is confusing" doesn't
+need a full data dump, and there is nothing in Tempo to investigate.
 
 ### Explicitly NOT stored
 
-The schema has no columns for any of these, and shouldn't grow them later without a deliberate decision:
+The schema has no columns for any of these, and shouldn't grow them
+later without a deliberate decision:
 
 - Chat history, conversation turns, agent transcripts
 - Memory or file contents
@@ -81,60 +108,137 @@ The schema has no columns for any of these, and shouldn't grow them later withou
 - File paths or directory listings
 - Anything derived from the user's disk state
 
-These are excluded at the client (residuum) layer before the payload is ever sent. Sanitization of the attached span dump is forced-on regardless of the user's global sanitize setting; free-text fields the user typed themselves are not redacted (users are responsible for keeping PII out of what they write).
+These are excluded at the client (residuum) layer before the payload is
+ever sent. Sanitization of the attached span dump is forced-on
+regardless of the user's global sanitize setting; free-text fields the
+user typed themselves are not redacted (users are responsible for
+keeping PII out of what they write).
 
 ---
 
 ## Design goals
 
-1. **Normalized.** No JSONB catch-all columns for structured data. Variable-arity snapshots (subagents, config flags) live in their own tables.
-2. **Class-table inheritance.** One parent `reports` table for shared identity; separate child tables for the kind-specific shape. The parent's `kind` column is authoritative.
-3. **Queryable from day one.** Indexes that support the future investigation tooling: list by kind, filter by status, look up by public ID, trace ID.
-4. **Cascades on delete.** Deleting a parent report cleans up all children in one statement.
-5. **Postgres-native constraints.** `CHECK` constraints on enum-shaped columns rather than PG `ENUM` types, so adding a new value is a simple DDL change.
-6. **Forward-compatible.** The read API is deferred, but the schema must not paint us into a corner.
+1. **Normalized.** No JSONB catch-all columns for structured data.
+   Variable-arity snapshots (subagents, config flags) live in their own
+   tables.
+2. **Class-table inheritance.** One parent `reports` table for shared
+   identity; separate child tables for the kind-specific shape. The
+   parent's `kind` column is authoritative.
+3. **Queryable from day one.** Indexes that support the future
+   investigation tooling: list by kind, filter by status, look up by
+   public ID, trace ID.
+4. **Cascades on delete.** Deleting a parent report cleans up all
+   children in one statement.
+5. **Postgres-native constraints.** `CHECK` constraints on enum-shaped
+   columns rather than PG `ENUM` types, so adding a new value is a
+   simple DDL change.
+6. **Forward-compatible.** The read API is deferred, but the schema
+   does not paint us into a corner.
 
 ---
 
-## Proposed sketch (starting point)
+## Shape
+
+```mermaid
+erDiagram
+    reports ||--o| bug_reports            : "kind = 'bug'"
+    reports ||--o| feedback_reports       : "kind = 'feedback'"
+    bug_reports ||--o{ bug_report_active_subagents : snapshot
+    bug_reports ||--o{ bug_report_config_flags     : snapshot
+
+    reports {
+      uuid        id PK
+      text        public_id UK "RR-XXXXXXXXXX"
+      text        kind "bug | feedback"
+      timestamptz created_at
+      inet        submitter_ip
+      text        version
+      text        commit "nullable"
+      text        status "new|triaged|investigating|resolved|wontfix"
+      text        notes "nullable"
+    }
+    bug_reports {
+      uuid id PK,FK
+      text what_happened
+      text what_expected
+      text what_doing
+      text severity "broken|wrong|annoying"
+      text os
+      text arch
+      text model_provider "nullable"
+      text model_name "nullable"
+      text trace_id "NOT NULL"
+      text tempo_tenant "NOT NULL"
+    }
+    feedback_reports {
+      uuid id PK,FK
+      text category "nullable"
+      text message
+    }
+    bug_report_active_subagents {
+      uuid report_id PK,FK
+      text name PK
+      text status
+    }
+    bug_report_config_flags {
+      uuid report_id PK,FK
+      text key PK
+      text value
+    }
+```
+
+Class-table inheritance: `reports` carries shared identity and triage
+state; `bug_reports` / `feedback_reports` carry the kind-specific shape;
+the two snapshot tables hang off `bug_reports` only. Cascades run
+through `reports.id` so `DELETE FROM reports WHERE id = …` cleans
+everything up.
+
+---
+
+## Final DDL
+
+Destination: `feedback-ingest` service repo, `migrations/0001_init.sql`
+(or whatever numbering sqlx expects). Not lab-iac.
 
 ```sql
 -- Parent: shared identity + triage state
 CREATE TABLE reports (
-  id              uuid PRIMARY KEY,           -- UUID v7 internally
-  public_id       text UNIQUE NOT NULL,       -- user-facing RR-XXXXXXXXXX
-  kind            text NOT NULL
+  id              uuid        PRIMARY KEY,            -- UUID v7 (service-generated)
+  public_id       text        NOT NULL UNIQUE
+                    CHECK (public_id ~ '^RR-[0-9A-HJKMNP-TV-Z]{10}$'),
+  kind            text        NOT NULL
                     CHECK (kind IN ('bug', 'feedback')),
   created_at      timestamptz NOT NULL DEFAULT now(),
   submitter_ip    inet,
-  version         text NOT NULL,
+  version         text        NOT NULL,
   commit          text,
-  status          text NOT NULL DEFAULT 'new'
+  status          text        NOT NULL DEFAULT 'new'
                     CHECK (status IN ('new','triaged','investigating','resolved','wontfix')),
-  notes           text,
-  trace_id        text,
-  tempo_tenant    text
+  notes           text
 );
 
--- Bug-only: user-typed fields + inline client context
+-- Bug-only: user-typed fields + inline client context + trace join key
 CREATE TABLE bug_reports (
-  report_id       uuid PRIMARY KEY
+  report_id       uuid        PRIMARY KEY
                     REFERENCES reports(id) ON DELETE CASCADE,
-  what_happened   text NOT NULL,
-  what_expected   text NOT NULL,
-  what_doing      text NOT NULL,
-  severity        text NOT NULL
-                    CHECK (severity IN ('crash','wrong_output','confusing','slow')),
-  os              text NOT NULL,
-  arch            text NOT NULL,
+  what_happened   text        NOT NULL,
+  what_expected   text        NOT NULL,
+  what_doing      text        NOT NULL,
+  severity        text        NOT NULL
+                    CHECK (severity IN ('broken','wrong','annoying')),
+  os              text        NOT NULL,
+  arch            text        NOT NULL,
   model_provider  text,
-  model_name      text
+  model_name      text,
+  trace_id        text        NOT NULL,
+  tempo_tenant    text        NOT NULL
 );
 
--- Bug-only: variable-arity subagent snapshot
+-- Bug-only: variable-arity subagent snapshot (FK targets bug_reports so
+-- these rows can only exist for bug-kind reports)
 CREATE TABLE bug_report_active_subagents (
   report_id  uuid NOT NULL
-               REFERENCES reports(id) ON DELETE CASCADE,
+               REFERENCES bug_reports(report_id) ON DELETE CASCADE,
   name       text NOT NULL,
   status     text NOT NULL,
   PRIMARY KEY (report_id, name)
@@ -143,7 +247,7 @@ CREATE TABLE bug_report_active_subagents (
 -- Bug-only: variable-arity config toggle snapshot
 CREATE TABLE bug_report_config_flags (
   report_id  uuid NOT NULL
-               REFERENCES reports(id) ON DELETE CASCADE,
+               REFERENCES bug_reports(report_id) ON DELETE CASCADE,
   key        text NOT NULL,
   value      text NOT NULL,
   PRIMARY KEY (report_id, key)
@@ -157,71 +261,130 @@ CREATE TABLE feedback_reports (
   message    text NOT NULL
 );
 
--- Indexes supporting the future investigation tooling
-CREATE INDEX reports_created_at_idx   ON reports (created_at DESC);
-CREATE INDEX reports_kind_created_idx ON reports (kind, created_at DESC);
-CREATE INDEX reports_status_idx       ON reports (status);
-CREATE INDEX reports_trace_id_idx     ON reports (trace_id)
-                                      WHERE trace_id IS NOT NULL;
-CREATE INDEX bug_reports_severity_idx ON bug_reports (severity);
+-- Indexes: list/filter for the investigation tooling
+CREATE INDEX reports_created_at_idx
+          ON reports (created_at DESC);
+CREATE INDEX reports_kind_created_idx
+          ON reports (kind, created_at DESC);
+CREATE INDEX reports_status_idx
+          ON reports (status);
+
+CREATE INDEX bug_reports_severity_idx
+          ON bug_reports (severity);
+CREATE INDEX bug_reports_trace_id_idx
+          ON bug_reports (trace_id);
+
+-- Reverse-lookup indexes on snapshot tables
+CREATE INDEX bug_report_active_subagents_name_idx
+          ON bug_report_active_subagents (name);
+CREATE INDEX bug_report_config_flags_key_idx
+          ON bug_report_config_flags (key);
 ```
 
-Notable choices in this sketch:
+### Notes on the DDL
 
-- **`public_id` is a dedicated column**, not derived at query time. Stable, indexable, rotatable independently of the internal UUID.
-- **Client context is inline on `bug_reports`**, not a separate `bug_client_context` table. A 1:1 split would be pure normalization ritual with no integrity or lifecycle benefit.
-- **`feedback_reports` has only three columns.** Everything else feedback needs (version, created_at, status) lives on the parent.
-- **`CHECK` constraints instead of PG `ENUM`** — adding a new severity or status is a column-level migration, not an `ALTER TYPE` dance.
-- **Partial index on `trace_id`** because it's nullable and every feedback row will be null there — no point indexing them.
+- **`public_id` is a dedicated column**, not derived at query time.
+  Stable, indexable, rotatable independently of the internal UUID. The
+  regex CHECK enforces the Crockford base32 alphabet (no `I`, `L`, `O`,
+  `U`) and `RR-` prefix at the DB level.
+- **Client context is inline on `bug_reports`**, not a separate
+  `bug_client_context` table. A 1:1 split would be pure normalization
+  ritual with no integrity or lifecycle benefit.
+- **`feedback_reports` has only three columns.** Everything else
+  feedback needs (version, created_at, status) lives on the parent.
+- **`CHECK` constraints instead of PG `ENUM`** — adding a new severity
+  or status is a column-level migration, not an `ALTER TYPE` dance.
+- **Snapshot FKs target `bug_reports(report_id)`, not `reports(id)`.**
+  Same cascade behavior (the FK chain still reaches the parent), but
+  this makes it impossible to attach subagents or config-flags to a
+  feedback-kind report — the integrity constraint matches the intent.
+- **`bug_reports.trace_id` is NOT NULL**, so the index is plain (no
+  partial `WHERE trace_id IS NOT NULL` qualifier needed).
+
+---
+
+## Locked decisions
+
+Answers to the open questions from the workshop phase:
+
+| # | Question | Decision | Why |
+|---|---|---|---|
+| 1 | Database name | `residuum_feedback` | Match K8s namespace / DNS / service name / Tempo tenant. Underscores for the PG identifier. |
+| 2 | Snapshots: tables or JSONB? | **Tables** (as specified above) | Investigation tooling is the entire point. Design goal #1 already forbids JSONB catch-alls. Queryability > insert speed for a write-once workload. |
+| 3 | Third variable-arity child table? | **Not yet.** Ship subagents + config_flags only. | The residuum-side allowlist for auto-attach data is still TBD. Adding a third child table later is an additive migration — don't speculate. |
+| 4 | Retention policy | **Indefinite in first pass.** `trace_id` may dangle after 30 days (Tempo's `720h` block retention) and that's acceptable. | Metadata is cheap; long-term trends are the investigation use case. A purge/rotation job is a later decision. Document the dangling-trace expectation in the service repo's README. |
+| 5 | Reverse indexes on snapshot tables | **Yes** — `(name)` and `(key)` (included in the DDL above). | Enables "which reports had subagent X active" / "which reports had flag Y set" without a seq scan. Tables are write-once so index maintenance cost is negligible. |
+| 6 | Audit trail on `status` / `notes` | **None in first pass.** Current state only. | Audit is an additive migration later — a `report_status_history` table with an FK to `reports(id)` doesn't break anything existing. |
+| 7 | `submitter_ip` retention | **Store raw.** Retention pass is a follow-up open question for the service repo, not the schema. | Hashing at insertion breaks the abuse-forensics use case (can't correlate across IPs). Dropping kills rate-limit analytics. Raw + a documented retention pass later is the only option that keeps both use cases alive. The column stays `inet`. |
+| 8 | Migrations toolchain | **`sqlx migrate`**, run on service startup. | Matches the relay. Not a lab-iac concern — migrations live in `feedback-ingest`'s own repo. |
+| 9 | Seed / fixture data | **None.** Empty migrations; local dev gets an empty DB. | No bootstrap rows needed. A test fixture helper in the service repo is a separate concern. |
 
 ---
 
 ## Provisioning
 
-The feedback database lives on the existing `r730xd-postgres` instance. Additions to the `r730xd-postgres` Ansible role:
+The feedback database lives on the existing `r730xd-postgres` instance.
+**The provisioning work is tracked separately from the schema itself**
+— it lands in `lab-iac` via a follow-up plan, not here:
 
-- A new database (name TBD — `residuum_reports` is the working placeholder)
-- A scoped role with only the permissions it needs on that database — `SELECT`/`INSERT`/`UPDATE` on the report tables for the ingest service, no access to any other database in the instance
-- Role password stored in `group_vars/all/vault.yml`
-- Database connection string assembled into `FEEDBACK_DATABASE_URL` and surfaced to the K8s Secret consumed by `feedback-ingest`
+- A new database named `residuum_feedback`
+- A `residuum_feedback` role owning the database (so `sqlx migrate`
+  can issue DDL during service startup), password stored in
+  `group_vars/all/vault.yml`
+- Database connection string assembled into `FEEDBACK_DATABASE_URL`
+  and surfaced to the K8s Secret consumed by `feedback-ingest` via
+  `ansible/playbooks/seed-app-secrets.yml`
 
-Migrations are run from the `feedback-ingest` service itself via `sqlx migrate` on startup, matching the pattern the relay already uses. This keeps schema evolution in the service's own repo alongside the code that depends on it, and avoids an out-of-band Ansible step every time the schema changes.
-
----
-
-## Open questions
-
-Need to be resolved before migrations are written:
-
-1. **Database name.** `residuum_reports` is a placeholder — confirm or rename in line with naming patterns elsewhere on the instance.
-
-2. **Snapshots: normalized tables or JSONB columns?** The argument for tables is genuine queryability ("show me all reports where subagent X was running"). The argument for JSONB is simpler shape, faster inserts, no orphan risk. Leaning tables because the investigation tooling is the entire point of this work, but worth a deliberate call.
-
-3. **Any third variable-arity thing to normalize the same way?** E.g., environment variables, loaded MCP servers, enabled feature flags. The allowlist of what gets auto-attached is still TBD on the residuum side — once that list is pinned, decide whether any of it belongs in its own child table.
-
-4. **Retention policy.** How long are reports kept? Indefinitely? 1 year? Does retention need to match the Tempo `residuum-reports` tenant's block retention (currently `720h` / 30 days per the `r730xd-tempo` role)? If Postgres outlives Tempo, `trace_id` becomes a dangling reference after 30 days — is that OK, or should metadata be purged in lockstep?
-
-5. **Indexes on the snapshot tables.** Do we need a reverse index (`name → report_id`, `key → report_id`) to support "which reports had subagent X active" questions? Probably yes if the investigation tooling wants them, but not strictly needed for writes.
-
-6. **Audit trail on `status` and `notes`.** When status changes or notes are updated during triage, do we want a history table, or is the current state enough? Leaning sufficient for the first pass; history can be added later without a breaking change.
-
-7. **Submitter IP retention.** `submitter_ip inet` is useful for rate-limit analytics and abuse forensics, but it's the most PII-adjacent field in the schema. Drop it after N days? Hash it at insertion? Leave it raw? Needs a deliberate call, especially if the read API eventually surfaces it.
-
-8. **Migrations toolchain.** Confirm `sqlx migrate` is the right fit vs. something like `refinery` or `dbmate`. Matching the existing relay is the strongest argument.
-
-9. **Seed / fixture data.** When someone runs `feedback-ingest` locally against a test Postgres, what's the bootstrap? Probably just empty migrations; no seed rows needed.
+Migrations run from the `feedback-ingest` service itself via
+`sqlx migrate` on startup, matching the relay. Schema evolution lives
+in the service's own repo alongside the code that depends on it; no
+out-of-band Ansible step per schema change.
 
 ---
 
 ## Things that are NOT open
 
-Locked by decisions already made elsewhere; should not be re-litigated during the schema workshop:
+Locked by decisions already made elsewhere:
 
 - The two kinds (`bug`, `feedback`) and their distinct shape
 - The required fields on bug reports (`what_happened`, `what_expected`, `what_doing`, `severity`)
 - The feedback minimalism (message + optional category + version only)
 - The `RR-XXXXXXXXXX` public ID format
-- The `residuum-reports` Tempo tenant name
+- The `residuum-feedback` Tempo tenant name
 - The exclusion of chat history, memory, file contents, secrets from any column
 - The choice to run on the existing `r730xd-postgres` instance (not a separate PG server)
 - Storage isolation: dedicated database, not a schema inside an existing database
+
+---
+
+## Verification
+
+The schema doesn't land in lab-iac, so there's nothing to verify in
+this repo. When the DDL is committed in the `feedback-ingest` service
+repo, validate with:
+
+1. **Fresh DB apply.** `docker run --rm postgres:16` + `sqlx migrate run`
+   against a throwaway database — migrations must apply cleanly on an
+   empty PG 16.
+2. **Sample inserts.** One bug report with two subagents and three
+   config flags; one feedback report. Assert the public_id CHECK
+   rejects `'BAD-XXXXXXXXXX'` and accepts `'RR-0123456789'`.
+3. **Cascade delete.** `DELETE FROM reports WHERE id = …` for the bug
+   report; assert `bug_reports`, `bug_report_active_subagents`, and
+   `bug_report_config_flags` are all empty for that id.
+4. **FK integrity.** Attempt to insert a `bug_report_active_subagents`
+   row for a feedback-kind report's id — must fail with a FK
+   violation.
+5. **NOT NULL on trace columns.** Attempt to insert a `bug_reports`
+   row with `trace_id = NULL` or `tempo_tenant = NULL` — must fail
+   with a not-null violation. A `feedback_reports` insert succeeds
+   even though there is no trace column to populate.
+6. **Severity constraint.** Insert a `bug_reports` row with
+   `severity = 'crash'` — must fail with a CHECK violation.
+   `severity = 'broken'` succeeds.
+7. **Index presence.** `\di` shows all seven explicit indexes plus the
+   automatic PK/UNIQUE backings.
+
+None of these require lab-iac or the r730xd PG instance — they run
+against a local container while the service repo's test harness is
+being written.
