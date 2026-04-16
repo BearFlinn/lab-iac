@@ -25,6 +25,22 @@ Cron-based health checks continue to run as a belt-and-suspenders layer alongsid
 | Cron checks | Each host | — | Tier 1 (every 5m) + Tier 2 (every 15m) health checks |
 | Textfile metrics | Each host | — | `.prom` files at `/var/lib/prometheus/node-exporter/` |
 
+### Tempo tenants
+
+Tempo runs in multi-tenant mode. Every OTLP write and every Grafana query
+must set `X-Scope-OrgID`; tenant-less requests are rejected.
+
+| Tenant | Purpose |
+|---|---|
+| `grizzly-platform` | Homelab operational traces — Argo Workflows, future self-instrumented services, and the `feedback-ingest` service's own operational traces. Default for new producers. |
+| `residuum-feedback` | Report traces emitted by the `feedback-ingest` service. Isolated so feedback volume can't affect platform trace retention or queries. |
+
+Grafana exposes both as separate datasources: `Tempo (grizzly-platform)`
+(uid `tempo` — preserved so Prometheus exemplar links and Loki derived
+fields continue to resolve) and `Tempo (residuum-feedback)` (uid
+`tempo-residuum-feedback`). Add a new tenant only when there's a specific
+isolation reason; default new producers to `grizzly-platform`.
+
 ### Check scripts
 
 Located at `/usr/local/lib/monitoring/checks/` on each host:

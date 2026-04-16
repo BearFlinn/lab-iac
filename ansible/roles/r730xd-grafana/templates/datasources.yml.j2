@@ -3,6 +3,12 @@
 
 apiVersion: 1
 
+# Delete legacy single-tenant Tempo datasource before re-inserting tenant-split versions.
+# Safe to leave in place permanently — runs every reconcile and is a no-op once cleared.
+deleteDatasources:
+  - name: Tempo
+    orgId: 1
+
 datasources:
   - name: Prometheus
     type: prometheus
@@ -29,12 +35,13 @@ datasources:
           datasourceUid: tempo
           urlDisplayLabel: View Trace
 
-  - name: Tempo
+  - name: Tempo (grizzly-platform)
     type: tempo
     access: proxy
     url: {{ grafana_tempo_url }}
     uid: tempo
     jsonData:
+      httpHeaderName1: X-Scope-OrgID
       tracesToLogsV2:
         datasourceUid: loki
         filterByTraceID: true
@@ -44,3 +51,15 @@ datasources:
         enabled: true
       lokiSearch:
         datasourceUid: loki
+    secureJsonData:
+      httpHeaderValue1: grizzly-platform
+
+  - name: Tempo (residuum-feedback)
+    type: tempo
+    access: proxy
+    url: {{ grafana_tempo_url }}
+    uid: tempo-residuum-feedback
+    jsonData:
+      httpHeaderName1: X-Scope-OrgID
+    secureJsonData:
+      httpHeaderValue1: residuum-feedback

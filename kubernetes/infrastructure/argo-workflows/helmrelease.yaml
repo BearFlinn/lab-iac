@@ -34,6 +34,8 @@ spec:
           value: "http://10.0.0.200:4317"
         - name: OTEL_EXPORTER_OTLP_PROTOCOL
           value: "grpc"
+        - name: OTEL_EXPORTER_OTLP_HEADERS
+          value: "X-Scope-OrgID=grizzly-platform"
         - name: OTEL_SERVICE_NAME
           value: "argo-workflow-controller"
       resources:
