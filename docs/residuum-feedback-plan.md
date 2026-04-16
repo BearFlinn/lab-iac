@@ -2,7 +2,19 @@
 
 What needs to land in `lab-iac` to stand up the feedback ingestion feature. See `~/Projects/residuum-feedback-decisions.md` for the architectural decisions this implements.
 
-Database schema, normalization choices, and provisioning details are workshopped in a separate doc: [`residuum-feedback-schema.md`](./residuum-feedback-schema.md).
+Database schema is locked in [`residuum-feedback-schema.md`](./residuum-feedback-schema.md). **Provisioning of the `residuum_feedback` database and owning role is NOT a lab-iac concern** — it's owned by the feedback-ingest repo via a `workflow_dispatch` gh Actions job that runs on the self-hosted lab runner. lab-iac owns the PG instance itself (the `r730xd-postgres` role) and the superuser credential in Ansible Vault, and that's where its responsibility ends for this feature's database.
+
+---
+
+## Status (2026-04-15)
+
+Nothing in this plan has landed in `lab-iac` yet. The feedback-ingest service itself is scaffolded and verified end-to-end against the live `r730xd-postgres` (`residuum_feedback` database + role provisioned by the feedback-ingest repo's bootstrap workflow), but every item below is still pending:
+
+- **K8s manifests** in `kubernetes/apps/residuum-feedback/` — not started
+- **DNS A record** for `residuum-feedback.bearflinn.com` — not added
+- **Tempo multitenancy** (`multitenancy_enabled: true` in `r730xd-tempo`, second Grafana datasource, docs) — not started
+- **ADR** — not written
+- **Optional hardening** (ingress IP allowlist, Alertmanager rule) — not started
 
 ---
 
@@ -83,6 +95,6 @@ Number assigned at the time of writing.
 
 ## Still open
 
-- PG database and role provisioning via the `r730xd-postgres` role — tracked in [`residuum-feedback-schema.md`](./residuum-feedback-schema.md). Blocks the ingest service from going fully live but not from being deployed in a degraded/stub state.
+- ~~PG database and role provisioning via the `r730xd-postgres` role~~ — **No longer a lab-iac concern.** Provisioning moved to the feedback-ingest repo (`.github/workflows/bootstrap-db.yml` + `scripts/bootstrap-db.sh`). Already live: `residuum_feedback` DB + role exist on `r730xd-postgres` and the feedback-ingest service connects to them successfully. lab-iac's only remaining responsibility here is keeping `vault_postgres_password` current in Ansible Vault — that's the credential the bootstrap workflow consumes via the `PG_SUPERUSER_PASSWORD` gh secret.
 - Whether to add an Alertmanager rule for the ingest service's health (e.g., no successful submissions in the last N hours, or high error rate) — low priority but worth noting for the operational readiness checklist
-- Image pull configuration — verify the `residuum-feedback` namespace can pull from the lab registry with the same credentials already configured for other app namespaces
+- Image pull configuration — verify the `residuum-feedback` namespace can pull from the lab registry with the same credentials already configured for other app namespaces (likely a non-issue since the lab registry is anonymous within the cluster per `kubernetes/apps/caz-portfolio/`, but confirm when the manifests land)

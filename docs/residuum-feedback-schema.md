@@ -323,22 +323,54 @@ Answers to the open questions from the workshop phase:
 
 ## Provisioning
 
-The feedback database lives on the existing `r730xd-postgres` instance.
-**The provisioning work is tracked separately from the schema itself**
-— it lands in `lab-iac` via a follow-up plan, not here:
+**Live as of 2026-04-15.** The `residuum_feedback` database and owning
+role exist on the `r730xd-postgres` instance. The schema migration in
+this doc has been applied via `sqlx::migrate!()` on feedback-ingest
+startup and all tables + indexes are present.
 
-- A new database named `residuum_feedback`
-- A `residuum_feedback` role owning the database (so `sqlx migrate`
-  can issue DDL during service startup), password stored in
-  `group_vars/all/vault.yml`
-- Database connection string assembled into `FEEDBACK_DATABASE_URL`
-  and surfaced to the K8s Secret consumed by `feedback-ingest` via
-  `ansible/playbooks/seed-app-secrets.yml`
+**Provisioning is NOT a lab-iac concern** — it moved to the
+feedback-ingest repo during the discovery discussion. The rationale is
+keeping lab-iac free of per-app logic: lab-iac owns the PG instance
+(`r730xd-postgres` role) and the superuser credential in Ansible Vault
+(`vault_postgres_password`), and that's its only touchpoint for this
+feature's database. Everything downstream — creating the app DB,
+creating the owning role, rotating the role password, applying DDL —
+lives with the code that depends on it.
 
-Migrations run from the `feedback-ingest` service itself via
-`sqlx migrate` on startup, matching the relay. Schema evolution lives
-in the service's own repo alongside the code that depends on it; no
-out-of-band Ansible step per schema change.
+The concrete flow:
+
+- **Schema evolution:** `feedback-ingest/migrations/*.sql` run via
+  `sqlx::migrate!()` at service startup. No out-of-band Ansible step.
+- **DB + role bring-up:**
+  `feedback-ingest/.github/workflows/bootstrap-db.yml` is a
+  `workflow_dispatch` job on the self-hosted lab runner. It runs
+  `scripts/bootstrap-db.sh`, which uses standard libpq env vars
+  (`PGHOST=10.0.0.200 PGPORT=5432 PGUSER=postgres`) and the
+  `PG_SUPERUSER_PASSWORD` gh secret to issue idempotent `CREATE
+  DATABASE` / `CREATE ROLE` against r730xd. Re-running rotates the
+  role password.
+- **Credential handoff:** the feedback-ingest repo holds four gh
+  secrets populated by `scripts/setup-gh-secrets.sh` —
+  `FEEDBACK_UPSTREAM_TOKEN`, `PG_SUPERUSER_PASSWORD`,
+  `FEEDBACK_DB_PASSWORD`, and a composed `DATABASE_URL`. The setup
+  script also writes a matching local `.env` so the password is
+  generated once client-side and pushed identically to both
+  destinations, avoiding the "gh secrets are write-only" readback
+  problem.
+
+What lab-iac still needs to own:
+
+- Keeping `vault_postgres_password` in
+  `ansible/inventory/group_vars/all/vault.yml` current. When it
+  rotates, the operator re-runs `setup-gh-secrets.sh` in the
+  feedback-ingest repo to sync the new value into `PG_SUPERUSER_PASSWORD`.
+- Ensuring `r730xd-postgres` continues to accept TCP connections from
+  the self-hosted lab runner (already true).
+
+When the K8s manifests land, the `FEEDBACK_DATABASE_URL` gh secret
+gets wired into a SealedSecret / Sealed K8s Secret in
+`kubernetes/apps/residuum-feedback/` — that's the one remaining
+lab-iac touchpoint for this database.
 
 ---
 
