@@ -14,8 +14,8 @@
 #   SSH_PUBLIC_KEY     - SSH public key string (defaults to ~/.ssh/id_ed25519.pub)
 #
 # Usage:
-#   ./scripts/build-laptop-iso.sh <debian-netinst.iso> --hostname msi-gs66
-#   sudo ./scripts/build-laptop-iso.sh <debian-netinst.iso> --hostname msi-gs66 --usb /dev/sdc
+#   ./scripts/build-laptop-iso.sh <debian-netinst.iso> --hostname lab-laptop
+#   sudo ./scripts/build-laptop-iso.sh <debian-netinst.iso> --hostname lab-laptop --usb /dev/sdc
 
 set -euo pipefail
 
@@ -61,7 +61,7 @@ Usage: build-laptop-iso.sh <debian-netinst.iso> --hostname <name> [options]
 
 Required:
   <debian-netinst.iso>    Path to official Debian 13 netinst ISO
-  --hostname <name>       Hostname (e.g., msi-gs66)
+  --hostname <name>       Hostname (e.g., lab-laptop)
 
 Options:
   --usb <device>          Flash ISO to USB device after building

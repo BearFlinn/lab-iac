@@ -1,9 +1,11 @@
 # K8s Cluster Standup Plan
 
+> **Status (2026-04-17):** All phases below (1–8) are complete. The cluster is live on v1.33.10 with Flux green, apps migrated to GitOps, and the custom runner image / Argo / sccache work shipped. This document is retained as the build log and the reference for the shape of each phase; individual "Verify" blocks stay useful as smoke-test checklists for future bring-up. Remaining closeout work (Tower PC join, GPU host, off-the-shelf router + VLANs, UPS) is tracked in `migration-2026/migration-plan.md`.
+
 Phased deployment of the new K8s cluster. Each phase is self-contained — it produces a working, observable state that can be verified before moving on.
 
 **Stack:** kubeadm, Cilium/Hubble, nginx-ingress, Flux CD, democratic-csi
-**Decisions:** ADR-013 (local disk), ADR-014 (stack), ADR-015 (storage), ADR-016 (single CP)
+**Decisions:** ADR-013 (local disk), ADR-014 (stack), ADR-015 (storage), ADR-016 (single CP), ADR-017 (ARC v2), ADR-018 (Argo), ADR-019 (ingress/TLS), ADR-020 (app delivery), ADR-021 (Tower PC as plain worker)
 
 ## Nodes
 
@@ -196,7 +198,7 @@ Migrate services one at a time. Each migration exercises the 7a machinery and sh
 - **landing-page** — migrated first because it's the simplest real workload, and the stale link to `bearflinn/lab-iac` on the site is fixed as part of this migration (new URL is `grizzly-endeavors/lab-iac`)
 - caz-portfolio
 - resume-site
-- Other services from the old cluster (Palworld, anything still on the staging VM)
+- Other services from the old cluster (anything still on the staging VM). Palworld was backed up and decommissioned indefinitely — see ADR-022.
 
 **Per-service delivers:**
 - App repo has a `deploy/` dir with Helm chart

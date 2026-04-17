@@ -27,7 +27,8 @@ optiplex_ip: "10.0.0.187"
 proxy_vps_public_ip: "178.156.217.91"
 home_public_ip: "98.251.87.200"
 netbird_home_assistant_ip: "100.96.217.175"
-netbird_palworld_ip: "100.96.46.7"
+# netbird_palworld_ip removed 2026-04-17 — Palworld decommissioned
+# indefinitely per ADR-022. VPS UDP 8211 forward retired in the same pass.
 
 # WireGuard point-to-point tunnel: VPS ↔ R730xd
 # Used by Caddy on VPS to reach K8s ingress via iptables DNAT on R730xd.
@@ -42,7 +43,9 @@ wg_port: 51822
 
 # K8s ingress address as seen from the VPS.
 # Traffic flow: VPS Caddy → wg0 tunnel → R730xd wg0 → iptables DNAT → K8s NodePort
-# R730xd is a temporary L4 bridge until the Tower PC router (ADR-001) takes over.
+# R730xd is the L4 bridge today. If ingress ever moves off R730xd (e.g., to the
+# off-the-shelf router from ADR-021), the WG tunnel + iptables role can re-run
+# against the new host with no Flux/Caddy changes — see ADR-019.
 # Only ports 30487 (http) and 30356 (https) are forwarded — nothing else on
 # the LAN is reachable from the VPS through the tunnel.
 k8s_ingress_ip: "{{ wg_r730xd_ip }}"

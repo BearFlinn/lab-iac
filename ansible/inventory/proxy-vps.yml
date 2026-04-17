@@ -80,11 +80,11 @@ all:
       #
       # NAT rules are stored in /etc/ufw/before.rules so they persist
       # across UFW reloads.
-      udp_forwarding_rules:
-        - src_port: 8211
-          dest_ip: "{{ netbird_palworld_ip }}"
-          dest_port: 8211
-          comment: "Palworld game server on deb-web"
+      #
+      # (Palworld UDP 8211 forward removed 2026-04-17. Palworld decommissioned
+      # indefinitely — see ADR-022. Leaving the empty list here so the
+      # setup-proxy-vps playbook's UFW reset still removes any lingering rule.)
+      udp_forwarding_rules: []
 
   vars:
     # Timezone
@@ -100,9 +100,9 @@ all:
 
     # Home network public IP for monitoring firewall rules.
     # R730xd Prometheus scrapes VPS over the internet from this address.
-    # R730xd has NetBird installed out-of-band as a temporary admin-group
-    # member (operator access only, never used for VPS→home ingress).
-    # Update this if the ISP assigns a new IP.
+    # R730xd is enrolled in the NetBird admin group for operator access only
+    # (never used for VPS→home ingress — that goes through the dedicated WG
+    # tunnel per ADR-019). Update this if the ISP assigns a new IP.
     monitoring_home_ip: "{{ home_public_ip }}"
 
     # Firewall configuration

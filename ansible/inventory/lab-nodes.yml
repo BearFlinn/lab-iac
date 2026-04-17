@@ -50,14 +50,11 @@ all:
               node_roles: ["worker"]
               ipmi_exporter_enabled: false
 
-    standalone:
-      hosts:
-        tower-pc:
-          ansible_host: "{{ tower_pc_ip }}"
-          model: "Custom Tower PC"
-          cpu: "Intel i7-4790 (4C/8T @ 3.6-4.0 GHz)"
-          ram_gb: 24
-          node_roles: ["router", "gpu-inference"]
+    # (tower-pc host entry removed 2026-04-17 alongside ADR-021. Tower PC
+    # will join the cluster as a plain K8s worker — the host entry will be
+    # re-added under k8s_workers at join time. The reserved IP stays in
+    # ansible/group_vars/all/network.yml as tower_pc_ip. The previous
+    # "standalone" group had only tower-pc in it, so it's removed too.)
 
     storage_servers:
       hosts:

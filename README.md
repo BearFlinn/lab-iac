@@ -1,22 +1,26 @@
 # Home Lab Infrastructure
 
-Infrastructure as Code for a bare-metal homelab on repurposed enterprise and consumer hardware. Currently mid-migration to a new topology with dedicated storage, managed switching, and diskless PXE-booted Kubernetes nodes.
+Infrastructure as Code for a bare-metal homelab on repurposed enterprise and consumer hardware. The 2026 migration is substantively complete: new Kubernetes cluster is live on dedicated nodes, storage is dynamic (iSCSI + NFS), and apps deploy via GitOps.
 
-**Traffic flow:** Internet → Hetzner VPS (Caddy) → NetBird VPN → Home cluster
+**Traffic flow:** Internet → Hetzner VPS (Caddy wildcard TLS) → dedicated WireGuard tunnel → R730xd iptables DNAT → K8s NodePort → ingress-nginx → app ([ADR-019](docs/decisions/019-ingress-and-tls-termination.md))
 
 ## Current State
 
-The previous K8s cluster configs have been archived (`archive/pre-migration-2026/`). The repo now contains only configs for infrastructure that's online or actively being built.
+The previous K8s cluster configs are archived (`archive/pre-migration-2026/`). The repo contains only configs for live infrastructure.
 
 **Online:**
-- **Dell R730xd** — Storage server (Debian 13, 32GB ECC, 14 drive bays). Two storage tiers: ZFS raidz1 pool for latency-sensitive services (Postgres, Redis, MinIO Obs, Prometheus, Loki, Tempo, Grafana), MergerFS + SnapRAID for bulk storage (MinIO Bulk, NFS for K8s PVCs). Staging VM for critical services during migration.
-- **Hetzner VPS** — Caddy reverse proxy with wildcard TLS (*.bearflinn.com via Cloudflare DNS-01). Routes traffic over NetBird VPN to the cluster.
+- **K8s cluster** — v1.33.10. `dell-inspiron-15` (control plane) + `quanta`, `intel-nuc`, `optiplex` (workers). Cilium CNI, Flux GitOps, democratic-csi for storage, cert-manager, ingress-nginx, ARC v2 runners, Argo Workflows, in-cluster OCI registry. See [docs/k8s-cluster-standup.md](docs/k8s-cluster-standup.md).
+- **Dell R730xd** — Storage server (Debian 13, 32 GB ECC, 14 drive bays). Two storage tiers: ZFS raidz1 for latency-sensitive services (Postgres, Redis, MinIO Obs, Prometheus, Loki, Tempo, Grafana), MergerFS + SnapRAID for bulk (MinIO Bulk, NFS for K8s PVCs). Also terminates the VPS → home ingress WireGuard tunnel.
+- **Hetzner VPS** — Caddy reverse proxy with wildcard TLS (`*.bearflinn.com` via Cloudflare DNS-01). Routes to the cluster through the WG tunnel.
 
-**In progress:**
-- Jumpbox (AMD C60 mini PC) — Lightweight command center with Sway, Claude Code, stats display
-- K8s cluster rebuild — New topology with diskless nodes, VLANs, dedicated storage network
+**In progress / pending:**
+- **Tower PC** — will join the cluster as a plain worker ([ADR-021](docs/decisions/021-off-the-shelf-router-tower-pc-as-worker.md)).
+- **GPU inference host** — separate new-build machine for standalone inference (Ollama / vLLM / TGI TBD).
+- **Off-the-shelf router** — replaces Xfinity gateway routing; unblocks VLAN config on SR2024.
+- **Jumpbox (AMD C60 mini PC)** — lightweight command center with Sway, Claude Code, stats display.
+- **UPS battery replacement** — APC RS 1500 batteries dead; not blocking anything.
 
-See [docs/migration-2026/](docs/migration-2026/) for the full migration plan, hardware inventory, and network design.
+See [docs/migration-2026/](docs/migration-2026/) for full migration plan, hardware inventory, and network design.
 
 ## Repository Structure
 

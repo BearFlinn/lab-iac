@@ -1,7 +1,7 @@
 # ADR-001: Tower PC as Lab Router
 
 **Date:** 2026-03-27
-**Status:** Reinstated by [ADR-011](011-ap630-restored-to-stock-wifi-ap.md) (was superseded by ADR-003, but AP630 router project closed out)
+**Status:** Superseded by [ADR-021](021-off-the-shelf-router-tower-pc-as-worker.md) (2026-04-17). Previous history: reinstated by [ADR-011](011-ap630-restored-to-stock-wifi-ap.md) after ADR-003 closed out.
 
 ## Context
 
@@ -36,3 +36,14 @@ Use the Tower PC as the lab router in addition to its GPU inference role.
 - **Dedicated box:** Unnecessary cost and power draw for a homelab. The tower PC handles this with no additional hardware.
 - **R730 VM:** Puts routing behind the storage server's availability. R730 reboots (firmware updates, drive changes) would take down the network. The R730 is more likely to need maintenance than the tower PC.
 - **Keep Xfinity routing:** Loses inter-VLAN firewall rules, custom DNS, per-VLAN DHCP, and full network control — the main reasons for the migration.
+
+---
+
+## Update (2026-04-17) — Superseded
+
+This decision is superseded by [ADR-021](021-off-the-shelf-router-tower-pc-as-worker.md). Two reasons:
+
+1. The Tower PC PSU can't carry the planned GPU fleet. A separate machine is being built for GPU inference, so the "CPU idle alongside GPU inference" rationale no longer applies.
+2. The operator decided the ongoing overhead of owning a DIY router in IaC isn't worth it for this homelab. An off-the-shelf router will replace the Xfinity gateway's routing role; the Tower PC will join the cluster as a plain K8s worker.
+
+See ADR-021 for the replacement decision and context.

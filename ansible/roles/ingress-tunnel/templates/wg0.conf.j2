@@ -13,7 +13,7 @@ PrivateKey = {{ vault_wg_vps_private_key }}
 MTU = {{ wg_mtu }}
 
 [Peer]
-# R730xd — ingress bridge (temporary until Tower PC router per ADR-001)
+# R730xd — ingress bridge. May move to the off-the-shelf router (ADR-021) later; no contract depends on R730xd specifically.
 PublicKey = {{ wg_r730xd_public_key }}
 AllowedIPs = {{ wg_r730xd_ip }}/32
 {% else %}

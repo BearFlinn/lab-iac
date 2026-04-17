@@ -9,7 +9,7 @@ Phase 6 of the K8s cluster standup (`docs/k8s-cluster-standup.md`) needs to put 
 
 The relevant existing pieces:
 - **Hetzner VPS** (`proxy-vps`) has a public IP, runs Caddy with a `*.bearflinn.com` wildcard certificate issued via Cloudflare DNS-01.
-- **R730xd** is on the home LAN (`10.0.0.0/24`). It has NetBird installed out-of-band as an admin-group member for operator use (jumpbox, laptop). This is a temporary placeholder — the Tower PC dedicated router (ADR-001) will take over routing and boundary duties later.
+- **R730xd** is on the home LAN (`10.0.0.0/24`). It has NetBird installed out-of-band as an admin-group member for operator use (jumpbox, laptop). This is a temporary placeholder for the ingress tunnel termination; a future off-the-shelf router ([ADR-021](021-off-the-shelf-router-tower-pc-as-worker.md)) may take over boundary duties later, or the tunnel may stay on R730xd — the ADR-021 decision does not force a move.
 - **K8s cluster** (one control plane + three workers) is entirely on the home LAN, not individually reachable from the internet.
 - **cert-manager** has not previously been deployed via GitOps; the old cluster installed it via an Ansible playbook for a short-lived LE-based flow.
 
@@ -33,7 +33,7 @@ The relevant existing pieces:
 ## Consequences
 
 - **External traffic path is four hops:** Internet → VPS Caddy (TLS) → WG tunnel → R730xd iptables DNAT → K8s NodePort → DaemonSet pod → workload. Each hop is observable (Caddy logs, `wg show`, iptables counters, Prometheus ingress-nginx metrics, Alloy pod logs in Loki).
-- **R730xd is on the critical path for external ingress.** If R730xd goes down, external traffic to any `*.bearflinn.com` subdomain stops — even though the cluster itself may still be healthy. This is acceptable for the lifespan of this design: it's explicitly a bridge until the Tower PC router replaces it. When that happens, the WG tunnel and iptables rules migrate to the Tower PC with no changes to the Flux manifests or Caddy config.
+- **R730xd is on the critical path for external ingress.** If R730xd goes down, external traffic to any `*.bearflinn.com` subdomain stops — even though the cluster itself may still be healthy. This is acceptable for the lifespan of this design. If the WG tunnel and iptables rules ever migrate to a different host (e.g., the purchased off-the-shelf router from [ADR-021](021-off-the-shelf-router-tower-pc-as-worker.md)), the move is additive — no Flux manifest or Caddy config changes required, only the `ingress-tunnel` role re-running on a new target.
 - **Client IP preservation relies on headers, not TCP.** `externalTrafficPolicy: Cluster` means kube-proxy may SNAT the source address before handing traffic to the ingress-nginx pod, so the real client address is only available via `X-Real-IP` / `X-Forwarded-For` from Caddy. `use-forwarded-headers: "true"` is set in the ingress-nginx config so logs, rate-limiting, and backend services see the right address.
 - **WireGuard keys are rotated manually.** No automated rotation — the two keypairs live in `ansible/group_vars/all/vault.yml`. If either side is compromised, regenerate both keys, re-vault, re-run the `ingress-tunnel` role on both hosts.
 - **Self-signed only means nothing in-cluster has browser-trusted TLS.** Workloads that need TLS-terminated endpoints internally (e.g., mTLS between services, dashboards over HTTPS) will use the self-signed issuer and require explicit trust bundles. A Let's Encrypt ClusterIssuer will be added the first time a workload actually needs it.
@@ -45,5 +45,5 @@ The relevant existing pieces:
 - `kubernetes/infrastructure/ingress-nginx/helmrelease.yaml` — NodePort DaemonSet config.
 - `kubernetes/infrastructure/cert-manager/cluster-issuer.yaml` — self-signed issuer.
 - `ansible/roles/caddy/templates/Caddyfile-k8s.j2` — VPS wildcard catch-all and upstream header handling.
-- ADR-001 (Tower PC as router) — successor that will take over R730xd's bridge role.
+- ADR-021 (off-the-shelf router; Tower PC as worker) — supersedes ADR-001; future router may or may not take over R730xd's bridge role.
 - ADR-014 (K8s cluster stack) — establishes nginx-ingress + VPS-side TLS termination.

@@ -1,149 +1,145 @@
 # Target Network Architecture
 
-Last updated: 2026-04-03
+Last updated: 2026-04-17
 
-## Physical Layout
+## Status
 
-Everything lab-related goes in the **dedicated closet**. Full ability to run new cable anywhere in the house.
+The lab runs on a **flat SR2024 network** today with the Xfinity gateway upstream. The target architecture below is gated on two purchases:
 
-```
-Closet (Lab):
-  - SR2024 switch (24-port managed)
-  - Dell PowerEdge R730 (storage + VMs)
-  - Quanta QSSC-2ML (K8s worker)
-  - Dell Optiplex 9020 (K8s worker)
-  - Dell Inspiron 15 (K8s control plane)
-  - Tower PC (router + GPU inference) — may be in closet or nearby depending on noise/heat
+1. An **off-the-shelf router** ([ADR-021](../decisions/021-off-the-shelf-router-tower-pc-as-worker.md)) to replace the Xfinity gateway's routing role. Until it's in place, configuring VLANs buys little — inter-VLAN routing would have to live somewhere, and we've explicitly decided not to run it ourselves.
+2. **UPS battery replacement** (not network-blocking, tracked separately).
 
-Cable runs from closet:
-  - To Xfinity gateway (uplink)
-  - To master bedroom (sibling's drop)
-  - To garage/workshop
-  - To wherever WiFi APs are placed
-```
+Nothing below is time-pressured — everything still operates on the current flat network until then.
 
-## Network Topology
+## Physical Layout (current)
+
+All lab machines are in the closet:
+
+- SR2024 switch (24-port managed)
+- Dell PowerEdge R730xd (storage + observability + foundation stores)
+- Quanta QSSC-2ML (K8s worker)
+- Intel NUC (K8s worker)
+- Dell Optiplex 9020 (K8s worker)
+- Dell Inspiron 15 (K8s control plane)
+- Tower PC (pending K8s worker — ADR-021)
+
+Home drops (bedroom, garage, workshop) stay on the legacy consumer switch chain ([ADR-008](../decisions/008-keep-existing-switch-chain-for-home.md)) — they're fine as they are.
+
+## Target Topology (post-router)
 
 ```
               [ISP / Xfinity Gateway]
                  Bridge mode
                   Living Room
                         |
-                        | (cable run to closet)
                         v
               +-------------------+
-              |    Tower PC       |
-              |  Router + GPU     |
+              |  Off-the-shelf    |
+              |  Router           |
               |  NAT/DHCP/DNS/FW  |
+              |  VLAN trunk       |
               +-------------------+
                         |
                         v
             +-------------------+
             |    SR2024 Switch  |
             |  24-port managed  |
-            |    VLAN-capable   |
+            |    VLAN trunks    |
             +-------------------+
-              |  |  |  |  |  |  |  |  |
-              v  v  v  v  v  v  v  v  v
-           Lab machines    Bedroom   Garage   APs
-           (VLAN 10)      (VLAN 1)  (VLAN 1) (trunk)
+              |  |  |  |  |  |
+              v  v  v  v  v  v
+           Lab machines  Home drops   APs
+           (VLAN 10)    (VLAN 1)     (trunk)
 ```
 
-### How This Works
+### How it works (once the router is in place)
 
-- **Xfinity gateway in bridge mode** — passes the public IP through to the Tower PC, which handles all routing
-- **Tower PC is the router** — runs NAT, DHCP, DNS, and inter-VLAN firewall rules. CPU is largely unused by its GPU inference workload, and its other roles are non-critical, making it a good fit.
-- **SR2024 handles VLANs** — lab traffic is segmented at Layer 2, with the Tower PC providing inter-VLAN routing and firewall rules (router-on-a-stick)
-- **Lab machines use static IPs** (as they already do via Ansible) on the lab VLAN
-- **Home devices get DHCP from the Tower PC** on the default/untagged VLAN
-- **Lab VLAN is isolated from home VLAN** — inter-VLAN traffic goes through the Tower PC's firewall rules
+- **Xfinity gateway in bridge mode** — passes the public IP to the purchased router, which handles all routing.
+- **Purchased router** handles NAT, DHCP, DNS, and inter-VLAN firewall rules. Typical candidates (UniFi, OPNsense on an appliance) all support this out of the box.
+- **SR2024 handles L2 tagging** — trunk ports to the router; access / trunk ports per lab machine.
+- **Lab machines keep static IPs** (as they already do via Ansible) on the lab VLAN.
 
-### What This Unlocks (vs. Xfinity-only)
+### What this unlocks
 
-- **Inter-VLAN firewall rules** — granular control over what can cross VLAN boundaries
-- **Custom DHCP per VLAN** — static assignments for lab, dynamic for home
-- **Local DNS** — lab-internal resolution (e.g., `r730.lab.local`) without /etc/hosts hacks
-- **Full control** — no dependency on Xfinity gateway's limited feature set
+- Inter-VLAN firewall rules — granular control over what can cross VLAN boundaries.
+- Custom DHCP per VLAN — static leases for lab, dynamic for home.
+- Local DNS — lab-internal resolution without `/etc/hosts` hacks.
+- Full router-side config, no Xfinity gateway feature limits.
 
-## VLAN Design
+## VLAN Design (deferred — target state)
 
-With the Tower PC as router, full inter-VLAN routing and firewall rules are available. Start with 2 VLANs, expand as needed.
+Start with 2 VLANs, expand only if warranted.
 
 | VLAN | ID | Purpose | Members |
 |------|----|---------|---------|
-| Default (Home) | 1 (untagged) | Home network — Xfinity DHCP, personal devices, internet access | Xfinity uplink, bedroom drop, garage drop, WiFi APs (home SSID), lab machines (default gateway) |
-| Lab | 10 (tagged) | Lab-internal traffic — K8s, storage, inference | Inspiron, Quanta, Optiplex, R730, Tower PC |
-
-### How Lab Machines Handle Two VLANs
-
-Each lab machine gets:
-- **Untagged port on VLAN 1** for internet access (default gateway via Xfinity)
-- **Tagged VLAN 10** on the same port (802.1Q trunk) for lab-internal traffic
-
-This means lab machines have two IPs — one on the home subnet (for internet) and one on the lab subnet (for inter-machine communication). Kubernetes, NFS, and all lab traffic uses the VLAN 10 addresses. Internet-bound traffic goes through VLAN 1.
-
-Alternatively, keep it even simpler: **just use VLAN 10 as a dedicated storage network** and leave everything else on VLAN 1. The R730's 4-port NIC makes this easy — one port on VLAN 1 (general), one or more ports on VLAN 10 (storage only).
+| Default (Home) | 1 (untagged) | Home network — DHCP from new router, personal devices, internet | Router uplink, bedroom drop, garage drop, WiFi APs (home SSID), lab machines' internet-facing port |
+| Lab | 10 (tagged) | Lab-internal — K8s, storage, observability | Inspiron, Quanta, Intel NUC, Optiplex, Tower PC (once joined), R730xd |
 
 ### Optional: Storage Sub-VLAN
 
 | VLAN | ID | Purpose | Members |
 |------|----|---------|---------|
-| Storage | 20 | NFS/S3 traffic only | R730 (dedicated NIC port), Quanta, Optiplex, Inspiron |
+| Storage | 20 | NFS / iSCSI traffic only | R730 (dedicated NIC port), worker nodes' dedicated ports |
 
-This is the highest-value segmentation — keeps storage I/O off the general network. The R730's 4-port NIC can dedicate ports to this. Worth doing even without a router.
+Worth doing **if** storage I/O noticeably contends with other lab traffic on the flat network. No pressure to commit up front — the R730xd 4-port NIC makes this trivial to add when needed.
 
-**Quanta direct link:** The Quanta will have 1-2 ports direct-connected to the R730 (bypassing the switch entirely) for dedicated NFS I/O. As the heaviest K8s worker, this prevents it from saturating the switch with storage traffic. Remaining Quanta NIC ports connect to the switch for general/K8s traffic.
+### How lab machines handle tagging
+
+Each lab machine gets:
+
+- **Untagged on VLAN 1** for internet / general access (default gateway via the new router).
+- **Tagged VLAN 10** on the same port (802.1Q trunk) for lab-internal traffic.
+
+Result: two IPs per machine — one on the home subnet (for internet), one on the lab subnet (for everything K8s / storage). Works cleanly with Linux's VLAN support (`ip link add link eth0 name eth0.10 type vlan id 10`).
 
 ## WiFi Architecture
 
 | AP | Location | Notes |
 |----|----------|-------|
-| AP630 (primary) | Central location — living room or hallway | Highest performance (4×4:4 MU-MIMO, 802.11ac Wave 2). Restored to stock HiveOS 2026-04-03 ([ADR-011](../decisions/011-ap630-restored-to-stock-wifi-ap.md)). |
-| AP230 (secondary) | Second coverage zone | Strong performance (3×3:3 MIMO) |
-| AP130 #1 | Garage/workshop | Workshop coverage |
-| AP130 #2 | Far side of house or closet area | Dead spot coverage |
+| AP630 (primary) | Central location (living room or hallway) | Highest performance (4×4:4 MU-MIMO, 802.11ac Wave 2). Restored to stock HiveOS 2026-04-03 ([ADR-011](../decisions/011-ap630-restored-to-stock-wifi-ap.md)). |
+| AP230 (secondary) | Secondary coverage zone | 3×3:3 MIMO. Starting point per [ADR-009](../decisions/009-start-with-ap230-only.md). |
+| AP130 #1 | Garage/workshop | Workshop coverage. |
+| AP130 #2 | Far side of house or closet area | Dead-spot coverage if needed. |
 
-- With the Tower PC as router, VLAN-tagged SSIDs (e.g., separate guest network) are fully supported — the router can provide DHCP and firewall rules per VLAN.
-- Xfinity WiFi can be **disabled** once AP coverage is verified, or left on as a fallback.
-- **PoE note:** SR2024 provides PoE (802.3at/PoE+) — no injectors needed.
+- Once the new router is in place, VLAN-tagged SSIDs (e.g., separate guest network) are fully supported.
+- Xfinity WiFi can be disabled when AP coverage is verified.
+- **PoE:** SR2024 provides 802.3at — no injectors needed.
 
 ## NetBird VPN
 
-Unchanged from current setup:
-- NetBird continues to provide external access to the lab via the Hetzner VPS
-- NetBird client runs on machines that need external reachability (K8s nodes, R730)
-- Caddy on VPS still routes to K8s ingress via NetBird
-- Peer-to-peer — doesn't depend on the local router
+Unchanged by the router purchase:
+
+- Admin-group operator access to the home lab (jumpbox, R730xd, K8s nodes as needed).
+- Hetzner VPS is deliberately *not* in the admin group — see [ADR-019](../decisions/019-ingress-and-tls-termination.md) and `feedback_netbird_scope.md` in memory.
+- Peer-to-peer; doesn't depend on the local router.
 
 ## DNS
 
-- **For now:** Continue using /etc/hosts managed by Ansible (current approach) during migration
-- **Post-migration:** Run DNS on the Tower PC (router) for whole-network resolution — lab-internal names (e.g., `r730.lab.local`, `quanta.lab.local`) and upstream forwarding. Eliminates the need for /etc/hosts management via Ansible.
-- **Alternative:** Run CoreDNS or Pi-hole on K8s if preferred, but having it on the router is simpler and doesn't create a chicken-and-egg problem with K8s needing DNS to boot.
+- **Today:** `/etc/hosts` managed by Ansible on lab machines + Xfinity upstream.
+- **Target (post-router):** local DNS on the new router for lab-internal names. Eliminates the `/etc/hosts` pattern.
+- **Alternative:** CoreDNS / Pi-hole on K8s — rejected for now because it creates a chicken-and-egg between K8s health and DNS availability. Router-side DNS is simpler.
 
-## Cable Runs Needed
+## Cable Runs
 
-| From | To | Purpose |
-|------|----|---------|
-| Xfinity gateway (living room) | Closet | Uplink to SR2024 |
-| Closet (SR2024) | Master bedroom | Sibling's connection |
-| Closet (SR2024) | Garage | Workshop connection |
-| Closet (SR2024) | AP locations (×3) | WiFi APs (PoE from switch, no injectors needed) |
-| Within closet | Short patch cables | All lab machines to SR2024 |
+| From | To | Status |
+|------|----|--------|
+| Xfinity gateway (living room) | Closet | In place. |
+| Closet (SR2024) | AP mount locations | Partial — will complete as APs get mounted. |
+| Within closet | Short patch cables — all lab machines to SR2024 | Done. |
 
 ## Open Questions
 
-- [x] **SR2024 VLAN verification** — confirmed: supports 802.1Q VLAN tagging, LACP bonding, trunk/access port modes
-- [x] **SR2024 PoE** — confirmed: SR2024 provides PoE (802.3at/PoE+). All 3 APs powered successfully by the switch. No injectors needed.
-- [x] **Aerohive firmware** — confirmed: standalone mode works via `no capwap client enable`. VLAN-tagged SSIDs work via user-profile attributes. Switch runs HiveOS 6.5r8, AP230 runs HiveOS 8.1r1.
-- [ ] **Xfinity gateway model** — does it play nice with a managed switch doing VLANs on the LAN side?
-- [ ] **Storage VLAN worth it now?** — dedicated storage VLAN is high value but adds config complexity on every lab machine. Decide before migration.
-- [ ] **D-Link DIR-868L** — could potentially be reflashed with OpenWrt and used as an additional WiFi AP if needed, but low priority.
+- [x] ~~SR2024 VLAN capability~~ — confirmed (802.1Q, LACP, trunks).
+- [x] ~~SR2024 PoE~~ — confirmed (802.3at, powers all APs without injectors).
+- [x] ~~Aerohive standalone mode~~ — confirmed (`no capwap client enable`).
+- [x] ~~Custom router vs. off-the-shelf~~ — decided off-the-shelf ([ADR-021](../decisions/021-off-the-shelf-router-tower-pc-as-worker.md)).
+- [ ] **Router model selection** — UniFi, OPNsense appliance, or similar. Decide when ready to buy.
+- [ ] **Storage VLAN worth it?** — revisit once router is in and we have traffic baselines.
+- [ ] **Xfinity gateway bridge-mode compatibility** — verify with the chosen router before cutover.
 
 ## Available but Unused Network Hardware
 
 | Device | Status | Potential Use |
 |--------|--------|---------------|
-| Mini PC (AMD C60) | Jumpbox / command center | SSH gateway, Claude Code, stats display |
-| D-Link DIR-868L | Consumer router | Could flash OpenWrt and use as AP, or keep as spare |
-| Existing consumer switches (5-port ×2, 8-port ×1, 5-port managed ×1) | Replaced by SR2024 | Spares. Workshop might keep a small switch if only one cable run goes to the garage. |
+| D-Link DIR-868L | Consumer router | OpenWrt AP candidate, low priority. |
+| Existing consumer switches (5-port ×2, 8-port ×1, 5-port managed ×1) | In use for home drops per ADR-008. | Leave in place. |
