@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: residuum-feedback
+  labels:
+    app.kubernetes.io/name: feedback-ingest
+    app.kubernetes.io/managed-by: flux
