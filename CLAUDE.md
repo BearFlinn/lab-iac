@@ -1,6 +1,6 @@
 # lab-iac
 
-Homelab Infrastructure as Code. See `README.md` for architecture, machines, repo structure, and common commands. See `docs/migration-2026/` for migration plan and hardware inventory.
+Homelab Infrastructure as Code. See `README.md` for architecture, machines, repo structure, and common commands. `docs/hardware.md` has the live machine inventory, `docs/network.md` the network topology, and `docs/decisions/` the architectural rationale. The completed 2026 migration record lives in `archive/migration-2026/`.
 
 # Secrets Management
 
@@ -17,7 +17,7 @@ Homelab Infrastructure as Code. See `README.md` for architecture, machines, repo
 
 # Operational Readiness Checklist
 
-Every service, machine, or infrastructure component stood up during the migration MUST have answers to the following before it is considered complete. If a question doesn't apply, document why.
+Every service, machine, or infrastructure component MUST have answers to the following before it is considered complete. If a question doesn't apply, document why.
 
 ## Observability
 - **Health signal:** How do we know this is working right now? (e.g., systemd status, HTTP health endpoint, kubectl readiness probe, process check)

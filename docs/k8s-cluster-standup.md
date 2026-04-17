@@ -1,6 +1,6 @@
 # K8s Cluster Standup Plan
 
-> **Status (2026-04-17):** All phases below (1–8) are complete. The cluster is live on v1.33.10 with Flux green, apps migrated to GitOps, and the custom runner image / Argo / sccache work shipped. This document is retained as the build log and the reference for the shape of each phase; individual "Verify" blocks stay useful as smoke-test checklists for future bring-up. Remaining closeout work (Tower PC join, GPU host, off-the-shelf router + VLANs, UPS) is tracked in `migration-2026/migration-plan.md`.
+> **Status (2026-04-17):** All phases below (1–8) are complete. The cluster is live on v1.33.10 with Flux green, apps migrated to GitOps, and the custom runner image / Argo / sccache work shipped. This document is retained as the build log and the reference for the shape of each phase; individual "Verify" blocks stay useful as smoke-test checklists for future bring-up. Remaining pending work (Tower PC join, GPU host, off-the-shelf router + VLANs, UPS) is tracked in `hardware.md` and the relevant ADRs.
 
 Phased deployment of the new K8s cluster. Each phase is self-contained — it produces a working, observable state that can be verified before moving on.
 

@@ -1,8 +1,10 @@
-# Target Network Architecture
+# VLAN Redesign (exploration)
+
+> **Status: not implemented.** Gated on an off-the-shelf router purchase ([ADR-021](../decisions/021-off-the-shelf-router-tower-pc-as-worker.md)). For the live topology, see [../network.md](../network.md).
 
 Last updated: 2026-04-17
 
-## Status
+## Why this isn't live yet
 
 The lab runs on a **flat SR2024 network** today with the Xfinity gateway upstream. The target architecture below is gated on two purchases:
 

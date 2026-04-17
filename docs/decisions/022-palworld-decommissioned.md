@@ -5,7 +5,7 @@
 
 ## Context
 
-Palworld ran as a systemd service on the Optiplex ("deb-web") alongside the old web-hosting workloads, with UDP 8211 forwarded from the Hetzner VPS through NetBird to the server. Earlier migration plans (`docs/migration-2026/migration-plan.md` Phase 3B) called for containerizing it and moving it into K8s or a VM.
+Palworld ran as a systemd service on the Optiplex ("deb-web") alongside the old web-hosting workloads, with UDP 8211 forwarded from the Hetzner VPS through NetBird to the server. Earlier migration plans (`archive/migration-2026/migration-plan.md` Phase 3B) called for containerizing it and moving it into K8s or a VM.
 
 Two things now point the other way:
 
@@ -21,7 +21,7 @@ Save data (52 MB) and config were backed up to `~/Backups/deb-web/` on 2026-04-0
 ## Consequences
 
 - `netbird_palworld_ip` and the `udp_forwarding_rules` entry for port 8211 get removed from `ansible/inventory/proxy-vps.yml` and `ansible/group_vars/all/network.yml`.
-- Any references to "Palworld migration" in `docs/migration-2026/` get removed or rewritten to point here.
+- Any references to "Palworld migration" in the archived migration docs (`archive/migration-2026/`) remain as historical record and point here for the final decision.
 - `archive/palworld-udp-forwarding.md` stays as the historical record of how the UDP forward was wired up, in case it's ever rebuilt.
 - `feedback_iac_and_docs.md` (auto-memory) continues to reference the "manual changes to Palworld config got wiped" incident as a lesson — that lesson is about IaC discipline, not about Palworld, and the example is still valid.
 - No migration work needed to close this out beyond the Ansible / doc edits landing with this ADR.

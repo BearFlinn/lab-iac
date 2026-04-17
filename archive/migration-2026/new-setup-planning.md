@@ -4,7 +4,7 @@ Last updated: 2026-04-17
 
 ## Status
 
-Everything in the role-assignment table below is now either **live** or **pending a known next step**. This document is kept as a reference for the planning rationale behind each role; for day-to-day "what's running where", see `current-hardware-inventory.md`.
+Everything in the role-assignment table below is now either **live** or **pending a known next step**. This document is kept as a reference for the planning rationale behind each role; for day-to-day "what's running where", see `../../docs/hardware.md`.
 
 ## Target Architecture
 
@@ -54,8 +54,8 @@ Everything in the role-assignment table below is now either **live** or **pendin
 - **Storage layout:**
   - MergerFS pool (`/mnt/pool`): 5×3TB data + 2×4TB SnapRAID parity. 15 TB usable. Bulk / cold storage; backs K8s `nfs-mergerfs` StorageClass and MinIO Bulk.
   - ZFS `tank` (`/mnt/zfs`): 3×2TB raidz1 (migrated from old tower-pc). ~3.6 TB usable. Latency-sensitive services; backs K8s `iscsi-zfs` StorageClass via democratic-csi.
-  - 3TB drive with pre-existing data: mounted directly into the MergerFS pool ([ADR-007](../decisions/007-3tb-data-drive-direct-to-pool.md)).
-- **Storage software:** MergerFS + SnapRAID (mismatched drives, no license cost); ZFS for hot-write workloads (splits laid out in [ADR-012](../decisions/012-hot-services-on-zfs-minio-split.md)).
+  - 3TB drive with pre-existing data: mounted directly into the MergerFS pool ([ADR-007](../../docs/decisions/007-3tb-data-drive-direct-to-pool.md)).
+- **Storage software:** MergerFS + SnapRAID (mismatched drives, no license cost); ZFS for hot-write workloads (splits laid out in [ADR-012](../../docs/decisions/012-hot-services-on-zfs-minio-split.md)).
 - **Boot cache:** bcache SSD for MergerFS deferred — not blocking.
 - **Observability stack:** Prometheus, Alertmanager, Loki, Tempo, Grafana, Alloy, cAdvisor, blackbox-exporter (Docker Compose on ZFS). Deployed via `ansible/playbooks/deploy-observability.yml`.
 - **Foundation stores:** Postgres 16, Redis 7, MinIO Obs (hot/ZFS), MinIO Bulk (cold/MergerFS). Deployed via `ansible/playbooks/deploy-foundation-stores.yml`.
@@ -63,8 +63,8 @@ Everything in the role-assignment table below is now either **live** or **pendin
 ### Quanta QSSC-2ML → Primary K8s Worker
 
 - **Role:** Main K8s compute — 16C/32T, 64 GB RAM, fully dedicated to the cluster.
-- **Boot:** Local SSD ([ADR-013](../decisions/013-local-disk-over-pxe-boot.md), superseded PXE-boot / NFS-root plans).
-- **Network:** 4-port NIC via PCIe riser installed. Direct-to-R730 dedicated storage link is an optional optimization revisited alongside the storage VLAN (see `network-target.md`).
+- **Boot:** Local SSD ([ADR-013](../../docs/decisions/013-local-disk-over-pxe-boot.md), superseded PXE-boot / NFS-root plans).
+- **Network:** 4-port NIC via PCIe riser installed. Direct-to-R730 dedicated storage link is an optional optimization revisited alongside the storage VLAN (see `../../docs/exploration/network-vlans.md`).
 - **Status:** **Live K8s worker.**
 
 ### Intel NUC12SNKi72 → K8s Worker
@@ -79,20 +79,20 @@ Everything in the role-assignment table below is now either **live** or **pendin
 - **Role:** K8s worker (i7-4790 4C/8T, 32 GB RAM).
 - **Previous role:** Standalone "deb-web" — web hosting + Palworld + self-hosted Actions runner. All three retired:
   - Web services migrated onto K8s via Flux (landing-page, caz-portfolio, resume-site).
-  - Palworld decommissioned indefinitely ([ADR-022](../decisions/022-palworld-decommissioned.md)).
-  - Self-hosted runner replaced by in-cluster ARC v2 ([ADR-017](../decisions/017-arc-v2-github-runners.md)).
+  - Palworld decommissioned indefinitely ([ADR-022](../../docs/decisions/022-palworld-decommissioned.md)).
+  - Self-hosted runner replaced by in-cluster ARC v2 ([ADR-017](../../docs/decisions/017-arc-v2-github-runners.md)).
 - **Boot:** Local SSD.
 - **Status:** **Live K8s worker.**
 
 ### Dell Inspiron 15 → K8s Control Plane
 
-- **Role:** Single control plane node (2C/4T i3-7100U, 8 GB). Adequate for this cluster size ([ADR-016](../decisions/016-single-control-plane.md)).
+- **Role:** Single control plane node (2C/4T i3-7100U, 8 GB). Adequate for this cluster size ([ADR-016](../../docs/decisions/016-single-control-plane.md)).
 - **Boot:** Local SSD.
 - **Status:** **Live control plane.**
 
 ### Tower PC → K8s Worker (Pending Join)
 
-- **Role:** Plain K8s worker. No router role, no GPU role — both superseded by [ADR-021](../decisions/021-off-the-shelf-router-tower-pc-as-worker.md).
+- **Role:** Plain K8s worker. No router role, no GPU role — both superseded by [ADR-021](../../docs/decisions/021-off-the-shelf-router-tower-pc-as-worker.md).
 - **Why no GPU:** PSU is insufficient for the planned 3-GPU fleet. Rather than upgrade the PSU, the GPU workload moves to a separate new-build host (below).
 - **Specs:** i7-4790 (4C/8T), 24 GB RAM. Modest contribution to the cluster, but it's already owned hardware.
 - **Status:** Not yet in `ansible/inventory/lab-nodes.yml` — will be added at kubeadm-join time.
@@ -102,7 +102,7 @@ Everything in the role-assignment table below is now either **live** or **pendin
 - **Role:** Dedicated inference host (Ollama / vLLM / text-generation-inference TBD). Consumed over the LAN by cluster workloads and developer tools.
 - **Why standalone:** Keeps inference reboots / driver updates independent of cluster drains. Also avoids pulling NVIDIA device-plugin machinery into the cluster for a single host.
 - **GPUs:** 1080 Ti (11 GB), 1060 (3 GB), 1050 Ti (4 GB). GTX 760 (2 GB) probably not worth a slot.
-- **Status:** Hardware build in progress. Specs / hostname / IP / ADR pending hardware arrival. Tracked in `current-hardware-inventory.md` as "Future / pending".
+- **Status:** Hardware build in progress. Specs / hostname / IP / ADR pending hardware arrival. Tracked in `../../docs/hardware.md` as "Future / pending".
 
 ### Mini PC (AMD C60) → Jumpbox / Command Center
 
@@ -118,7 +118,7 @@ Everything in the role-assignment table below is now either **live** or **pendin
 
 ## Boot & Storage Strategy
 
-**K8s nodes boot from local disk** ([ADR-013](../decisions/013-local-disk-over-pxe-boot.md)). The previously-planned PXE / NFS-root setup was dropped — local installs are simpler, faster to bring up, and have fewer moving parts.
+**K8s nodes boot from local disk** ([ADR-013](../../docs/decisions/013-local-disk-over-pxe-boot.md)). The previously-planned PXE / NFS-root setup was dropped — local installs are simpler, faster to bring up, and have fewer moving parts.
 
 **Stateful workloads live on R730xd**, not in the K8s nodes. The cluster provisions PVCs via democratic-csi:
 
@@ -140,19 +140,19 @@ Actual moves are bookkeeping — what matters is that all machines now boot from
 ### SR2024 Switch
 
 - 24-port managed GbE backbone for the closet.
-- Live today as a **flat L2** backbone. VLAN trunks + per-VLAN tagging deferred until the off-the-shelf router ([ADR-021](../decisions/021-off-the-shelf-router-tower-pc-as-worker.md)) is in place. See `network-target.md` for the VLAN design.
+- Live today as a **flat L2** backbone. VLAN trunks + per-VLAN tagging deferred until the off-the-shelf router ([ADR-021](../../docs/decisions/021-off-the-shelf-router-tower-pc-as-worker.md)) is in place. See `../../docs/exploration/network-vlans.md` for the VLAN design.
 
 ### Aerohive APs (2× AP130, 1× AP230, 1× AP630)
 
-- AP630 primary (4×4:4 MU-MIMO, 802.11ac Wave 2). Restored to stock HiveOS 2026-04-03 ([ADR-011](../decisions/011-ap630-restored-to-stock-wifi-ap.md)).
-- AP230 secondary (3×3:3 MIMO). Starting AP per [ADR-009](../decisions/009-start-with-ap230-only.md).
+- AP630 primary (4×4:4 MU-MIMO, 802.11ac Wave 2). Restored to stock HiveOS 2026-04-03 ([ADR-011](../../docs/decisions/011-ap630-restored-to-stock-wifi-ap.md)).
+- AP230 secondary (3×3:3 MIMO). Starting AP per [ADR-009](../../docs/decisions/009-start-with-ap230-only.md).
 - AP130s for coverage extension.
 - All 4 run HiveOS standalone (no cloud controller).
 - Physical mounting still pending.
 
 ## Network Topology
 
-Current state is a flat SR2024 network with the Xfinity gateway upstream. The target architecture (VLANs, custom router, router-side DNS) lives in `network-target.md` and is gated on the off-the-shelf router purchase.
+Current state is a flat SR2024 network with the Xfinity gateway upstream. The target architecture (VLANs, custom router, router-side DNS) lives in `../../docs/exploration/network-vlans.md` and is gated on the off-the-shelf router purchase.
 
 ## K8s Cluster Summary (Live)
 
@@ -172,13 +172,13 @@ Tower PC adds +4C/8T and +24 GB RAM once joined.
 - [x] ~~K8s vs alternatives~~ — **keeping K8s.**
 - [x] ~~Quanta / NUC / Optiplex / Inspiron roles~~ — **all decided; all live.**
 - [x] ~~R730 role~~ — **storage + observability + foundation stores.**
-- [x] ~~Tower PC role~~ — **plain K8s worker ([ADR-021](../decisions/021-off-the-shelf-router-tower-pc-as-worker.md)).**
+- [x] ~~Tower PC role~~ — **plain K8s worker ([ADR-021](../../docs/decisions/021-off-the-shelf-router-tower-pc-as-worker.md)).**
 - [x] ~~Router sourcing~~ — **off-the-shelf, deferred purchase (ADR-021).**
 - [x] ~~R730 storage software~~ — **MergerFS + SnapRAID for bulk; ZFS `tank` for hot services; democratic-csi for K8s.**
 - [x] ~~R730 drive layout~~ — **2×4TB parity (bays 0+3), 5×3TB data (bays 1+2+4+5+8), 3×2TB ZFS (bays 9+10+11). See `ansible/inventory/r730xd.yml`.**
-- [x] ~~3TB data handling~~ — **direct mount into MergerFS pool ([ADR-007](../decisions/007-3tb-data-drive-direct-to-pool.md)).**
+- [x] ~~3TB data handling~~ — **direct mount into MergerFS pool ([ADR-007](../../docs/decisions/007-3tb-data-drive-direct-to-pool.md)).**
 - [x] ~~Drive migration from tower-pc~~ — **done 2026-04-03 (ZFS pool `tank`).**
-- [x] ~~Network topology choice~~ — **flat now, VLANs post-router. See `network-target.md`.**
+- [x] ~~Network topology choice~~ — **flat now, VLANs post-router. See `../../docs/exploration/network-vlans.md`.**
 - [x] ~~Tower PC PSU audit~~ — **confirmed insufficient for 3 GPUs; GPU workload moves to separate host.**
 - [ ] **GPU inference host** — hardware build in progress; needs its own ADR + inventory entry when it lands.
 - [ ] **Router model selection** — UniFi / OPNsense appliance / similar. Decide when ready to buy.

@@ -1,12 +1,16 @@
-# Current Network Layout
+# Network Topology
 
-> **IP addresses:** Authoritative values are in `ansible/group_vars/all/network.yml`.
+The live lab network. Flat L2 today on the SR2024, with a dedicated point-to-point WireGuard tunnel between the Hetzner VPS and the R730xd for public ingress.
+
+> **IP addresses:** Authoritative values are in `ansible/group_vars/all/network.yml`. This doc renders the Jinja vars literally.
+
+For the pending VLAN redesign (gated on off-the-shelf router purchase), see [exploration/network-vlans.md](exploration/network-vlans.md).
 
 Last updated: 2026-04-17
 
 ## Physical Topology
 
-All lab machines are in the closet on the SR2024. Non-lab drops (bedroom, garage, workshop) continue to run through the legacy consumer switch chain — see [ADR-008](../decisions/008-keep-existing-switch-chain-for-home.md).
+All lab machines are in the closet on the SR2024. Non-lab drops (bedroom, garage, workshop) continue to run through the legacy consumer switch chain — see [ADR-008](decisions/008-keep-existing-switch-chain-for-home.md).
 
 ```
                 [Xfinity Gateway]
@@ -37,18 +41,18 @@ All lab machines are in the closet on the SR2024. Non-lab drops (bedroom, garage
 
 ### Routing & DHCP
 
-- **Xfinity gateway still handles routing, DHCP, and upstream DNS.** This is interim — an off-the-shelf router ([ADR-021](../decisions/021-off-the-shelf-router-tower-pc-as-worker.md)) will replace it, at which point the gateway goes into bridge mode.
+- **Xfinity gateway still handles routing, DHCP, and upstream DNS.** This is interim — an off-the-shelf router ([ADR-021](decisions/021-off-the-shelf-router-tower-pc-as-worker.md)) will replace it, at which point the gateway goes into bridge mode.
 - Lab machines use static IPs configured at the OS level (Ansible-managed).
 
 ### Switching
 
 - **SR2024** is the lab backbone in the closet. All lab machines (live cluster + R730xd + pending Tower PC) connect directly to it.
-- **Flat L2** — no VLANs configured yet. VLAN design lives in `network-target.md` and is deferred until the purchased router arrives, so inter-VLAN routing happens on the new router rather than being grafted onto the Xfinity gateway.
+- **Flat L2** — no VLANs configured yet. VLAN design lives in [exploration/network-vlans.md](exploration/network-vlans.md) and is deferred until the purchased router arrives, so inter-VLAN routing happens on the new router rather than being grafted onto the Xfinity gateway.
 - Legacy consumer switches still serve the bedroom / garage / workshop drops (ADR-008).
 
 ### WiFi
 
-- AP230 / AP130s / AP630 all factory-reset to standalone mode. Mounting and SSID config still pending (Phase 4B/4D in `migration-plan.md`).
+- AP230 / AP130s / AP630 all factory-reset to standalone mode. Mounting and SSID config still pending.
 - Xfinity gateway WiFi still active as the primary coverage pending AP mounts.
 - PoE to APs will come from SR2024 once mounted (no injectors needed).
 
@@ -58,7 +62,7 @@ All lab machines are in the closet on the SR2024. Non-lab drops (bedroom, garage
 
 ### VPN / Ingress
 
-- **NetBird** for operator admin access (admin group: jumpbox, R730xd, K8s nodes as needed). Hetzner VPS is deliberately **not** in the admin group — see `feedback_vps_home_exposure.md` in memory and [ADR-019](../decisions/019-ingress-and-tls-termination.md).
+- **NetBird** for operator admin access (admin group: jumpbox, R730xd, K8s nodes as needed). Hetzner VPS is deliberately **not** in the admin group — see `feedback_vps_home_exposure.md` in memory and [ADR-019](decisions/019-ingress-and-tls-termination.md).
 - **Hetzner VPS → K8s cluster** ingress uses a dedicated WireGuard `/30` tunnel VPS ↔ R730xd, with iptables DNAT on R730xd forwarding only TCP 30487/30356 to the K8s NodePort. No subnet routes.
 
 ### Security
@@ -79,9 +83,9 @@ Out-of-band management (iDRAC, BMC/IPMI) lives on the lab subnet and is reachabl
 
 | Equipment | Location | Notes |
 |-----------|----------|-------|
-| SR2024 (24-port managed GbE + 2 SFP) | Closet (live) | VLAN-capable; flat today, VLANs deferred per [ADR-021](../decisions/021-off-the-shelf-router-tower-pc-as-worker.md). |
+| SR2024 (24-port managed GbE + 2 SFP) | Closet (live) | VLAN-capable; flat today, VLANs deferred per [ADR-021](decisions/021-off-the-shelf-router-tower-pc-as-worker.md). |
 | 2× Aerohive AP130 | Spare (mount pending) | PoE, standalone-mode confirmed. |
 | 1× Aerohive AP230 | Spare (mount pending) | PoE, standalone-mode confirmed. Higher performance than AP130s. |
-| 1× Aerohive AP630 | Spare (mount pending) | Stock HiveOS restored 2026-04-03 ([ADR-011](../decisions/011-ap630-restored-to-stock-wifi-ap.md)). Highest-performance AP. |
+| 1× Aerohive AP630 | Spare (mount pending) | Stock HiveOS restored 2026-04-03 ([ADR-011](decisions/011-ap630-restored-to-stock-wifi-ap.md)). Highest-performance AP. |
 | R730 4-port NIC | In R730xd | Could dedicate ports to a storage VLAN once VLANs are enabled. |
 | Xfinity gateway | Living room | WAN uplink; still the router until the off-the-shelf router lands. Goes into bridge mode at that point. |

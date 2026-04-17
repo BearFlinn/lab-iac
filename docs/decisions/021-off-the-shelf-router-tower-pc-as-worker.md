@@ -20,7 +20,7 @@ Current physical state: all lab machines are in the closet, SR2024 is the lab ba
 
 **Tower PC joins the K8s cluster as a plain worker.** No router role, no GPU role. Its i7-4790 + 24 GB RAM is useful compute that the cluster can absorb with zero additional operational burden. It runs the same baseline Ansible + containerd setup as Quanta / NUC / Optiplex.
 
-**GPU inference moves to a separate, yet-to-be-built host.** The GPU fleet (1080 Ti / 1060 / 1050 Ti) is reserved for that machine. Specs, role, and any observability / IaC for it will be captured in a future ADR once hardware lands; until then it's a footnote in `current-hardware-inventory.md`.
+**GPU inference moves to a separate, yet-to-be-built host.** The GPU fleet (1080 Ti / 1060 / 1050 Ti) is reserved for that machine. Specs, role, and any observability / IaC for it will be captured in a future ADR once hardware lands; until then it's a footnote in `docs/hardware.md`.
 
 **Until the new router arrives:** the lab stays on SR2024 flat L2 with the Xfinity gateway upstream. VLANs are deferred — they were always cheapest to configure alongside a real router, and doing them on top of Xfinity-gateway routing doesn't buy much.
 
@@ -30,7 +30,7 @@ Current physical state: all lab machines are in the closet, SR2024 is the lab ba
 - **Tower PC becomes cluster compute.** +4C/8T and +24 GB RAM to the cluster once it joins. It will be added to `ansible/inventory/lab-nodes.yml` as a worker at join time, not before.
 - **No cluster workload depends on Tower PC.** Like any other worker, it can fail without breaking the cluster. This closes the "router reboot = lab outage" concern from ADR-001.
 - **GPU workloads won't run on the cluster node fleet.** When the new GPU host is built, it will run inference as a standalone service (Ollama / vLLM / TGI) exposed over the LAN, consumed by cluster workloads or developer tools as needed.
-- **VLAN design (`docs/migration-2026/network-target.md`) stays on the shelf.** The target two- or three-VLAN split (home / lab / optional storage) is still the right end state; it just waits until the router is in place.
+- **VLAN design (`docs/exploration/network-vlans.md`) stays on the shelf.** The target two- or three-VLAN split (home / lab / optional storage) is still the right end state; it just waits until the router is in place.
 - **ADR-001 is superseded.** ADR-011 is left as-is — its AP630-specific conclusions stand; the "Tower PC resumes router role" sentence in it is now historical context only.
 - **NetBird / VPS ingress path is unaffected.** The ingress tunnel (ADR-019) still terminates on R730xd today; nothing about the router change alters the VPS→cluster path. If the ingress tunnel is ever moved to a different host, that's a separate decision.
 
@@ -46,5 +46,5 @@ Current physical state: all lab machines are in the closet, SR2024 is the lab ba
 - ADR-001 (superseded) — original Tower-PC-as-router decision.
 - ADR-011 — AP630 returned to stock; Tower PC previously slated to resume router role.
 - ADR-019 — Ingress & TLS termination (unchanged by this ADR).
-- `docs/migration-2026/network-target.md` — target VLAN design, now gated on router arrival.
-- `docs/migration-2026/current-hardware-inventory.md` — Tower PC + pending GPU host tracked in the "Future / pending hardware" section.
+- `docs/exploration/network-vlans.md` — target VLAN design, now gated on router arrival.
+- `docs/hardware.md` — Tower PC + pending GPU host tracked in the "Future / Pending Hardware" section.

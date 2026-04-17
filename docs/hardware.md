@@ -1,6 +1,10 @@
-# Current Hardware Inventory
+# Hardware Inventory
 
-> **IP addresses:** Authoritative values are in `ansible/group_vars/all/network.yml`.
+Machines, specs, and live roles. This is the day-to-day "what's where" reference.
+
+> **IP addresses:** Authoritative values are in `ansible/group_vars/all/network.yml`. This doc renders the Jinja vars literally so it doesn't drift from the source of truth.
+
+**Update when:** a machine is added, removed, or takes on a different role; a disk is replaced; firmware/OS changes materially affect operations.
 
 Last updated: 2026-04-17
 
@@ -8,7 +12,7 @@ Last updated: 2026-04-17
 
 ## Active K8s Cluster Nodes
 
-All four nodes are live on v1.33.10. Cilium CNI, Flux GitOps. See `docs/k8s-cluster-standup.md` for build history.
+All four nodes are live on v1.33.10. Cilium CNI, Flux GitOps. See [k8s-cluster-standup.md](k8s-cluster-standup.md) for how the cluster was built.
 
 ### dell-inspiron-15 — Control Plane
 
@@ -21,8 +25,8 @@ All four nodes are live on v1.33.10. Cilium CNI, Flux GitOps. See `docs/k8s-clus
 | Storage | Local SSD (boot) |
 | GPU | None |
 | Network | `{{ dell_inspiron_ip }}` |
-| Role | K8s control plane (single-node etcd, apiserver, scheduler, controller-manager) — see [ADR-016](../decisions/016-single-control-plane.md) |
-| Boot | Local disk ([ADR-013](../decisions/013-local-disk-over-pxe-boot.md)) |
+| Role | K8s control plane (single-node etcd, apiserver, scheduler, controller-manager) — see [ADR-016](decisions/016-single-control-plane.md) |
+| Boot | Local disk ([ADR-013](decisions/013-local-disk-over-pxe-boot.md)) |
 
 ### quanta — Worker
 
@@ -63,7 +67,7 @@ All four nodes are live on v1.33.10. Cilium CNI, Flux GitOps. See `docs/k8s-clus
 | Storage | Local SSD (boot) |
 | GPU | None |
 | Network | `{{ optiplex_ip }}` |
-| Role | K8s worker (previously the standalone "deb-web" web/host/Palworld box — that role has been retired; see [ADR-022](../decisions/022-palworld-decommissioned.md) and Phase 3B in `migration-plan.md`) |
+| Role | K8s worker (previously the standalone "deb-web" web/host/Palworld box — that role has been retired; see [ADR-022](decisions/022-palworld-decommissioned.md)) |
 | Boot | Local disk |
 
 ---
@@ -97,7 +101,7 @@ All four nodes are live on v1.33.10. Cilium CNI, Flux GitOps. See `docs/k8s-clus
 | MergerFS pool (`/mnt/pool`) | 5×3TB data + 2×4TB SnapRAID parity (bays 0/3 parity, 1/2/4/5/8 data) | 15 TB | Bulk/cold data, K8s `nfs-mergerfs` StorageClass, MinIO Bulk |
 | ZFS pool `tank` (`/mnt/zfs`) | 3×2TB raidz1 (bays 9/10/11) | ~3.6 TB | Latency-sensitive services (Postgres/Redis/MinIO Obs/Prometheus/Loki/Tempo/Grafana), K8s `iscsi-zfs` StorageClass (via democratic-csi) |
 
-Decisions: [ADR-003](../decisions/003-foundation-stores-on-r730xd.md) (foundation stores), [ADR-004](../decisions/004-observability-stack-on-r730xd.md) (observability), [ADR-004 zfs](../decisions/004-zfs-iscsi-for-k8s-storage.md) (ZFS+iSCSI), [ADR-007](../decisions/007-3tb-data-drive-direct-to-pool.md) (3TB direct mount), [ADR-012](../decisions/012-hot-services-on-zfs-minio-split.md) (MinIO split), [ADR-015](../decisions/015-dynamic-storage-provisioning.md) (democratic-csi).
+Decisions: [ADR-003](decisions/003-foundation-stores-on-r730xd.md) (foundation stores), [ADR-004](decisions/004-observability-stack-on-r730xd.md) (observability), [ADR-004 zfs](decisions/004-zfs-iscsi-for-k8s-storage.md) (ZFS+iSCSI), [ADR-007](decisions/007-3tb-data-drive-direct-to-pool.md) (3TB direct mount), [ADR-012](decisions/012-hot-services-on-zfs-minio-split.md) (MinIO split), [ADR-015](decisions/015-dynamic-storage-provisioning.md) (democratic-csi).
 
 ### proxy-vps — Hetzner Cloud
 
@@ -106,7 +110,7 @@ Decisions: [ADR-003](../decisions/003-foundation-stores-on-r730xd.md) (foundatio
 | Provider | Hetzner Cloud |
 | SSH | Port 2222 |
 | Public IP | `{{ proxy_vps_public_ip }}` |
-| Role | Caddy reverse proxy with wildcard `*.bearflinn.com` TLS (Cloudflare DNS-01). Routes to K8s via dedicated WireGuard tunnel + iptables DNAT on R730xd ([ADR-019](../decisions/019-ingress-and-tls-termination.md)). Also hosts PostHog reverse proxy and a few domain redirects. |
+| Role | Caddy reverse proxy with wildcard `*.bearflinn.com` TLS (Cloudflare DNS-01). Routes to K8s via dedicated WireGuard tunnel + iptables DNAT on R730xd ([ADR-019](decisions/019-ingress-and-tls-termination.md)). Also hosts PostHog reverse proxy and a few domain redirects. |
 | Domains | `*.bearflinn.com` (wildcard to K8s), `pennydreadfulsfx.com`, `gin-house.bearflinn.com` (Home Assistant over NetBird), `ph.bearflinn.com` (PostHog proxy) |
 
 ---
@@ -121,15 +125,15 @@ Decisions: [ADR-003](../decisions/003-foundation-stores-on-r730xd.md) (foundatio
 | Ports | 24× 1GbE + 2× SFP (+ 2× combo GbE/SFP) |
 | PoE | 802.3at (PoE+), powering APs |
 | Firmware | HiveOS 6.5r8 |
-| Role | Lab backbone — all lab machines connect here. Xfinity gateway upstream. Flat L2 today (VLANs deferred until off-the-shelf router arrives, per [ADR-021](../decisions/021-off-the-shelf-router-tower-pc-as-worker.md)). |
+| Role | Lab backbone — all lab machines connect here. Xfinity gateway upstream. Flat L2 today (VLANs deferred until off-the-shelf router arrives, per [ADR-021](decisions/021-off-the-shelf-router-tower-pc-as-worker.md)). |
 | Capabilities | 802.1Q VLANs, LACP, trunk/access ports — all verified |
 
 ### Aerohive WiFi APs
 
 | AP | Model | WiFi | Firmware | Status |
 |----|-------|------|----------|--------|
-| AP630 | AP630 | 4×4:4 MU-MIMO, 802.11ac Wave 2 | Stock HiveOS IQ Engine 10.6r7 (restored 2026-04-03, [ADR-011](../decisions/011-ap630-restored-to-stock-wifi-ap.md)) | Restored; physical mounting pending |
-| AP230 | AP230 | 3×3:3 MIMO, 802.11ac Wave 1 | HiveOS 8.1r1 | Factory reset, CAPWAP disabled; mounting pending ([ADR-009](../decisions/009-start-with-ap230-only.md)) |
+| AP630 | AP630 | 4×4:4 MU-MIMO, 802.11ac Wave 2 | Stock HiveOS IQ Engine 10.6r7 (restored 2026-04-03, [ADR-011](decisions/011-ap630-restored-to-stock-wifi-ap.md)) | Restored; physical mounting pending |
+| AP230 | AP230 | 3×3:3 MIMO, 802.11ac Wave 1 | HiveOS 8.1r1 | Factory reset, CAPWAP disabled; mounting pending ([ADR-009](decisions/009-start-with-ap230-only.md)) |
 | AP130 #1 | AP130 | 802.11ac Wave 1 | HiveOS 6.5r8b | Factory reset, CAPWAP disabled; mounting pending |
 | AP130 #2 | AP130 | 802.11ac Wave 1 | HiveOS 6.5r1b | Same; older firmware + 1 bad NAND block (consider updating) |
 
@@ -164,7 +168,8 @@ Tracked here rather than in the active sections so the active tables stay truthf
 | GPU | None planned (PSU insufficient — GPU fleet moves to the new inference host below) |
 | Network | `{{ tower_pc_ip }}` (reserved) |
 | Planned role | Plain K8s worker |
-| Status | Physically in/near the closet. Not yet joined. Will be added to `ansible/inventory/lab-nodes.yml` at join time. See [ADR-021](../decisions/021-off-the-shelf-router-tower-pc-as-worker.md). |
+| Status | Physically in/near the closet. Not yet joined. Will be added to `ansible/inventory/lab-nodes.yml` at join time. See [ADR-021](decisions/021-off-the-shelf-router-tower-pc-as-worker.md). |
+| IaC | Hostname/IP reserved in `ansible/group_vars/all/network.yml`; joins via `ansible/playbooks/join-k8s-workers.yml`. |
 | Previous history | Was the K8s GPU-workload worker + planned router + planned GPU-inference host. All three roles retired in ADR-021. |
 
 ### GPU inference host — Being Built
@@ -183,8 +188,8 @@ Tracked here rather than in the active sections so the active tables stay truthf
 |------|-------|
 | Model | TBD (UniFi / OPNsense appliance / similar) |
 | Planned role | Replace Xfinity gateway's routing role; handle NAT, DHCP, DNS, VLANs, firewall rules. Xfinity gateway goes into bridge mode on arrival. |
-| Status | Purchase pending. See [ADR-021](../decisions/021-off-the-shelf-router-tower-pc-as-worker.md). |
-| Unblocks | VLAN configuration (Phase 1C in `migration-plan.md`). |
+| Status | Purchase pending. See [ADR-021](decisions/021-off-the-shelf-router-tower-pc-as-worker.md). |
+| Unblocks | VLAN configuration (see [exploration/network-vlans.md](exploration/network-vlans.md)). |
 
 ### APC Back-UPS RS 1500 — Batteries Dead
 
@@ -193,7 +198,7 @@ Tracked here rather than in the active sections so the active tables stay truthf
 | Capacity | 1500 VA / 865 W |
 | Output | Simulated sine wave (stepped approximation) |
 | Data port | RJ45 (APC proprietary) — needs APC 940-0127 or compatible cable for NUT |
-| Status | Batteries dead; replacement + NUT integration deferred ([ADR-006](../decisions/006-proceed-without-ups.md)). |
+| Status | Batteries dead; replacement + NUT integration deferred ([ADR-006](decisions/006-proceed-without-ups.md)). |
 | Compatibility | Server PSUs (R730 / Quanta) require pure sine; use only for consumer-PSU machines (Inspiron, Optiplex, Tower PC, switch) once batteries are replaced. |
 
 ### Spare GPUs
@@ -235,12 +240,10 @@ Not infrastructure: the operator's on-the-go dev laptop (GS66 Stealth) is a pers
 
 ---
 
-## Open Questions / TODO
+## Pending Work
 
-- [x] ~~Identify all CPUs / drive bay configs / POST / iDRAC / SR2024 / APs~~ — complete (see `migration-plan.md` Phase 0).
-- [x] ~~Back up 3TB drive~~ — mounted directly into pool ([ADR-007](../decisions/007-3tb-data-drive-direct-to-pool.md)).
-- [x] ~~HDD placements~~ — all data HDDs in R730xd (MergerFS + ZFS pools).
 - [ ] UPS: replace batteries, wire NUT.
 - [ ] Finish GPU inference host build; assign IP + hostname and write its ADR.
-- [ ] Purchase off-the-shelf router; configure VLANs on SR2024 once in place.
+- [ ] Purchase off-the-shelf router; configure VLANs on SR2024 once in place (see [exploration/network-vlans.md](exploration/network-vlans.md)).
 - [ ] Mount remaining APs; verify coverage.
+- [ ] Join Tower PC to the cluster (see [ADR-021](decisions/021-off-the-shelf-router-tower-pc-as-worker.md)).
