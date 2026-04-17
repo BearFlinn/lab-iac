@@ -51,3 +51,18 @@ sccache_minio_secret_key: "{{ vault_sccache_minio_secret_key }}"
 # See docs/decisions/019-ingress-and-tls-termination.md
 wg_vps_public_key: "{{ vault_wg_vps_public_key }}"
 wg_r730xd_public_key: "{{ vault_wg_r730xd_public_key }}"
+
+# OpenBao (R730xd) — Infisical universal-auth credentials for the
+# bootstrap machine identity. Surface encrypted values as the plain
+# variables the r730xd-openbao role expects.
+# See docs/decisions/023-self-hosted-openbao-on-r730xd.md
+infisical_openbao_client_id: "{{ vault_infisical_openbao_client_id }}"
+infisical_openbao_client_secret: "{{ vault_infisical_openbao_client_secret }}"
+
+# OpenBao Infisical project ID — pulled from .infisical.json at the repo
+# root so there's one source of truth for the workspace identifier.
+# Safe to commit: the client_id/secret pair is what grants access, not
+# the project ID. $PWD is the CWD ansible was launched from, which is
+# always the repo root per README / ansible.cfg conventions.
+openbao_infisical_project_id: >-
+  {{ (lookup('file', lookup('env', 'PWD') ~ '/.infisical.json') | from_json).workspaceId }}

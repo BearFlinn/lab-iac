@@ -1,0 +1,9 @@
+# Managed by Ansible — r730xd-prometheus role
+# OpenBao health endpoint. Self-signed cert — the prometheus.yml.j2
+# openbao job sets tls_config.insecure_skip_verify accordingly, because
+# the target is the same host as Prometheus itself.
+- targets:
+    - "{{ r730xd_ip }}:8200"
+  labels:
+    env: "homelab"
+    instance: "r730xd"

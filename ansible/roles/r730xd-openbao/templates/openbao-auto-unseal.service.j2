@@ -1,0 +1,29 @@
+# Managed by Ansible — r730xd-openbao role
+# Runs the scripted unseal after OpenBao is up. Oneshot + RemainAfterExit
+# so `systemctl is-active` reports "active (exited)" between boots.
+#
+# Boot-time ordering:
+#   network-online.target → docker.service → foundation-openbao.service
+#     → openbao-wait-ready.sh (ExecStartPre) → openbao-auto-unseal.sh
+
+[Unit]
+Description=OpenBao scripted unseal (Infisical-backed)
+Requires={{ openbao_server_unit_name }}
+After={{ openbao_server_unit_name }} network-online.target
+Wants=network-online.target
+ConditionPathExists={{ openbao_infisical_auth_env_file }}
+ConditionPathExists={{ openbao_unseal_script }}
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStartPre={{ openbao_wait_ready_script }}
+ExecStart={{ openbao_unseal_script }}
+# Don't retry forever — fail loudly so Prometheus alerts fire.
+TimeoutStartSec=180
+# Auto-unseal script is idempotent and safe to re-run; if it fails, the
+# operator reruns `systemctl restart openbao-auto-unseal` after fixing.
+Restart=no
+
+[Install]
+WantedBy=multi-user.target

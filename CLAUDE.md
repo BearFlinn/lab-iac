@@ -4,9 +4,18 @@ Homelab Infrastructure as Code. See `README.md` for architecture, machines, repo
 
 # Secrets Management
 
-- **Ansible Vault:** `group_vars/all/vault.yml` encrypted, decrypted via `.vault_pass` file
-- **Vault password file:** Must exist at repo root, git-ignored
-- Secrets must never appear in plaintext in IaC — use `no_log: true` for tasks that handle sensitive values
+**Start here:** `docs/runbooks/openbao-quickref.md` — at-a-glance addresses, file paths, common commands, and the deploy-time gotchas that aren't obvious from the code.
+
+- **OpenBao** (on R730xd, LAN-only at `https://10.0.0.200:8200`) is the homelab secrets source of truth. Scripted unseal via Infisical bootstrap secrets (`openbao-auto-unseal.service`).
+  - Role: `ansible/roles/r730xd-openbao/`
+  - Playbooks: `deploy-openbao.yml`, `bootstrap-openbao.yml`, `rotate-openbao-keys.yml`
+  - Helper: `scripts/set-openbao-bootstrap-secrets.sh` upserts the Infisical machine-identity creds into the Ansible vault
+  - ADR: `docs/decisions/023-self-hosted-openbao-on-r730xd.md`
+  - Runbooks: `docs/runbooks/openbao-{quickref,rotation,disaster-recovery}.md`
+- **Ansible Vault:** `group_vars/all/vault.yml` encrypted, decrypted via `.vault_pass` file. Holds the Infisical bootstrap credentials for OpenBao plus legacy secrets still being migrated.
+- **Vault password file:** Must exist at repo root, git-ignored.
+- **Infisical** holds ONLY the OpenBao unseal keys + root token (bootstrap store). Project ID = `workspaceId` in `.infisical.json` at repo root. Env slug = `prod`. Secrets stored as `--type=shared`. Not a general-purpose secret store here.
+- Secrets must never appear in plaintext in IaC — use `no_log: true` for tasks that handle sensitive values.
 
 # Rules
 

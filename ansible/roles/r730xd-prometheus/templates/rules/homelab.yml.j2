@@ -503,6 +503,52 @@ groups:
         annotations:
           summary: "Redis is evicting keys — memory pressure"
 
+  - name: openbao
+    rules:
+      # `up{job="openbao"} == 0` fires for EITHER "server down" OR
+      # "server sealed" — /v1/sys/health returns 503 when sealed, which
+      # Prometheus counts as a scrape failure. The operator triages via
+      # `systemctl status foundation-openbao openbao-auto-unseal` on
+      # r730xd. See docs/runbooks/openbao-disaster-recovery.md.
+      - alert: OpenbaoUnavailable
+        expr: up{job="openbao"} == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: >-
+            OpenBao is unavailable (down or sealed)
+            on {{ '{{' }} $labels.instance {{ '}}' }}
+          runbook: "docs/runbooks/openbao-disaster-recovery.md"
+
+      # Systemd-level signal: the openbao-auto-unseal.service failed at
+      # boot. This catches the case where OpenBao itself is up but
+      # auto-unseal couldn't fetch keys from Infisical.
+      - alert: OpenbaoAutoUnsealFailed
+        expr: node_systemd_unit_state{name="openbao-auto-unseal.service",state="failed"} == 1
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: >-
+            openbao-auto-unseal.service is in failed state on
+            {{ '{{' }} $labels.instance {{ '}}' }} — check Infisical reachability + auth
+
+      # Audit log volume: if the audit directory fills up, OpenBao will
+      # refuse requests (audit is required). Alert before that happens.
+      - alert: OpenbaoAuditLogDiskFull
+        expr: |
+          (node_filesystem_avail_bytes{mountpoint="/mnt/zfs"} /
+           node_filesystem_size_bytes{mountpoint="/mnt/zfs"}) < 0.15
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: >-
+            ZFS foundation tier <15% free on
+            {{ '{{' }} $labels.instance {{ '}}' }} —
+            OpenBao audit log growth may starve other foundation stores
+
   - name: endpoints
     rules:
       - alert: EndpointDown

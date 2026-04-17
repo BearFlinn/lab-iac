@@ -48,6 +48,28 @@ scrape_configs:
           - "/etc/prometheus/targets.d/k8s-etcd.yml"
         refresh_interval: 30s
 
+  # OpenBao health probe. Scrapes /v1/sys/health without a token; the
+  # endpoint returns 200 when up+unsealed and 503 when sealed, so
+  # `up{job="openbao"} == 0` fires for "down OR sealed". The operator
+  # distinguishes via `systemctl status foundation-openbao
+  # openbao-auto-unseal`. A follow-up (wiring in the prometheus-readonly
+  # token) will add internal metrics like vault_core_unsealed.
+  - job_name: "openbao"
+    scheme: https
+    metrics_path: /v1/sys/health
+    params:
+      standbyok: ["true"]
+      perfstandbyok: ["true"]
+    tls_config:
+      # Self-signed CA from the r730xd-openbao role. The Prometheus
+      # container doesn't have the host CA bundle; skipping verify is
+      # acceptable because the target is the same host (r730xd→r730xd).
+      insecure_skip_verify: true
+    file_sd_configs:
+      - files:
+          - "/etc/prometheus/targets.d/openbao.yml"
+        refresh_interval: 30s
+
 {% if prometheus_k8s_apiserver_target is defined and prometheus_k8s_apiserver_target %}
   - job_name: "kube-apiserver"
     scheme: https

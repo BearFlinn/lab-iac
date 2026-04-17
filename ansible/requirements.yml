@@ -1,0 +1,22 @@
+---
+# Ansible collection requirements for lab-iac.
+#
+# Install:
+#   ansible-galaxy collection install -r ansible/requirements.yml \
+#     -p .ansible/collections
+#
+# (CI / jumpbox bootstrap should run this once per fresh checkout.)
+
+collections:
+  # openssh_keypair, x509_certificate, openssl_privatekey, openssl_csr —
+  # used by setup-claude-user.yml, setup-k8s-storage.yml, r730xd-openbao
+  - name: community.crypto
+    version: ">=3.0.0"
+
+  # Broad utility collection (some tasks already pull from it implicitly).
+  - name: community.general
+    version: ">=10.0.0"
+
+  # POSIX utilities (sysctl, mount, authorized_key hardening, etc.).
+  - name: ansible.posix
+    version: ">=2.0.0"
