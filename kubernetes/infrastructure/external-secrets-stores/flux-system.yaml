@@ -14,7 +14,7 @@
 # creationPolicy: Owner means ESO manages the Secret end-to-end.
 # Because we enumerate every current key (githubAppID, Installation,
 # PrivateKey), no existing keys get pruned on reconcile.
-apiVersion: external-secrets.io/v1beta1
+apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:
   name: github-app-credentials

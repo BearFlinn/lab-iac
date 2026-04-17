@@ -3,7 +3,7 @@
 #   - github-runner-pat (org-level PAT for ARC v2)
 # Both previously seeded imperatively by seed-app-secrets.yml /
 # setup-k8s-cicd.yml; now reconciled from OpenBao via ESO.
-apiVersion: external-secrets.io/v1beta1
+apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:
   name: sccache-s3-credentials
@@ -26,7 +26,7 @@ spec:
         key: lab-iac/cicd/sccache-minio
         property: secret_key
 ---
-apiVersion: external-secrets.io/v1beta1
+apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:
   name: github-runner-pat
