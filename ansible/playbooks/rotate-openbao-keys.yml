@@ -1,13 +1,17 @@
 ---
 # rotate-openbao-keys.yml — Rotate OpenBao seal material.
 #
-# Three independent rotation flows, each selectable via --tags:
+# Independent rotation flows, each selectable via --tags:
 #   --tags rekey              Rotate the unseal keys (5 new shares, threshold 3)
 #   --tags root-token         Rotate the root token
 #   --tags infisical-identity Rotate the Infisical machine-identity secret
 #                             that openbao-auto-unseal.sh uses to fetch keys
-#   (no --tags)               Rekey + root-token run together; infisical-identity
-#                             is explicit-only because it needs an extra-var
+#   --tags approle-secret     Rotate the ansible-iac AppRole secret_id
+#   --tags k8s-auth-jwt       Rotate the openbao-auth reviewer-JWT the
+#                             kubernetes auth method uses to TokenReview
+#   (no --tags)               rekey + root-token run together; the others
+#                             are explicit-only because they need extra-vars
+#                             or cross-host ordering.
 #
 # Safety:
 #   - Every task that touches key material has `no_log: true`.
@@ -393,3 +397,92 @@
               group_vars/all/vault.yml with the new value (via
               `ansible-vault edit`) so future role applies don't
               overwrite the rotated secret.
+
+# =================================================================
+# AppRole secret_id rotation + Kubernetes reviewer-JWT rotation.
+# These run from localhost because they're consumer-side — the
+# approle-secret flow hits the Ansible vault and the k8s-auth-jwt
+# flow drives kubectl. Separated into their own play so the tags
+# selection doesn't accidentally run them as part of the default
+# rekey+root-token flow.
+# =================================================================
+- name: Rotate Ansible AppRole secret_id
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tags: [approle-secret, never]
+
+  tasks:
+    - name: Run the AppRole helper to mint a fresh secret_id
+      ansible.builtin.command:
+        argv:
+          - "{{ playbook_dir }}/../../scripts/set-openbao-approle-secrets.sh"
+      register: approle_rotate
+      changed_when: "'done' in approle_rotate.stdout"
+      # Script handles its own logging; surface stdout/stderr to the
+      # operator via the -v flag as normal.
+      no_log: false
+
+    - name: Remind operator to revoke old secret_ids
+      ansible.builtin.debug:
+        msg: >
+          New secret_id landed in vault.yml. The OLD secret_id is still
+          valid until you revoke it:
+            bao list -format=json auth/approle/role/ansible-iac/secret-id
+            bao delete auth/approle/role/ansible-iac/secret-id-accessor/<accessor>
+
+- name: Rotate Kubernetes reviewer-JWT
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tags: [k8s-auth-jwt, never]
+
+  vars_files:
+    - "{{ playbook_dir }}/../inventory/group_vars/all/vault.yml"
+    - "{{ playbook_dir }}/../inventory/group_vars/all/vars.yml"
+    - "{{ playbook_dir }}/../roles/r730xd-openbao/defaults/main.yml"
+
+  vars:
+    kubeconfig: "{{ lookup('env', 'KUBECONFIG') | default(lookup('env', 'HOME') ~ '/.kube/config', true) }}"
+    eso_namespace: "external-secrets"
+    openbao_auth_token_secret: "openbao-auth-token"
+
+  tasks:
+    # Force K8s to regenerate the reviewer JWT by deleting its Secret;
+    # kubectl apply re-creates it, and K8s populates a fresh `.data.token`.
+    # The downstream setup-openbao-k8s-auth.yml then re-reads the new
+    # token and overwrites auth/kubernetes/config.
+    - name: Delete existing openbao-auth-token Secret
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - -n
+          - "{{ eso_namespace }}"
+          - delete
+          - secret
+          - "{{ openbao_auth_token_secret }}"
+          - --ignore-not-found
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+      changed_when: true
+
+    - name: Re-apply external-secrets manifests (recreates the Secret)
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - apply
+          - -k
+          - "{{ playbook_dir }}/../../kubernetes/infrastructure/external-secrets"
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+      changed_when: true
+
+    - name: Re-run kubernetes auth configuration
+      ansible.builtin.command:
+        argv:
+          - ansible-playbook
+          - "{{ playbook_dir }}/setup-openbao-k8s-auth.yml"
+          - --vault-password-file
+          - "{{ playbook_dir }}/../../.vault_pass"
+      register: reconfig
+      changed_when: true

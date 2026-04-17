@@ -169,6 +169,15 @@
   vars_files:
     - "{{ playbook_dir }}/../../ansible/inventory/group_vars/all/vault.yml"
     - "{{ playbook_dir }}/../../ansible/inventory/group_vars/all/vars.yml"
+    # OpenBao auth defaults — inert unless openbao_read_enabled is true.
+    - "{{ playbook_dir }}/../vars/openbao_auth.yml"
+
+  pre_tasks:
+    - name: Load OpenBao-sourced platform secrets
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../vars/openbao_secrets.yml"
+      when: openbao_read_enabled | default(false) | bool
+      tags: [always]
 
   tasks:
     - name: Create Discord webhook secret for Flux notifications

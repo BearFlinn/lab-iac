@@ -31,11 +31,30 @@ telemetry {
   disable_hostname          = true
 }
 
-# TODO(openbao-audit): OpenBao 2.5 requires declarative audit config,
-# but the expected HCL block signature wasn't pinned down during the
-# initial bootstrap (2026-04-17). The audit mount is therefore not
-# enabled yet — operational-readiness note to follow up.
-# Tracking: need to verify exact HCL keys for audit type=file in 2.5.x.
+# Audit device — declared in-config so it's always enabled on boot.
+# The API-based `bao audit enable` path returned 400 on the 2.5.0-beta
+# during initial bootstrap (issue openbao/openbao#2168); the fix landed
+# in PR #2170 on release/2.5.x and is in v2.5.2, so declarative config
+# works. Shape comes from openbao.org/docs/configuration/audit/:
+#   audit "<type>" "<path>" { options { ... } }
+# The outer quoted tokens are type + path-within-the-audit-backend; no
+# two audit blocks may share the same path. Audit semantics are "all
+# devices receive the write; if all fail, the request fails." We run
+# one file device; the brick-on-ENOSPC risk is mitigated by logrotate
+# copytruncate (see defaults/main.yml) and the OpenbaoAuditLogDiskFull
+# Prometheus alert.
+audit "file" "main" {
+  description = "Primary audit log — JSON lines on the ZFS hot tier"
+  options {
+    # In-container path. The host path ({{ openbao_audit_dir }}) is bind-
+    # mounted to /openbao/audit in docker-compose.yml.j2.
+    file_path     = "/openbao/audit/audit.log"
+    format        = "json"
+    log_raw       = "false"
+    hmac_accessor = "true"
+    mode          = "0600"
+  }
+}
 
 # Log level: INFO in steady state; flip to DEBUG transiently via
 # `bao monitor -log-level=debug` when troubleshooting.

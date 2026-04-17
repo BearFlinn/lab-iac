@@ -534,8 +534,10 @@ groups:
             openbao-auto-unseal.service is in failed state on
             {{ '{{' }} $labels.instance {{ '}}' }} — check Infisical reachability + auth
 
-      # Audit log volume: if the audit directory fills up, OpenBao will
-      # refuse requests (audit is required). Alert before that happens.
+      # Audit log volume: if the audit sink can't write, OpenBao refuses
+      # every subsequent request (audit is a hard requirement once a
+      # device is declared). Two thresholds — the warning gives time to
+      # triage, the critical page says "fix it or OpenBao bricks."
       - alert: OpenbaoAuditLogDiskFull
         expr: |
           (node_filesystem_avail_bytes{mountpoint="/mnt/zfs"} /
@@ -548,6 +550,21 @@ groups:
             ZFS foundation tier <15% free on
             {{ '{{' }} $labels.instance {{ '}}' }} —
             OpenBao audit log growth may starve other foundation stores
+
+      - alert: OpenbaoAuditLogDiskCritical
+        expr: |
+          (node_filesystem_avail_bytes{mountpoint="/mnt/zfs"} /
+           node_filesystem_size_bytes{mountpoint="/mnt/zfs"}) < 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: >-
+            ZFS foundation tier <5% free on
+            {{ '{{' }} $labels.instance {{ '}}' }} —
+            OpenBao will start rejecting requests when the audit sink
+            can't write. Free space now or manually disable the audit
+            device as a last resort: `bao audit disable main/`.
 
   - name: endpoints
     rules:

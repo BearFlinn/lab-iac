@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: external-secrets
+  labels:
+    # pod-security.admission baseline — ESO needs no privileges beyond
+    # what "restricted" permits, but setting "baseline" mirrors the
+    # other infra namespaces in this cluster.
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted

@@ -1,0 +1,22 @@
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: argo-minio-credentials
+  namespace: argo
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: openbao
+  target:
+    name: argo-minio-credentials
+    creationPolicy: Owner
+  data:
+    - secretKey: accesskey
+      remoteRef:
+        key: lab-iac/cicd/argo-minio
+        property: access_key
+    - secretKey: secretkey
+      remoteRef:
+        key: lab-iac/cicd/argo-minio
+        property: secret_key

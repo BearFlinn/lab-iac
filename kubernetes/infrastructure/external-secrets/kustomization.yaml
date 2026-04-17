@@ -1,0 +1,20 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# External Secrets Operator install (CRDs + controller).
+#
+# This Kustomization is applied by the main "infrastructure" Flux
+# Kustomization. It installs ESO and the reviewer-JWT SA that
+# OpenBao's Kubernetes auth method uses to verify incoming SA tokens.
+#
+# The ClusterSecretStore + per-workload ExternalSecret manifests live
+# in kubernetes/infrastructure/external-secrets-stores/ and are applied
+# by a SEPARATE Flux Kustomization with dependsOn: infrastructure —
+# identical pattern to cert-manager/cert-manager-issuers. Keeps the
+# main infrastructure Kustomization free of apply-order hazards (you
+# can't admit an ExternalSecret resource until ESO's CRDs exist).
+resources:
+  - namespace.yaml
+  - openbao-auth-sa.yaml
+  - helmrepository.yaml
+  - helmrelease.yaml
+  - openbao-ca-configmap.yaml

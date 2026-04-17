@@ -1,0 +1,22 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# External Secrets Operator CRs.
+#
+# Split from kubernetes/infrastructure/external-secrets/ because these
+# resources are CRD instances (ClusterSecretStore, ExternalSecret) that
+# depend on ESO's CRDs being installed first. A separate Flux
+# Kustomization at kubernetes/clusters/homelab/external-secrets-stores.yaml
+# applies these with `dependsOn: infrastructure` — identical pattern
+# to cert-manager-issuers.
+#
+# Adding a new ExternalSecret: drop a file here, not next to the
+# consuming workload. Discoverability trade-off is acknowledged, but
+# it lets us keep the infrastructure Kustomization clean of apply-
+# order hazards.
+resources:
+  - openbao-store.yaml
+  - registry.yaml
+  - github-runners.yaml
+  - argo-workflows.yaml
+  - notifications.yaml
+  - flux-system.yaml

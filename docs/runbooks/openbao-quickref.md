@@ -64,6 +64,60 @@ Applied by `bootstrap-openbao.yml`. Re-apply by re-running that playbook (idempo
 | `ansible-readonly` | Read `secret/data/lab-iac/*` |
 | `ansible-readwrite` | Read/write `secret/data/lab-iac/*` |
 | `prometheus-readonly` | Read `sys/metrics` only (for future scrape token) |
+| `ansible-platform-read` | Read `secret/data/lab-iac/*` — for AppRole consumers (Phase C+) |
+| `eso-platform-read` | Read `secret/data/lab-iac/*` — for Kubernetes auth consumers (ESO, Phase D+) |
+
+## Auth methods
+
+| Method | Consumer | Role | Policy | Notes |
+|---|---|---|---|---|
+| token (root) | Bootstrap + rotation playbooks | — | root | One-off; rotated via rotate-openbao-keys.yml --tags root-token |
+| approle | Ansible IaC plays | `ansible-iac` | `ansible-platform-read` | CIDR-bound to 10.0.0.0/24. role_id + secret_id in vault.yml (via scripts/set-openbao-approle-secrets.sh). Rotate with rotate-openbao-keys.yml --tags approle-secret |
+| kubernetes | External Secrets Operator | `external-secrets` | `eso-platform-read` | SA `external-secrets:external-secrets`. Reviewer-JWT from `openbao-auth:openbao-auth-token` Secret. Refresh with rotate-openbao-keys.yml --tags k8s-auth-jwt |
+
+## Secret path layout
+
+All platform secrets live under `secret/lab-iac/<domain>/<name>` (KV v2):
+
+| Path | Keys |
+|---|---|
+| `secret/lab-iac/platform/cloudflare` | `api_token` |
+| `secret/lab-iac/platform/idrac` | `password` |
+| `secret/lab-iac/platform/github-app` | `app_id`, `installation_id`, `private_key` |
+| `secret/lab-iac/platform/github-runner` | `pat` |
+| `secret/lab-iac/stores/postgres` | `password` |
+| `secret/lab-iac/stores/redis` | `password` |
+| `secret/lab-iac/stores/minio-obs` | `root_user`, `root_password` |
+| `secret/lab-iac/stores/minio-bulk` | `root_user`, `root_password` |
+| `secret/lab-iac/observability/grafana` | `admin_password` |
+| `secret/lab-iac/observability/minio-client` | `access_key`, `secret_key` |
+| `secret/lab-iac/observability/discord-webhook` | `url` |
+| `secret/lab-iac/cicd/sccache-minio` | `access_key`, `secret_key` |
+| `secret/lab-iac/cicd/argo-minio` | `access_key`, `secret_key` |
+| `secret/lab-iac/flux/discord-webhook` | `url` |
+
+### Adding a new platform secret
+
+1. `bao kv put secret/lab-iac/<domain>/<name> k1=v1 k2=v2`
+2. Add a Jinja lookup for each key to `ansible/vars/openbao_secrets.yml`
+   (redefines `vault_*` as a `vault_kv2_get` lookup).
+3. If the secret is consumed in K8s, add an `ExternalSecret` next to
+   the consuming HelmRelease and register it in the directory's
+   `kustomization.yaml`.
+4. If the secret is platform-level, drop a line into the path-layout
+   table above and the `migration_set` in
+   `ansible/playbooks/migrate-platform-secrets-to-openbao.yml`.
+
+### Rotating a platform secret
+
+1. Update the value: `bao kv put secret/lab-iac/<domain>/<name> k=<new>`
+2. Ansible consumers: re-run the relevant playbook — lookups fetch
+   fresh on each run.
+3. K8s consumers: ESO refreshes every `refreshInterval` (default 1h);
+   force immediately via
+   `kubectl annotate externalsecret <name> -n <ns> force-sync=$(date +%s) --overwrite`.
+4. If the old value was exposed anywhere (logs, committed configs),
+   also revoke the underlying credential at its source.
 
 ## Common operations
 
@@ -98,7 +152,7 @@ Save future-you debug time — these aren't obvious from the code alone.
 - **`secrets get` returns data with trailing whitespace.** Pipe the root token through `| trim` before passing to `bao` env vars — otherwise `bao` rejects it as "contains non-printable characters."
 - **Role defaults are NOT visible to playbooks that don't apply the role.** `bootstrap-openbao.yml` and `rotate-openbao-keys.yml` load them explicitly via `vars_files`. Don't add a default like `openbao_infisical_project_id: "CHANGE_ME_..."` to role defaults if you want the vars.yml lookup to win — it won't.
 - **Infisical calls `delegate_to: localhost`.** The CLI on r730xd authenticates as the machine identity; the controller (bear-desktop / jumpbox) is logged in as the operator. Run pushes/gets from the controller to use the interactive auth.
-- **Audit device HCL schema is unresolved.** OpenBao 2.5 rejects the `bao audit enable` API path — config must be declarative — but the block syntax varies between docs and code. The role currently ships **without** audit enabled; a TODO comment lives in `openbao.hcl.j2`. Figure out the right block signature before the first sensitive workload depends on an audit trail.
+- **Audit device syntax.** OpenBao 2.5 rejects the `bao audit enable` API path in favor of declarative config. Syntax per [openbao.org/docs/configuration/audit](https://openbao.org/docs/configuration/audit/) is `audit "<type>" "<path>" { options { ... } }`. A bug in 2.5.0-beta made stanzas ignored at boot (needed SIGHUP) — fixed in PR #2170, which landed in 2.5.2 on release/2.5.x. The role ships with a single `audit "file" "main"` device writing to `/openbao/audit/audit.log`; see `openbao.hcl.j2`.
 - **`openbao_infisical_project_id` uses `lookup('env', 'PWD')`.** `playbook_dir`, `inventory_dir`, and bare relative paths all failed to locate `.infisical.json` from `group_vars/`. The `$PWD` path works because every Ansible invocation is from the repo root per README/ansible.cfg conventions. If you invoke from elsewhere, override with `-e openbao_infisical_project_id=<id>`.
 - **Infisical CLI on bear-desktop is pinned at 0.38.** It works for all required subcommands but shows upgrade nags; the r730xd install is whatever the apt repo serves.
 
@@ -107,8 +161,8 @@ Save future-you debug time — these aren't obvious from the code alone.
 - [x] Health: `systemctl is-active foundation-openbao openbao-auto-unseal` + `bao status | grep Sealed: false`
 - [x] Metrics: `up{job="openbao"}` via `/v1/sys/health` (unauthenticated)
 - [x] Logs: Docker journald + OpenBao server logs via `docker logs foundation-openbao`
-- [ ] **Audit log**: deferred (TODO — see gotcha above). Directory exists at `/mnt/zfs/foundation/openbao/audit/`, logrotate config in place — just no audit device enabled yet.
-- [x] Alerts: `OpenbaoUnavailable`, `OpenbaoAutoUnsealFailed`, `OpenbaoAuditLogDiskFull` → Discord via Alertmanager
-- [x] Runbooks: this file, `openbao-rotation.md`, `openbao-disaster-recovery.md`
-- [x] ADR: `023-self-hosted-openbao-on-r730xd.md`
+- [x] **Audit log**: enabled via declarative `audit "file" "main"` block in `openbao.hcl.j2`, writing to `/mnt/zfs/foundation/openbao/audit/audit.log`. Logrotate copytruncate keeps size bounded.
+- [x] Alerts: `OpenbaoUnavailable`, `OpenbaoAutoUnsealFailed`, `OpenbaoAuditLogDiskFull` (15% tier-free warning), `OpenbaoAuditLogDiskCritical` (5% tier-free critical) → Discord via Alertmanager
+- [x] Runbooks: this file, `openbao-rotation.md`, `openbao-disaster-recovery.md`, `secrets-migration.md`
+- [x] ADR: `023-self-hosted-openbao-on-r730xd.md`, `024-platform-secrets-on-openbao.md`
 - [x] Backup: daily cron, Raft snapshot to `/mnt/zfs/foundation/openbao/backup/` (14-day retention) + ZFS snapshots of the data dir

@@ -241,6 +241,17 @@
         - name: prometheus-readonly
           policy: |
             path "sys/metrics" { capabilities = ["read"] }
+        # Platform-scoped reads consumed via AppRole (Ansible) and via
+        # Kubernetes auth (ESO). Identical capabilities but named
+        # per-consumer so revocations can be surgical.
+        - name: ansible-platform-read
+          policy: |
+            path "secret/data/lab-iac/*" { capabilities = ["read"] }
+            path "secret/metadata/lab-iac/*" { capabilities = ["read","list"] }
+        - name: eso-platform-read
+          policy: |
+            path "secret/data/lab-iac/*" { capabilities = ["read"] }
+            path "secret/metadata/lab-iac/*" { capabilities = ["read","list"] }
       loop_control:
         label: "{{ item.name }}"
       no_log: false
@@ -265,6 +276,8 @@
         - { name: ansible-readonly }
         - { name: ansible-readwrite }
         - { name: prometheus-readonly }
+        - { name: ansible-platform-read }
+        - { name: eso-platform-read }
       loop_control:
         label: "{{ item.name }}"
       register: bootstrap_policy
@@ -280,6 +293,81 @@
         - ansible-readonly
         - ansible-readwrite
         - prometheus-readonly
+        - ansible-platform-read
+        - eso-platform-read
+
+    # ------------------------------------------------------------------
+    # AppRole auth method for Ansible consumers.
+    # ------------------------------------------------------------------
+    # Ansible reads platform secrets out of OpenBao via AppRole. role_id
+    # is stored in vault.yml (not sensitive alone) and secret_id is also
+    # stored in vault.yml (encrypted; sensitive — rotate via
+    # rotate-openbao-keys.yml --tags approle-secret). Both are
+    # CIDR-bound to the LAN, so a leak off-site is unusable.
+    #
+    # The role ships with long-lived secret_id (TTL=0, unlimited uses)
+    # — rotation is explicit, not time-based. Token TTL is short (1h /
+    # 4h max) so even if a rendered token leaks, the window is small.
+
+    - name: Fetch auth method list
+      ansible.builtin.command:
+        argv: ["{{ openbao_cli_install_dir }}/bao", "auth", "list", "-format=json"]
+      environment:
+        VAULT_ADDR: "{{ openbao_loopback_addr }}"
+        VAULT_CACERT: "{{ openbao_tls_dir }}/ca.crt"
+        BAO_ADDR: "{{ openbao_loopback_addr }}"
+        BAO_CACERT: "{{ openbao_tls_dir }}/ca.crt"
+        VAULT_TOKEN: "{{ openbao_init.root_token | trim }}"
+        BAO_TOKEN: "{{ openbao_init.root_token | trim }}"
+      register: bootstrap_auth_list
+      changed_when: false
+      no_log: true
+
+    - name: Enable approle auth method
+      ansible.builtin.command:
+        argv:
+          - "{{ openbao_cli_install_dir }}/bao"
+          - auth
+          - enable
+          - approle
+      environment:
+        VAULT_ADDR: "{{ openbao_loopback_addr }}"
+        VAULT_CACERT: "{{ openbao_tls_dir }}/ca.crt"
+        BAO_ADDR: "{{ openbao_loopback_addr }}"
+        BAO_CACERT: "{{ openbao_tls_dir }}/ca.crt"
+        VAULT_TOKEN: "{{ openbao_init.root_token | trim }}"
+        BAO_TOKEN: "{{ openbao_init.root_token | trim }}"
+      register: bootstrap_approle_enable
+      changed_when: "'Success' in bootstrap_approle_enable.stdout"
+      failed_when:
+        - bootstrap_approle_enable.rc != 0
+        - "'path is already in use' not in bootstrap_approle_enable.stderr"
+      when: "'approle/' not in (bootstrap_auth_list.stdout | from_json | default({}))"
+      no_log: true
+
+    - name: Write ansible-iac AppRole
+      ansible.builtin.command:
+        argv:
+          - "{{ openbao_cli_install_dir }}/bao"
+          - write
+          - auth/approle/role/ansible-iac
+          - "token_policies=ansible-platform-read"
+          - "token_ttl=1h"
+          - "token_max_ttl=4h"
+          - "token_bound_cidrs=10.0.0.0/24"
+          - "secret_id_bound_cidrs=10.0.0.0/24"
+          - "secret_id_ttl=0"
+          - "secret_id_num_uses=0"
+      environment:
+        VAULT_ADDR: "{{ openbao_loopback_addr }}"
+        VAULT_CACERT: "{{ openbao_tls_dir }}/ca.crt"
+        BAO_ADDR: "{{ openbao_loopback_addr }}"
+        BAO_CACERT: "{{ openbao_tls_dir }}/ca.crt"
+        VAULT_TOKEN: "{{ openbao_init.root_token | trim }}"
+        BAO_TOKEN: "{{ openbao_init.root_token | trim }}"
+      register: bootstrap_approle_role
+      changed_when: "'Success' in bootstrap_approle_role.stdout"
+      no_log: true
 
     - name: Final status check
       ansible.builtin.command:
@@ -316,5 +404,8 @@
           - "       export VAULT_CACERT={{ openbao_tls_dir }}/ca.crt"
           - "       bao login <root-token>"
           - "       bao token create -policy=lab-iac-admin -ttl=720h"
-          - "  3. Reboot r730xd once to verify auto-unseal survives a reboot."
-          - "  4. Schedule a rotation drill (see docs/runbooks/openbao-rotation.md)."
+          - "  3. Populate the Ansible AppRole creds into vault.yml so"
+          - "     playbooks can authenticate to OpenBao:"
+          - "       scripts/set-openbao-approle-secrets.sh"
+          - "  4. Reboot r730xd once to verify auto-unseal survives a reboot."
+          - "  5. Schedule a rotation drill (see docs/runbooks/openbao-rotation.md)."

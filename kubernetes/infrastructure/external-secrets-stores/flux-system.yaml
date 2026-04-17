@@ -1,0 +1,42 @@
+# github-app-credentials is the secret Flux's GitRepository uses to
+# pull this repo. Migrating it to an ExternalSecret is the highest-
+# blast-radius change in the Phase D rollout — if ESO isn't healthy
+# before this applies, Flux loses its pull credentials and the
+# GitOps loop wedges.
+#
+# Sequence guarantee (see docs/runbooks/secrets-migration.md Phase D):
+#   1. ESO HelmRelease Ready
+#   2. ClusterSecretStore "openbao" reports Valid
+#   3. A throwaway ExternalSecret in a non-critical namespace reconciles
+#   4. Only then: remove Play 4 of setup-k8s-gitops.yml (imperative seed)
+#      and let this manifest take over.
+#
+# creationPolicy: Owner means ESO manages the Secret end-to-end.
+# Because we enumerate every current key (githubAppID, Installation,
+# PrivateKey), no existing keys get pruned on reconcile.
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: github-app-credentials
+  namespace: flux-system
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: openbao
+  target:
+    name: github-app-credentials
+    creationPolicy: Owner
+  data:
+    - secretKey: githubAppID
+      remoteRef:
+        key: lab-iac/platform/github-app
+        property: app_id
+    - secretKey: githubAppInstallationID
+      remoteRef:
+        key: lab-iac/platform/github-app
+        property: installation_id
+    - secretKey: githubAppPrivateKey
+      remoteRef:
+        key: lab-iac/platform/github-app
+        property: private_key

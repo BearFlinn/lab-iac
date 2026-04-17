@@ -1,0 +1,61 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: external-secrets
+  namespace: flux-system
+spec:
+  interval: 30m
+  chart:
+    spec:
+      chart: external-secrets
+      # Chart versioning aligned with app version since 2.x. Bump
+      # intentionally — ESO has occasionally shipped breaking CRD
+      # changes between minors; watch release notes.
+      version: "0.18.2"
+      sourceRef:
+        kind: HelmRepository
+        name: external-secrets
+  targetNamespace: external-secrets
+  install:
+    createNamespace: false
+  values:
+    installCRDs: true
+    replicaCount: 1
+    resources:
+      requests:
+        cpu: 20m
+        memory: 64Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
+    webhook:
+      replicaCount: 1
+      resources:
+        requests:
+          cpu: 20m
+          memory: 32Mi
+        limits:
+          cpu: 100m
+          memory: 128Mi
+    certController:
+      replicaCount: 1
+      resources:
+        requests:
+          cpu: 20m
+          memory: 32Mi
+        limits:
+          cpu: 100m
+          memory: 128Mi
+    # ServiceMonitor requires Prometheus Operator; r730xd Prometheus
+    # scrapes ESO via a NodePort-exposed /metrics endpoint instead.
+    serviceMonitor:
+      enabled: false
+    metrics:
+      service:
+        enabled: true
+    # The operator runs under a dedicated SA (default "external-secrets"
+    # in the chart). Its K8s auth role in OpenBao is bound to that SA
+    # + namespace.
+    serviceAccount:
+      create: true
+      name: external-secrets

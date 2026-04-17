@@ -1,0 +1,46 @@
+# ExternalSecret manifests for arc-runners:
+#   - sccache-s3-credentials (MinIO bulk creds for Rust build cache)
+#   - github-runner-pat (org-level PAT for ARC v2)
+# Both previously seeded imperatively by seed-app-secrets.yml /
+# setup-k8s-cicd.yml; now reconciled from OpenBao via ESO.
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: sccache-s3-credentials
+  namespace: arc-runners
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: openbao
+  target:
+    name: sccache-s3-credentials
+    creationPolicy: Owner
+  data:
+    - secretKey: accesskey
+      remoteRef:
+        key: lab-iac/cicd/sccache-minio
+        property: access_key
+    - secretKey: secretkey
+      remoteRef:
+        key: lab-iac/cicd/sccache-minio
+        property: secret_key
+---
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: github-runner-pat
+  namespace: arc-runners
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: openbao
+  target:
+    name: github-runner-pat
+    creationPolicy: Owner
+  data:
+    - secretKey: github_token
+      remoteRef:
+        key: lab-iac/platform/github-runner
+        property: pat

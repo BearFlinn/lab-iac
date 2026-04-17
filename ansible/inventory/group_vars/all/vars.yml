@@ -66,3 +66,31 @@ infisical_openbao_client_secret: "{{ vault_infisical_openbao_client_secret }}"
 # always the repo root per README / ansible.cfg conventions.
 openbao_infisical_project_id: >-
   {{ (lookup('file', lookup('env', 'PWD') ~ '/.infisical.json') | from_json).workspaceId }}
+
+# -----------------------------------------------------------------------
+# Platform secrets via OpenBao (Phase C migration — ADR-024)
+# -----------------------------------------------------------------------
+# Consuming playbooks opt into OpenBao reads by loading
+# ansible/vars/openbao_secrets.yml (conditional on this flag via
+# include_vars in each play's pre_tasks). When true, vault_* are
+# redefined as vault_kv2_get lookups against OpenBao; when false,
+# values come from the decrypted vault.yml as before.
+#
+# Flipped to true 2026-04-17 after Phase B seed verified clean (all
+# 14 paths matched vault.yml source via read-back). Rollback knob:
+# set to false (or run rollback-openbao-migration.yml).
+openbao_read_enabled: true
+
+# OpenBao API endpoint — LAN-only, served on r730xd. Surfaced here (not
+# just in the role defaults) because consumer plays that don't apply the
+# r730xd-openbao role need it to configure community.hashi_vault
+# lookups. Port from the role defaults.
+openbao_api_port: 8200
+openbao_api_addr: "https://{{ r730xd_ip }}:{{ openbao_api_port }}"
+
+# OpenBao CA bundle on the controller. The r730xd-openbao role installs
+# the CA into the host trust store during deploy-openbao.yml; for the
+# jumpbox/bear-desktop controller, fetch it via:
+#   scripts/fetch-openbao-ca.sh
+# Override via `-e openbao_tls_ca_path=/alt/path/ca.crt`.
+openbao_tls_ca_path: "/usr/local/share/ca-certificates/lab-iac-openbao-ca.crt"
