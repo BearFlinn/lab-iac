@@ -252,6 +252,8 @@
           policy: |
             path "secret/data/lab-iac/*" { capabilities = ["read"] }
             path "secret/metadata/lab-iac/*" { capabilities = ["read","list"] }
+            path "secret/data/lab-apps/*" { capabilities = ["read"] }
+            path "secret/metadata/lab-apps/*" { capabilities = ["read","list"] }
       loop_control:
         label: "{{ item.name }}"
       no_log: false
