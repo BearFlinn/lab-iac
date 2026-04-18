@@ -30,7 +30,6 @@ kubernetes/        K8s manifests (Flux-managed apps + infrastructure)
 docker/            Docker Compose projects on the R730xd (foundation stores, observability)
 configs/           Machine-specific configs (jumpbox desktop, R730xd preseed, etc.)
 scripts/           Shell utilities (cluster standup, jumpbox image building)
-ap630-debian/      Ongoing AP630 firmware research (not active infrastructure)
 docs/              Architecture, operations, and decision records
 archive/           Historical configs (pre-2026 repo state + 2026 migration record)
 ```

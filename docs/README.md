@@ -27,7 +27,7 @@
 
 ## Hardware research
 
-- [ap630-debian-project.md](ap630-debian-project.md) — AP630 Debian-on-aarch64 experimentation
+- [ap630-debian-project.md](ap630-debian-project.md) — AP630 Debian-on-aarch64 experimentation (archived; source extracted to [Grizzly-Endeavors/ap630-debian](https://github.com/Grizzly-Endeavors/ap630-debian))
 - [aerohive-cli-reference.md](aerohive-cli-reference.md) — HiveOS CLI quick reference
 - [aerohive-serial-interface.md](aerohive-serial-interface.md) — Serial access notes
 
