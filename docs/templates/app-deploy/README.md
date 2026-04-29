@@ -25,7 +25,7 @@ See [ADR-020](../../decisions/020-app-delivery-model.md) for the full
 reasoning behind this delivery model. In short:
 
 - Each app repo owns its own `deploy/` directory (Helm chart by default).
-- `lab-iac` tracks each app as a thin `GitRepository` + `Kustomization` pair
+- `grizzly-platform` tracks each app as a thin `GitRepository` + `Kustomization` pair
   under `kubernetes/apps/<app>/`.
 - Tag bumps happen inside the app repo's CI — no Flux image automation.
-- Every deploy after the first is zero-touch on `lab-iac`.
+- Every deploy after the first is zero-touch on `grizzly-platform`.

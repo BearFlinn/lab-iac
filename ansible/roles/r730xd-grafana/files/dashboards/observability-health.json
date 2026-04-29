@@ -221,7 +221,7 @@
     }
   ],
   "schemaVersion": 39,
-  "tags": ["homelab", "observability", "prometheus", "loki", "tempo", "grafana"],
+  "tags": ["grizzly-platform", "observability", "prometheus", "loki", "tempo", "grafana"],
   "templating": { "list": [] },
   "time": { "from": "now-6h", "to": "now" },
   "timepicker": {},

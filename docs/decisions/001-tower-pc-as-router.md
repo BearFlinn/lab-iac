@@ -21,7 +21,7 @@ Use the Tower PC as the lab router in addition to its GPU inference role.
 
 - **CPU is underutilized.** GPU inference workloads are GPU-bound, not CPU-bound. The tower PC's CPU will be largely idle — more than enough headroom for routing, NAT, DHCP, and DNS at gigabit speeds.
 - **Already outside the cluster.** The tower PC is standalone (removed from K8s), so a router reboot doesn't affect cluster availability.
-- **Non-critical co-tenants.** The other workloads on the tower PC (LLM inference) are non-critical. If the router needs a restart, the only impact is a brief inference outage — acceptable for a homelab.
+- **Non-critical co-tenants.** The other workloads on the tower PC (LLM inference) are non-critical. If the router needs a restart, the only impact is a brief inference outage — acceptable for this self-hosted environment.
 - **No additional hardware.** Avoids buying or dedicating another machine solely for routing.
 - **Full routing capability.** An x86 box with multiple NICs can run nftables/iptables, dnsmasq or Unbound, and handle inter-VLAN routing (router-on-a-stick via the SR2024).
 
@@ -33,7 +33,7 @@ Use the Tower PC as the lab router in addition to its GPU inference role.
 
 ## Alternatives Rejected
 
-- **Dedicated box:** Unnecessary cost and power draw for a homelab. The tower PC handles this with no additional hardware.
+- **Dedicated box:** Unnecessary cost and power draw for this self-hosted environment. The tower PC handles this with no additional hardware.
 - **R730 VM:** Puts routing behind the storage server's availability. R730 reboots (firmware updates, drive changes) would take down the network. The R730 is more likely to need maintenance than the tower PC.
 - **Keep Xfinity routing:** Loses inter-VLAN firewall rules, custom DNS, per-VLAN DHCP, and full network control — the main reasons for the migration.
 
@@ -44,6 +44,6 @@ Use the Tower PC as the lab router in addition to its GPU inference role.
 This decision is superseded by [ADR-021](021-off-the-shelf-router-tower-pc-as-worker.md). Two reasons:
 
 1. The Tower PC PSU can't carry the planned GPU fleet. A separate machine is being built for GPU inference, so the "CPU idle alongside GPU inference" rationale no longer applies.
-2. The operator decided the ongoing overhead of owning a DIY router in IaC isn't worth it for this homelab. An off-the-shelf router will replace the Xfinity gateway's routing role; the Tower PC will join the cluster as a plain K8s worker.
+2. The operator decided the ongoing overhead of owning a DIY router in IaC isn't worth it for this self-hosted environment. An off-the-shelf router will replace the Xfinity gateway's routing role; the Tower PC will join the cluster as a plain K8s worker.
 
 See ADR-021 for the replacement decision and context.

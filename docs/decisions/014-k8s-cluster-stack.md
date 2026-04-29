@@ -5,7 +5,7 @@
 
 ## Context
 
-Standing up a new K8s cluster from scratch on homelab hardware. The previous cluster ran kubeadm + Calico + nginx-ingress with ad-hoc manifest management. This time, observability is a first-class priority (Prometheus, Grafana, Loki, and Tempo already run on the R730xd), and day-to-day cluster operations will be driven primarily by an AI agent (Claude Code) working from the CLI and this IaC repo.
+Standing up a new K8s cluster from scratch on self-hosted hardware. The previous cluster ran kubeadm + Calico + nginx-ingress with ad-hoc manifest management. This time, observability is a first-class priority (Prometheus, Grafana, Loki, and Tempo already run on the R730xd), and day-to-day cluster operations will be driven primarily by an AI agent (Claude Code) working from the CLI and this IaC repo.
 
 ## Decision
 

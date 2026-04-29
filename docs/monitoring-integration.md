@@ -2,7 +2,7 @@
 
 > **IP addresses:** Authoritative values are in `ansible/group_vars/all/network.yml`.
 
-How the homelab monitoring system works today, and how to evolve it as the lab grows.
+How the platform monitoring system works today, and how to evolve it as the infrastructure grows.
 
 ## Current Architecture
 
@@ -32,8 +32,8 @@ must set `X-Scope-OrgID`; tenant-less requests are rejected.
 
 | Tenant | Purpose |
 |---|---|
-| `grizzly-platform` | Homelab operational traces — Argo Workflows, future self-instrumented services, and the `feedback-ingest` service's own operational traces. Default for new producers. |
-| `residuum-feedback` | Report traces emitted by the `feedback-ingest` service. Isolated so feedback volume can't affect platform trace retention or queries. |
+| `grizzly-platform` | Platform operational traces — Argo Workflows, future self-instrumented services, and the `feedback-ingest` service's own operational traces. Default for new producers. |
+| `residuum-feedback` | Report traces emitted by the `feedback-ingest` service. Isolated so feedback volume cannot affect platform trace retention or queries. |
 
 Grafana exposes both as separate datasources: `Tempo (grizzly-platform)`
 (uid `tempo` — preserved so Prometheus exemplar links and Loki derived
@@ -126,7 +126,7 @@ The payload is JSON:
 Point the webhook URL at your Ntfy topic:
 
 ```yaml
-monitoring_alert_webhook_url: "https://ntfy.example.com/homelab-alerts"
+monitoring_alert_webhook_url: "https://ntfy.example.com/platform-alerts"
 ```
 
 Note: Ntfy expects different payload format. You may need to customize `alert.sh` to use Ntfy's API (simple curl with `-d "message"` and `-H "Title: ..."` headers) instead of the generic JSON POST. A Ntfy-specific dispatch function would look like:
@@ -170,14 +170,14 @@ scrape_configs:
           - "<r730xd_ip>:9100"   # r730xd
           # Add more hosts as they come online
         labels:
-          env: "homelab"
+          env: "grizzly-platform"
 
   - job_name: "ipmi"
     static_configs:
       - targets:
           - "<r730xd_ip>:9290"   # r730xd
         labels:
-          env: "homelab"
+          env: "grizzly-platform"
 ```
 
 ### Step 2: Alert Rules
@@ -185,7 +185,7 @@ scrape_configs:
 These Prometheus alerting rules replicate the cron check logic:
 
 ```yaml
-# rules/homelab.yml
+# rules/grizzly-platform.yml
 groups:
   - name: storage
     rules:
@@ -446,7 +446,7 @@ In all cases, the cron-based `alert.sh` webhook alerts continue working independ
 | Cron checks | **Keep** — textfile metrics flow through node\_exporter | **Keep** — but alert dispatch can migrate to Grafana Alerting |
 | Alloy install | Central machine or K8s only | Every monitored host |
 
-### Recommended Path for This Homelab
+### Recommended Path for This Environment
 
 Start with **Option A** — a single Alloy instance scraping all hosts. This avoids deploying Alloy to every machine and keeps the per-host stack simple (exporters + cron checks). When K8s is running, deploy Alloy as a K8s workload alongside Mimir and Grafana. The exporters and textfile metrics on each host continue working without changes.
 

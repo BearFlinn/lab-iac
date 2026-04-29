@@ -1,8 +1,8 @@
 name: Register App with Flux
 
 # Reusable workflow: any repo in the grizzly-endeavors org can call this to
-# onboard itself as an app on the homelab K8s cluster. It:
-#   1. Generates a short-lived GitHub App token scoped to lab-iac
+# onboard itself as an app on the grizzly-platform K8s cluster. It:
+#   1. Generates a short-lived GitHub App token scoped to grizzly-platform
 #   2. Verifies the calling repo actually has a deploy/ dir
 #   3. Renders the kubernetes/apps/<app>/ folder from templates
 #   4. Appends the app to kubernetes/apps/kustomization.yaml
@@ -82,19 +82,19 @@ jobs:
           fi
           echo "Verified $REPO/$path_to_check exists."
 
-      - name: Generate GitHub App token for lab-iac
+      - name: Generate GitHub App token for grizzly-platform
         id: app-token
         uses: actions/create-github-app-token@v1
         with:
           app-id: ${{ secrets.FLUX_OPS_APP_ID }}
           private-key: ${{ secrets.FLUX_OPS_APP_PRIVATE_KEY }}
           owner: grizzly-endeavors
-          repositories: lab-iac
+          repositories: grizzly-platform
 
-      - name: Checkout lab-iac
+      - name: Checkout grizzly-platform
         uses: actions/checkout@v4
         with:
-          repository: grizzly-endeavors/lab-iac
+          repository: grizzly-endeavors/grizzly-platform
           token: ${{ steps.app-token.outputs.token }}
           ref: master
           persist-credentials: true
@@ -198,7 +198,7 @@ jobs:
           EOF
           )
           pr_url=$(gh pr create \
-            --repo grizzly-endeavors/lab-iac \
+            --repo grizzly-endeavors/grizzly-platform \
             --base master \
             --head "register-app/${APP_NAME}" \
             --title "feat(apps): register ${APP_NAME}" \
@@ -214,7 +214,7 @@ jobs:
         run: |
           set -euo pipefail
           # Try immediate merge first — works when there are no required
-          # checks (the normal case for lab-iac). Fall back to --auto so the
+          # checks (the normal case for grizzly-platform). Fall back to --auto so the
           # PR merges once checks pass if branch protection gets added later.
           if gh pr merge --squash --delete-branch "$PR_URL"; then
             echo "Merged $PR_URL"

@@ -22,6 +22,6 @@ All K8s nodes boot from local disk. No PXE/TFTP/NFS-root infrastructure will be 
 
 - **Eliminates an entire infrastructure layer.** No TFTP server, no DHCP boot config, no NFS root exports, no initramfs builds. Fewer moving parts to debug.
 - **Faster path to cluster standup.** The blocking dependency on PXE server setup is removed — nodes are ready for containerd + kubeadm now.
-- **Lose centralized root filesystem management.** Can't snapshot/clone node root filesystems from the server side. Acceptable — Ansible reprovisioning from scratch is fast enough for a 4-node homelab.
+- **Lose centralized root filesystem management.** Can't snapshot/clone node root filesystems from the server side. Acceptable — Ansible reprovisioning from scratch is fast enough for a 4-node cluster.
 - **Each node manages its own boot disk.** Disk failures require local replacement + reinstall rather than just re-PXEing. Acceptable given the small cluster size.
 - **ADR-004 (ZFS + iSCSI for K8s storage) is unaffected.** iSCSI is still the plan for K8s PVC block storage — only the root filesystem delivery method changes.

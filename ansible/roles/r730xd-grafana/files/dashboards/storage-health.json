@@ -514,7 +514,7 @@
     }
   ],
   "schemaVersion": 39,
-  "tags": ["homelab", "storage", "r730xd"],
+  "tags": ["grizzly-platform", "storage", "r730xd"],
   "templating": { "list": [] },
   "time": { "from": "now-6h", "to": "now" },
   "timepicker": {},

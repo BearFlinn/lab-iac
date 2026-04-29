@@ -5,7 +5,7 @@ kind: Kustomization
 # Split from kubernetes/infrastructure/external-secrets/ because these
 # resources are CRD instances (ClusterSecretStore, ExternalSecret) that
 # depend on ESO's CRDs being installed first. A separate Flux
-# Kustomization at kubernetes/clusters/homelab/external-secrets-stores.yaml
+# Kustomization at kubernetes/clusters/grizzly-platform/external-secrets-stores.yaml
 # applies these with `dependsOn: infrastructure` — identical pattern
 # to cert-manager-issuers.
 #

@@ -1,6 +1,6 @@
 ---
 # setup-openbao-k8s-auth.yml — Wire OpenBao's kubernetes auth method
-# into the homelab cluster so External Secrets Operator can pull
+# into the grizzly-platform cluster so External Secrets Operator can pull
 # platform secrets.
 #
 # The ESO workflow:

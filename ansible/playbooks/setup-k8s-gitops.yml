@@ -121,9 +121,9 @@
       ansible.builtin.command: >
         flux bootstrap github
         --owner=grizzly-endeavors
-        --repository=lab-iac
+        --repository=grizzly-platform
         --branch=master
-        --path=kubernetes/clusters/homelab
+        --path=kubernetes/clusters/grizzly-platform
         --reconcile
       environment:
         KUBECONFIG: "{{ kubeconfig }}"
@@ -378,8 +378,8 @@
 
     - name: Re-template alert rules with Flux alerts
       ansible.builtin.template:
-        src: "{{ playbook_dir }}/../roles/r730xd-prometheus/templates/rules/homelab.yml.j2"
-        dest: "/opt/observability/prometheus/rules/homelab.yml"
+        src: "{{ playbook_dir }}/../roles/r730xd-prometheus/templates/rules/grizzly-platform.yml.j2"
+        dest: "/opt/observability/prometheus/rules/grizzly-platform.yml"
         mode: "0644"
       become: yes
       register: prom_rules

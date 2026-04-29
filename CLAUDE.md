@@ -1,13 +1,13 @@
-# lab-iac
+# grizzly-platform
 
-Homelab Infrastructure as Code. See `README.md` for architecture, machines, repo structure, and common commands. `docs/hardware.md` has the live machine inventory, `docs/network.md` the network topology, and `docs/decisions/` the architectural rationale. The completed 2026 migration record lives in `archive/migration-2026/`.
+Self-hosted infrastructure for Grizzly Endeavors projects (Infrastructure as Code). See `README.md` for architecture, machines, repo structure, and common commands. `docs/hardware.md` has the live machine inventory, `docs/network.md` the network topology, and `docs/decisions/` the architectural rationale. The completed 2026 migration record lives in `archive/migration-2026/`.
 
 # Secrets Management
 
 **Start here:** `docs/runbooks/openbao-quickref.md` — addresses, file paths, policies, auth methods, path layout, rotate/add how-tos, deploy-time gotchas.
 **Migration playbook:** `docs/runbooks/secrets-migration.md` — Phase A–E operator guide for moving consumers onto OpenBao.
 
-- **OpenBao** (on R730xd, LAN-only at `https://10.0.0.200:8200`) is the homelab secrets source of truth. Scripted unseal via Infisical bootstrap secrets (`openbao-auto-unseal.service`). Audit device enabled declaratively in `openbao.hcl` (file sink on the ZFS hot tier).
+- **OpenBao** (on R730xd, LAN-only at `https://10.0.0.200:8200`) is the platform secrets source of truth. Scripted unseal via Infisical bootstrap secrets (`openbao-auto-unseal.service`). Audit device enabled declaratively in `openbao.hcl` (file sink on the ZFS hot tier).
   - Role: `ansible/roles/r730xd-openbao/`
   - Playbooks: `deploy-openbao.yml`, `bootstrap-openbao.yml`, `rotate-openbao-keys.yml`, `setup-openbao-k8s-auth.yml`, `migrate-platform-secrets-to-openbao.yml`, `rollback-openbao-migration.yml`
   - Helpers: `scripts/set-openbao-bootstrap-secrets.sh` (Infisical creds), `scripts/set-openbao-approle-secrets.sh` (Ansible AppRole creds), `scripts/fetch-openbao-ca.sh` (CA → ConfigMap + controller trust store)
@@ -15,7 +15,7 @@ Homelab Infrastructure as Code. See `README.md` for architecture, machines, repo
   - Runbooks: `docs/runbooks/openbao-{quickref,rotation,disaster-recovery}.md`, `docs/runbooks/secrets-migration.md`
 - **Ansible consumers:** `ansible/vars/openbao_secrets.yml` redefines in-scope `vault_*` as `community.hashi_vault.vault_kv2_get` lookups; opt-in per playbook via `openbao_read_enabled` (default false). Auth: AppRole `ansible-iac` bound to `ansible-platform-read` (CIDR-locked to 10.0.0.0/24).
 - **Kubernetes consumers:** External Secrets Operator, deployed via Flux at `kubernetes/infrastructure/external-secrets/`. ClusterSecretStore `openbao` authenticates via K8s auth method using the `openbao-auth` ServiceAccount (TokenReview delegated). `ExternalSecret` manifests live next to the consuming HelmRelease.
-- **Path layout:** `secret/lab-iac/<domain>/<name>` under KV v2. Domains: `platform/`, `stores/`, `observability/`, `cicd/`, `flux/`. Full layout in the quickref.
+- **Path layout:** `secret/grizzly-platform/<domain>/<name>` under KV v2. Domains: `platform/`, `stores/`, `observability/`, `cicd/`, `flux/`. Full layout in the quickref.
 - **Ansible Vault** (`ansible/inventory/group_vars/all/vault.yml`, encrypted, decrypted via `.vault_pass`) post-migration holds only: Infisical bootstrap creds (chicken-and-egg with OpenBao unseal), OpenBao AppRole creds, WireGuard private keys (ingress-tunnel role references them directly — not migrated), and app-level secrets (out of scope for this migration).
 - **Vault password file:** Must exist at repo root, git-ignored.
 - **Infisical** holds ONLY the OpenBao unseal keys + root token (bootstrap store). Project ID = `workspaceId` in `.infisical.json` at repo root. Env slug = `prod`. Secrets stored as `--type=shared`. Not a general-purpose secret store here.

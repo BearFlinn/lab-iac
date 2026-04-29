@@ -48,11 +48,20 @@
 
 - name: Deploy Prometheus alert rules
   ansible.builtin.template:
-    src: rules/homelab.yml.j2
-    dest: "{{ prometheus_compose_dir }}/rules/homelab.yml"
+    src: rules/grizzly-platform.yml.j2
+    dest: "{{ prometheus_compose_dir }}/rules/grizzly-platform.yml"
     owner: root
     group: root
     mode: "0644"
+  notify: Restart observability-prometheus
+
+# Remove the legacy rendered rules file (rules/homelab.yml) left over
+# from before the 2026-04 grizzly-platform rename. Prometheus loads
+# rules/*.yml so leaving it would double-evaluate the rules.
+- name: Remove legacy homelab rules file
+  ansible.builtin.file:
+    path: "{{ prometheus_compose_dir }}/rules/homelab.yml"
+    state: absent
   notify: Restart observability-prometheus
 
 - name: Deploy Alertmanager configuration

@@ -162,30 +162,30 @@ Set up nginx-ingress, cert-manager, and wire traffic through the Hetzner VPS so 
 
 ## Phase 7: Workload Delivery & Migration
 
-Establish the application delivery model, then migrate services from the staging VM and old cluster. The delivery model is load-bearing — getting it right once means every future deploy is `git push` in the app repo, with no lab-iac changes.
+Establish the application delivery model, then migrate services from the staging VM and old cluster. The delivery model is load-bearing — getting it right once means every future deploy is `git push` in the app repo, with no grizzly-platform changes.
 
-**Delivery model (ADR-020):** each app repo owns its own manifests in a `deploy/` dir. lab-iac tracks each app as a Flux `GitRepository` + `Kustomization` under `kubernetes/apps/<app>/`. Onboarding a new app is automated via a reusable GitHub workflow in lab-iac. Tag bumps happen inside each app repo's CI — no Flux image automation.
+**Delivery model (ADR-020):** each app repo owns its own manifests in a `deploy/` dir. grizzly-platform tracks each app as a Flux `GitRepository` + `Kustomization` under `kubernetes/apps/<app>/`. Onboarding a new app is automated via a reusable GitHub workflow in grizzly-platform. Tag bumps happen inside each app repo's CI — no Flux image automation.
 
 ### 7a: Platform Setup
 
 Prereqs for the model itself. Done once, before any app migrates.
 
 **Delivers:**
-- lab-iac migrated from personal GitHub account to `grizzly-endeavors` org (local remotes updated, CI still passes, existing Flux `GitRepository` source for lab-iac repointed at new URL)
+- grizzly-platform migrated from personal GitHub account to `grizzly-endeavors` org (local remotes updated, CI still passes, existing Flux `GitRepository` source for grizzly-platform repointed at new URL)
 - GitHub App created and installed org-wide with:
   - `contents: read` on all repos (Flux uses this to pull app `deploy/` dirs)
-  - `contents: write` + `pull-requests: write` on lab-iac (onboarding workflow uses this)
+  - `contents: write` + `pull-requests: write` on grizzly-platform (onboarding workflow uses this)
 - Flux `GitRepository` auth for app repos switched to the GitHub App (replaces any per-repo deploy keys)
 - `kubernetes/apps/` directory created with a `kustomization.yaml` listing app folders
-- `kubernetes/clusters/homelab/apps.yaml` Flux Kustomization added, pointing at `./kubernetes/apps`, with `prune: true`
-- `.github/workflows/register-app.yaml` reusable workflow in lab-iac — accepts inputs (app name, repo, deploy path, namespace, ingress host, etc.), renders the `GitRepository` + `Kustomization` from a template, opens an auto-merging PR on lab-iac
+- `kubernetes/clusters/grizzly-platform/apps.yaml` Flux Kustomization added, pointing at `./kubernetes/apps`, with `prune: true`
+- `.github/workflows/register-app.yaml` reusable workflow in grizzly-platform — accepts inputs (app name, repo, deploy path, namespace, ingress host, etc.), renders the `GitRepository` + `Kustomization` from a template, opens an auto-merging PR on grizzly-platform
 - `deploy/` template for app repos (Helm chart skeleton) with an example CI tag-bump step and an example `workflow_call` to `register-app.yaml`
 
 **Verify before moving on:**
-- `grizzly-endeavors/lab-iac` resolves; `git fetch` works from a fresh clone; CI (lint, `flux check`) passes under the new org
+- `grizzly-endeavors/grizzly-platform` resolves; `git fetch` works from a fresh clone; CI (lint, `flux check`) passes under the new org
 - Flux is reading from at least one app repo via the GitHub App (test with a throwaway "hello-world" app); no deploy keys in use
 - `flux get kustomizations apps` shows `Ready=True`
-- End-to-end onboarding test: run `register-app.yaml` via `workflow_dispatch` from a scratch repo, PR opens on lab-iac, auto-merges, Flux picks up the app within 2 minutes, pod reaches Ready
+- End-to-end onboarding test: run `register-app.yaml` via `workflow_dispatch` from a scratch repo, PR opens on grizzly-platform, auto-merges, Flux picks up the app within 2 minutes, pod reaches Ready
 - Reverse test: delete the scratch app's folder from `kubernetes/apps/`, Flux prunes the in-cluster resources
 - Onboarding workflow metrics / logs visible (GitHub Actions UI is fine; no custom dashboard needed)
 - Existing non-app Flux Kustomizations (`infrastructure`, `cert-manager-issuers`) still `Ready=True` after the apps source is added
@@ -195,7 +195,7 @@ Prereqs for the model itself. Done once, before any app migrates.
 Migrate services one at a time. Each migration exercises the 7a machinery and shakes out any template gaps.
 
 **Services to migrate (landing-page first, rest TBD):**
-- **landing-page** — migrated first because it's the simplest real workload, and the stale link to `bearflinn/lab-iac` on the site is fixed as part of this migration (new URL is `grizzly-endeavors/lab-iac`)
+- **landing-page** — migrated first because it's the simplest real workload, and the stale link to `bearflinn/lab-iac` on the site is fixed as part of this migration (new URL is `grizzly-endeavors/grizzly-platform`)
 - caz-portfolio
 - resume-site
 - Other services from the old cluster (anything still on the staging VM). Palworld was backed up and decommissioned indefinitely — see ADR-022.

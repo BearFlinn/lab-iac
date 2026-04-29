@@ -13,7 +13,7 @@ Rotation of OpenBao seal material (unseal keys, root token) and the Infisical bo
 ## Prerequisites
 
 ```
-cd ~/Projects/lab-iac
+cd ~/Projects/grizzly-platform
 # Confirm your Infisical CLI can write to the project:
 infisical secrets --projectId=$(jq -r .workspaceId .infisical.json) --env=prod
 # If not logged in:  infisical login   (or export INFISICAL_TOKEN=...)

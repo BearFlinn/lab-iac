@@ -229,7 +229,7 @@
     }
   ],
   "schemaVersion": 39,
-  "tags": ["homelab", "foundation", "postgres", "redis", "minio"],
+  "tags": ["grizzly-platform", "foundation", "postgres", "redis", "minio"],
   "templating": { "list": [] },
   "time": { "from": "now-6h", "to": "now" },
   "timepicker": {},

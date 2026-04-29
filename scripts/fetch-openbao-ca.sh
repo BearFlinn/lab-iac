@@ -6,7 +6,9 @@
 # Why this exists: the ConfigMap is reconciled by Flux, so the CA PEM
 # must live in git. The CA is generated on r730xd by the r730xd-openbao
 # role and rotates every ~10 years. This script pulls the current PEM
-# over ssh and updates the ConfigMap in place.
+# over ssh and updates the ConfigMap in place. The local trust-store
+# install also cleans up the legacy lab-iac-openbao-ca.crt filename
+# left over from before the 2026-04 grizzly-platform rename.
 #
 # Also writes the CA to the controller's trust store path so
 # community.hashi_vault lookups from Ansible can verify it (the
@@ -23,7 +25,7 @@ set -euo pipefail
 REPO_ROOT="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
 CONFIGMAP="${REPO_ROOT}/kubernetes/infrastructure/external-secrets/openbao-ca-configmap.yaml"
 CA_SRC="r730xd:/etc/openbao/tls/ca.crt"
-CA_TRUST_DEST="/usr/local/share/ca-certificates/lab-iac-openbao-ca.crt"
+CA_TRUST_DEST="/usr/local/share/ca-certificates/grizzly-platform-openbao-ca.crt"
 
 log()  { printf '[%s] %s\n' "$(basename "$0")" "$*"; }
 die()  { log "ERROR: $*" >&2; exit 1; }
@@ -66,12 +68,16 @@ else
 fi
 
 # --- install into controller trust store ------------------------------
+CA_TRUST_LEGACY="/usr/local/share/ca-certificates/lab-iac-openbao-ca.crt"
+
 if [ -w "$(dirname "${CA_TRUST_DEST}")" ] 2>/dev/null || sudo -n true 2>/dev/null; then
     log "installing CA into controller trust store at ${CA_TRUST_DEST}"
     if [ -w "$(dirname "${CA_TRUST_DEST}")" ]; then
         cp "${TMP_CA}" "${CA_TRUST_DEST}"
+        rm -f "${CA_TRUST_LEGACY}"
     else
         sudo cp "${TMP_CA}" "${CA_TRUST_DEST}"
+        sudo rm -f "${CA_TRUST_LEGACY}"
     fi
     if command -v update-ca-certificates >/dev/null; then
         sudo update-ca-certificates >/dev/null

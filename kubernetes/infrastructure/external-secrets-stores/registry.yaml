@@ -14,9 +14,9 @@ spec:
   data:
     - secretKey: accessKey
       remoteRef:
-        key: lab-iac/stores/minio-bulk
+        key: grizzly-platform/stores/minio-bulk
         property: root_user
     - secretKey: secretKey
       remoteRef:
-        key: lab-iac/stores/minio-bulk
+        key: grizzly-platform/stores/minio-bulk
         property: root_password

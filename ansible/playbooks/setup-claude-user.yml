@@ -36,7 +36,7 @@
           community.crypto.openssh_keypair:
             path: "~/.ssh/claude_lab_ed25519"
             type: ed25519
-            comment: "claude@lab-iac"
+            comment: "claude@grizzly-platform"
           when: not claude_key_stat.stat.exists
 
         - name: Read public key
@@ -51,7 +51,7 @@
         - name: Ensure SSH config uses claude key for claude user
           ansible.builtin.blockinfile:
             path: "~/.ssh/config"
-            marker: "# {mark} lab-iac claude-user"
+            marker: "# {mark} grizzly-platform claude-user"
             block: |
               Match user claude
                   IdentityFile ~/.ssh/claude_lab_ed25519

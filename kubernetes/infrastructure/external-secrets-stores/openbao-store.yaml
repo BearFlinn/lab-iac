@@ -9,8 +9,8 @@
 # `eso-platform-read` policy.
 #
 # Path convention: KV v2 mount `secret/`, platform secrets under
-# `lab-iac/<domain>/<name>`. See docs/decisions/024-platform-secrets-
-# on-openbao.md and the path layout in the quickref runbook.
+# `grizzly-platform/<domain>/<name>`. See docs/decisions/024-platform-
+# secrets-on-openbao.md and the path layout in the quickref runbook.
 apiVersion: external-secrets.io/v1
 kind: ClusterSecretStore
 metadata:

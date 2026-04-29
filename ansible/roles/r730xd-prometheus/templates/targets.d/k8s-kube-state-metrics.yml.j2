@@ -3,6 +3,6 @@
 - targets:
     - "{{ hostvars[groups['k8s_control_plane'][0]]['ansible_host'] }}:30080"
   labels:
-    env: "homelab"
+    env: "grizzly-platform"
     instance: "kube-state-metrics"
     component: "kube-state-metrics"

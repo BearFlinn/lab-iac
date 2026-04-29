@@ -19,5 +19,5 @@ Run a single control plane node on the dell-inspiron-15. All other machines are 
 ## Consequences
 
 - **All compute-heavy machines stay as workers.** Quanta (32T/64GB), NUC (20T/64GB), and Optiplex (8T/32GB) run workloads at full capacity.
-- **Control plane is a SPOF.** If the Inspiron dies, the cluster is down. Existing workloads on workers keep running (pods stay up) but no new scheduling, no API access, no kubectl. Acceptable for a homelab — rebuild/reprovisioning from Ansible is the recovery path.
+- **Control plane is a SPOF.** If the Inspiron dies, the cluster is down. Existing workloads on workers keep running (pods stay up) but no new scheduling, no API access, no kubectl. Acceptable for this self-hosted environment — rebuild/reprovisioning from Ansible is the recovery path.
 - **Inspiron's 8GB RAM is adequate** for a single-node control plane at this cluster size (3 workers, <100 pods). Would need revisiting if the cluster grows significantly.

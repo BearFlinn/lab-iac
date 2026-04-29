@@ -14,9 +14,9 @@ spec:
   data:
     - secretKey: accesskey
       remoteRef:
-        key: lab-iac/cicd/argo-minio
+        key: grizzly-platform/cicd/argo-minio
         property: access_key
     - secretKey: secretkey
       remoteRef:
-        key: lab-iac/cicd/argo-minio
+        key: grizzly-platform/cicd/argo-minio
         property: secret_key

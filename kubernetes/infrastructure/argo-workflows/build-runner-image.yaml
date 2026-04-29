@@ -36,7 +36,7 @@ spec:
         command: [sh, -c]
         args:
           - |
-            git clone https://github.com/grizzly-endeavors/lab-iac.git /workspace/src
+            git clone https://github.com/grizzly-endeavors/grizzly-platform.git /workspace/src
             cd /workspace/src
             git checkout {{inputs.parameters.git-ref}}
         volumeMounts:

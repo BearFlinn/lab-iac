@@ -3,13 +3,13 @@
 - targets:
     - "{{ hostvars[groups['k8s_control_plane'][0]]['ansible_host'] }}:30886"
   labels:
-    env: "homelab"
+    env: "grizzly-platform"
     instance: "argo-workflow-controller"
     component: "workflow-controller"
 
 - targets:
     - "{{ hostvars[groups['k8s_control_plane'][0]]['ansible_host'] }}:30887"
   labels:
-    env: "homelab"
+    env: "grizzly-platform"
     instance: "argo-server"
     component: "argo-server"

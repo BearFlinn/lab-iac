@@ -5,7 +5,7 @@
 - targets:
     - "{{ hostvars[host]['ansible_host'] }}:9963"
   labels:
-    env: "homelab"
+    env: "grizzly-platform"
     instance: "{{ host }}"
     component: "cilium-operator"
 {% endfor %}

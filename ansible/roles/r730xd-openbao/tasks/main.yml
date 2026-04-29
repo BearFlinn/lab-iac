@@ -145,15 +145,24 @@
 - name: Install CA bundle into system trust store
   ansible.builtin.copy:
     src: "{{ openbao_tls_dir }}/ca.crt"
-    dest: /usr/local/share/ca-certificates/lab-iac-openbao-ca.crt
+    dest: /usr/local/share/ca-certificates/grizzly-platform-openbao-ca.crt
     remote_src: true
     mode: "0644"
   register: openbao_ca_installed
 
+# Remove the legacy lab-iac-openbao-ca.crt name installed before the
+# 2026-04 grizzly-platform rename. Same CA bytes, just under the old
+# filename — leaving it would clutter the trust store.
+- name: Remove legacy lab-iac CA bundle from trust store
+  ansible.builtin.file:
+    path: /usr/local/share/ca-certificates/lab-iac-openbao-ca.crt
+    state: absent
+  register: openbao_legacy_ca_removed
+
 - name: Refresh system CA store
   ansible.builtin.command: update-ca-certificates
   changed_when: true
-  when: openbao_ca_installed.changed
+  when: openbao_ca_installed.changed or openbao_legacy_ca_removed.changed
 
 # ---------------------------------------------------------------------
 # 3. OpenBao server config + compose

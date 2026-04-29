@@ -86,4 +86,4 @@ prometheus_k8s_apiserver_target: ""
 
 # Alertmanager — webhook receiver (optional)
 # Set monitoring_alert_webhook_url in group_vars to enable
-# monitoring_alert_webhook_url: "https://ntfy.example.com/homelab-alerts"
+# monitoring_alert_webhook_url: "https://ntfy.example.com/platform-alerts"

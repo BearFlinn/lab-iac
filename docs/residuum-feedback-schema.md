@@ -6,7 +6,7 @@ the cross-cutting architectural decisions at `~/Projects/residuum-feedback-decis
 
 This is a **spec, not a workshop.** The DDL below is committed to and
 lands as the first sqlx migration in the `feedback-ingest` service repo
-(not in `lab-iac`). The `residuum_feedback` database, role, and
+(not in `grizzly-platform`). The `residuum_feedback` database, role, and
 connection secret are provisioned separately — see the "Provisioning"
 section below.
 
@@ -198,7 +198,7 @@ everything up.
 ## Final DDL
 
 Destination: `feedback-ingest` service repo, `migrations/0001_init.sql`
-(or whatever numbering sqlx expects). Not lab-iac.
+(or whatever numbering sqlx expects). Not grizzly-platform.
 
 ```sql
 -- Parent: shared identity + triage state
@@ -316,7 +316,7 @@ Answers to the open questions from the workshop phase:
 | 5 | Reverse indexes on snapshot tables | **Yes** — `(name)` and `(key)` (included in the DDL above). | Enables "which reports had subagent X active" / "which reports had flag Y set" without a seq scan. Tables are write-once so index maintenance cost is negligible. |
 | 6 | Audit trail on `status` / `notes` | **None in first pass.** Current state only. | Audit is an additive migration later — a `report_status_history` table with an FK to `reports(id)` doesn't break anything existing. |
 | 7 | `submitter_ip` retention | **Store raw.** Retention pass is a follow-up open question for the service repo, not the schema. | Hashing at insertion breaks the abuse-forensics use case (can't correlate across IPs). Dropping kills rate-limit analytics. Raw + a documented retention pass later is the only option that keeps both use cases alive. The column stays `inet`. |
-| 8 | Migrations toolchain | **`sqlx migrate`**, run on service startup. | Matches the relay. Not a lab-iac concern — migrations live in `feedback-ingest`'s own repo. |
+| 8 | Migrations toolchain | **`sqlx migrate`**, run on service startup. | Matches the relay. Not a grizzly-platform concern — migrations live in `feedback-ingest`'s own repo. |
 | 9 | Seed / fixture data | **None.** Empty migrations; local dev gets an empty DB. | No bootstrap rows needed. A test fixture helper in the service repo is a separate concern. |
 
 ---
@@ -328,9 +328,9 @@ role exist on the `r730xd-postgres` instance. The schema migration in
 this doc has been applied via `sqlx::migrate!()` on feedback-ingest
 startup and all tables + indexes are present.
 
-**Provisioning is NOT a lab-iac concern** — it moved to the
+**Provisioning is NOT a grizzly-platform concern** — it moved to the
 feedback-ingest repo during the discovery discussion. The rationale is
-keeping lab-iac free of per-app logic: lab-iac owns the PG instance
+keeping grizzly-platform free of per-app logic: grizzly-platform owns the PG instance
 (`r730xd-postgres` role) and the superuser credential in Ansible Vault
 (`vault_postgres_password`), and that's its only touchpoint for this
 feature's database. Everything downstream — creating the app DB,
@@ -358,7 +358,7 @@ The concrete flow:
   destinations, avoiding the "gh secrets are write-only" readback
   problem.
 
-What lab-iac still needs to own:
+What grizzly-platform still needs to own:
 
 - Keeping `vault_postgres_password` in
   `ansible/inventory/group_vars/all/vault.yml` current. When it
@@ -370,7 +370,7 @@ What lab-iac still needs to own:
 When the K8s manifests land, the `FEEDBACK_DATABASE_URL` gh secret
 gets wired into a SealedSecret / Sealed K8s Secret in
 `kubernetes/apps/residuum-feedback/` — that's the one remaining
-lab-iac touchpoint for this database.
+grizzly-platform touchpoint for this database.
 
 ---
 
@@ -391,7 +391,7 @@ Locked by decisions already made elsewhere:
 
 ## Verification
 
-The schema doesn't land in lab-iac, so there's nothing to verify in
+The schema doesn't land in grizzly-platform, so there's nothing to verify in
 this repo. When the DDL is committed in the `feedback-ingest` service
 repo, validate with:
 
@@ -417,6 +417,6 @@ repo, validate with:
 7. **Index presence.** `\di` shows all seven explicit indexes plus the
    automatic PK/UNIQUE backings.
 
-None of these require lab-iac or the r730xd PG instance — they run
+None of these require grizzly-platform or the r730xd PG instance — they run
 against a local container while the service repo's test harness is
 being written.

@@ -1,4 +1,4 @@
-# pre-commit configuration for lab-iac
+# pre-commit configuration for grizzly-platform
 # Install: pip install pre-commit && pre-commit install
 # Run manually: pre-commit run --all-files
 # Reference: https://pre-commit.com/

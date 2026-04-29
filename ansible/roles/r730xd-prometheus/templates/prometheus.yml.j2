@@ -1,5 +1,5 @@
 # Managed by Ansible — r730xd-prometheus role
-# Prometheus scrape configuration for homelab observability
+# Prometheus scrape configuration for the grizzly-platform observability stack
 
 global:
   scrape_interval: {{ prometheus_scrape_interval }}
@@ -39,7 +39,7 @@ scrape_configs:
       - targets:
           - "{{ svc.target }}"
         labels:
-          env: "homelab"
+          env: "grizzly-platform"
 
 {% endfor %}
   - job_name: "etcd"
@@ -82,7 +82,7 @@ scrape_configs:
       - targets:
           - "{{ prometheus_k8s_apiserver_target }}"
         labels:
-          env: "homelab"
+          env: "grizzly-platform"
           component: "kube-apiserver"
 {% endif %}
 

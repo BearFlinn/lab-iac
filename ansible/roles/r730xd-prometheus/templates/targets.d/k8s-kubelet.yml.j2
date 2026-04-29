@@ -4,7 +4,7 @@
 - targets:
     - "{{ hostvars[host]['ansible_host'] }}:10250"
   labels:
-    env: "homelab"
+    env: "grizzly-platform"
     instance: "{{ host }}"
     component: "kubelet"
 {% endfor %}

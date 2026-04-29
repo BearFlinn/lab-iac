@@ -1,6 +1,6 @@
-# Home Lab Infrastructure
+# Grizzly Platform
 
-Infrastructure as Code for a bare-metal homelab on repurposed enterprise and consumer hardware. Workloads run on a four-node Kubernetes cluster (one control plane, three workers). Storage is served by a Dell R730xd over iSCSI (ZFS raidz1) and NFS (MergerFS + SnapRAID). Apps deploy via Flux GitOps. Public ingress terminates at a Hetzner VPS and routes through a dedicated WireGuard tunnel to the cluster.
+Self-hosted infrastructure for Grizzly Endeavors projects. Bare-metal IaC on repurposed enterprise and consumer hardware. Workloads run on a four-node Kubernetes cluster (one control plane, three workers). Storage is served by a Dell R730xd over iSCSI (ZFS raidz1) and NFS (MergerFS + SnapRAID). Apps deploy via Flux GitOps. Public ingress terminates at a Hetzner VPS and routes through a dedicated WireGuard tunnel to the cluster.
 
 **Traffic flow:** Internet → Hetzner VPS (Caddy wildcard TLS) → dedicated WireGuard tunnel → R730xd iptables DNAT → K8s NodePort → ingress-nginx → app ([ADR-019](docs/decisions/019-ingress-and-tls-termination.md))
 

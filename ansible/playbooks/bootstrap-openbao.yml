@@ -225,19 +225,19 @@
         content: "{{ item.policy }}"
         mode: "0600"
       loop:
-        - name: lab-iac-admin
+        - name: grizzly-platform-admin
           policy: |
             path "secret/*"      { capabilities = ["create","read","update","delete","list","patch","sudo"] }
             path "sys/mounts/*"  { capabilities = ["read","list"] }
             path "sys/policies/acl/*" { capabilities = ["read","list"] }
         - name: ansible-readonly
           policy: |
-            path "secret/data/lab-iac/*" { capabilities = ["read"] }
-            path "secret/metadata/lab-iac/*" { capabilities = ["read","list"] }
+            path "secret/data/grizzly-platform/*" { capabilities = ["read"] }
+            path "secret/metadata/grizzly-platform/*" { capabilities = ["read","list"] }
         - name: ansible-readwrite
           policy: |
-            path "secret/data/lab-iac/*" { capabilities = ["create","read","update","delete","patch"] }
-            path "secret/metadata/lab-iac/*" { capabilities = ["read","list","delete"] }
+            path "secret/data/grizzly-platform/*" { capabilities = ["create","read","update","delete","patch"] }
+            path "secret/metadata/grizzly-platform/*" { capabilities = ["read","list","delete"] }
         - name: prometheus-readonly
           policy: |
             path "sys/metrics" { capabilities = ["read"] }
@@ -246,12 +246,12 @@
         # per-consumer so revocations can be surgical.
         - name: ansible-platform-read
           policy: |
-            path "secret/data/lab-iac/*" { capabilities = ["read"] }
-            path "secret/metadata/lab-iac/*" { capabilities = ["read","list"] }
+            path "secret/data/grizzly-platform/*" { capabilities = ["read"] }
+            path "secret/metadata/grizzly-platform/*" { capabilities = ["read","list"] }
         - name: eso-platform-read
           policy: |
-            path "secret/data/lab-iac/*" { capabilities = ["read"] }
-            path "secret/metadata/lab-iac/*" { capabilities = ["read","list"] }
+            path "secret/data/grizzly-platform/*" { capabilities = ["read"] }
+            path "secret/metadata/grizzly-platform/*" { capabilities = ["read","list"] }
             path "secret/data/lab-apps/*" { capabilities = ["read"] }
             path "secret/metadata/lab-apps/*" { capabilities = ["read","list"] }
       loop_control:
@@ -274,7 +274,7 @@
         VAULT_TOKEN: "{{ openbao_init.root_token | trim }}"
         BAO_TOKEN: "{{ openbao_init.root_token | trim }}"
       loop:
-        - { name: lab-iac-admin }
+        - { name: grizzly-platform-admin }
         - { name: ansible-readonly }
         - { name: ansible-readwrite }
         - { name: prometheus-readonly }
@@ -286,12 +286,35 @@
       changed_when: "'Success' in bootstrap_policy.stdout"
       no_log: true
 
+    # Remove the legacy lab-iac-admin policy name (replaced by
+    # grizzly-platform-admin in the 2026-04 rename). Safe even if absent.
+    - name: Delete legacy lab-iac-admin policy
+      ansible.builtin.command:
+        argv:
+          - "{{ openbao_cli_install_dir }}/bao"
+          - policy
+          - delete
+          - lab-iac-admin
+      environment:
+        VAULT_ADDR: "{{ openbao_loopback_addr }}"
+        VAULT_CACERT: "{{ openbao_tls_dir }}/ca.crt"
+        BAO_ADDR: "{{ openbao_loopback_addr }}"
+        BAO_CACERT: "{{ openbao_tls_dir }}/ca.crt"
+        VAULT_TOKEN: "{{ openbao_init.root_token | trim }}"
+        BAO_TOKEN: "{{ openbao_init.root_token | trim }}"
+      register: bootstrap_legacy_policy_delete
+      changed_when: "'Success' in bootstrap_legacy_policy_delete.stdout"
+      failed_when:
+        - bootstrap_legacy_policy_delete.rc != 0
+        - "'no policy named' not in (bootstrap_legacy_policy_delete.stderr | default(''))"
+      no_log: true
+
     - name: Clean up policy files
       ansible.builtin.file:
         path: "/tmp/openbao-policy-{{ item }}.hcl"
         state: absent
       loop:
-        - lab-iac-admin
+        - grizzly-platform-admin
         - ansible-readonly
         - ansible-readwrite
         - prometheus-readonly
@@ -405,7 +428,7 @@
           - "       export VAULT_ADDR={{ openbao_api_addr }}"
           - "       export VAULT_CACERT={{ openbao_tls_dir }}/ca.crt"
           - "       bao login <root-token>"
-          - "       bao token create -policy=lab-iac-admin -ttl=720h"
+          - "       bao token create -policy=grizzly-platform-admin -ttl=720h"
           - "  3. Populate the Ansible AppRole creds into vault.yml so"
           - "     playbooks can authenticate to OpenBao:"
           - "       scripts/set-openbao-approle-secrets.sh"

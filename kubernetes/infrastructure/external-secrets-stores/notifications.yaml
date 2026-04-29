@@ -14,5 +14,5 @@ spec:
   data:
     - secretKey: address
       remoteRef:
-        key: lab-iac/flux/discord-webhook
+        key: grizzly-platform/flux/discord-webhook
         property: url

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Install CLI tools for the homelab K8s cluster
+# Install CLI tools for the grizzly-platform K8s cluster
 #
 # Installs:
 #   - cilium    (Cilium CNI status, connectivity tests)

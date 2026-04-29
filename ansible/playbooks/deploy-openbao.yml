@@ -1,7 +1,7 @@
 ---
 # deploy-openbao.yml — Deploy OpenBao to the R730xd
 #
-# OpenBao is the single source of truth for homelab secrets. It runs on
+# OpenBao is the single source of truth for platform secrets. It runs on
 # the R730xd (not K8s) so that cluster bootstrap does not depend on
 # secrets that live in the cluster. Integrated Raft storage keeps it free
 # of any runtime dependency on other foundation stores — no circular

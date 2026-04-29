@@ -457,7 +457,7 @@
     }
   ],
   "schemaVersion": 39,
-  "tags": ["homelab", "kubernetes", "cilium", "hubble", "storage"],
+  "tags": ["grizzly-platform", "kubernetes", "cilium", "hubble", "storage"],
   "templating": { "list": [] },
   "time": { "from": "now-6h", "to": "now" },
   "timepicker": {},

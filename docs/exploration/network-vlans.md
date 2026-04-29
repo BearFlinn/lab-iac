@@ -111,7 +111,7 @@ Result: two IPs per machine — one on the home subnet (for internet), one on th
 
 Unchanged by the router purchase:
 
-- Admin-group operator access to the home lab (jumpbox, R730xd, K8s nodes as needed).
+- Admin-group operator access to the self-hosted infrastructure (jumpbox, R730xd, K8s nodes as needed).
 - Hetzner VPS is deliberately *not* in the admin group — see [ADR-019](../decisions/019-ingress-and-tls-termination.md) and `feedback_netbird_scope.md` in memory.
 - Peer-to-peer; doesn't depend on the local router.
 

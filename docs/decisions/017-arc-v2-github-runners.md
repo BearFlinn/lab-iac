@@ -27,6 +27,6 @@ Key configuration choices:
 ## Consequences
 
 - **DinD requires privileged containers** in `arc-runners`. Runner pods have elevated privileges — acceptable since they only run org-owned workflow code, not external PRs.
-- **Scale-to-zero means cold starts.** First job after idle triggers pod creation (~30-60s). Acceptable for a homelab.
+- **Scale-to-zero means cold starts.** First job after idle triggers pod creation (~30-60s). Acceptable for this self-hosted environment.
 - **No custom runner image initially.** Using `ghcr.io/actions/actions-runner:latest`. If workflows need Helm/kubectl/Rust pre-installed (like the old custom image), a custom image can be layered in later via `template.spec.containers[].image`.
 - **Listener metrics** (`listenerMetrics`) are configured for job-level observability: started/completed counts, runner gauges, job duration histograms.

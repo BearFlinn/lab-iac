@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Install CLI tools for the homelab observability stack
+# Install CLI tools for the grizzly-platform observability stack
 #
 # Installs:
 #   - logcli    (Loki log queries)

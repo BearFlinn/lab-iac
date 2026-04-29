@@ -55,9 +55,9 @@ run.
 ### Verify
 
 ```
-bao kv list secret/lab-iac            # shows: platform/ stores/ observability/ cicd/ flux/
-bao kv list secret/lab-iac/stores     # shows: postgres redis minio-obs minio-bulk
-bao kv get secret/lab-iac/stores/postgres   # should return the current password
+bao kv list secret/grizzly-platform            # shows: platform/ stores/ observability/ cicd/ flux/
+bao kv list secret/grizzly-platform/stores     # shows: postgres redis minio-obs minio-bulk
+bao kv get secret/grizzly-platform/stores/postgres   # should return the current password
 ```
 
 ## Phase C — Ansible consumer flip
@@ -77,10 +77,10 @@ confirm credentials work:
 
 ```
 psql -h 10.0.0.200 -U postgres               # password from OpenBao
-redis-cli -h 10.0.0.200 -a "$(bao kv get -field=password secret/lab-iac/stores/redis)" ping
+redis-cli -h 10.0.0.200 -a "$(bao kv get -field=password secret/grizzly-platform/stores/redis)" ping
 mc alias set obs http://10.0.0.200:9000 \
-  "$(bao kv get -field=root_user secret/lab-iac/stores/minio-obs)" \
-  "$(bao kv get -field=root_password secret/lab-iac/stores/minio-obs)"
+  "$(bao kv get -field=root_user secret/grizzly-platform/stores/minio-obs)" \
+  "$(bao kv get -field=root_password secret/grizzly-platform/stores/minio-obs)"
 ```
 
 Once verified, proceed to the next playbook in order:
@@ -125,7 +125,7 @@ spec:
   target: { name: smoke-test, creationPolicy: Owner }
   data:
     - secretKey: v
-      remoteRef: { key: lab-iac/flux/discord-webhook, property: url }
+      remoteRef: { key: grizzly-platform/flux/discord-webhook, property: url }
 EOF
 kubectl get externalsecret smoke-test -w   # SecretSynced within ~30s
 kubectl delete externalsecret smoke-test

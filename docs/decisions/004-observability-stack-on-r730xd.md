@@ -67,7 +67,7 @@ Deploy the Grafana LGTM stack (Loki, Grafana, Tempo, Prometheus) plus Alertmanag
 
 5. **PostgreSQL for Grafana database** — Uses the already-deployed foundation PostgreSQL with a dedicated `grafana` database and user. Avoids running SQLite inside a container.
 
-6. **Grafana Alloy for log collection** — Tails Docker container logs via the Docker socket and pushes to Loki. Simplest approach for a Docker Compose homelab. No per-container logging driver changes needed.
+6. **Grafana Alloy for log collection** — Tails Docker container logs via the Docker socket and pushes to Loki. Simplest approach for a Docker Compose self-hosted environment. No per-container logging driver changes needed.
 
 7. **Conservative memory limits** — ~3GB total across all services on a 32GB machine already running foundation stores (~10GB effective). Prometheus 1.5GB, Loki 512MB, Tempo 256MB, Grafana 256MB, Alloy 256MB, Alertmanager 128MB.
 

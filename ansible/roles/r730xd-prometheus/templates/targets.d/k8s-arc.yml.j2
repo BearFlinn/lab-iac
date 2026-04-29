@@ -3,6 +3,6 @@
 - targets:
     - "{{ hostvars[groups['k8s_control_plane'][0]]['ansible_host'] }}:30885"
   labels:
-    env: "homelab"
+    env: "grizzly-platform"
     instance: "arc-controller"
     component: "arc-controller"

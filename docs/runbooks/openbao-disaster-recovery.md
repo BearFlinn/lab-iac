@@ -9,7 +9,7 @@ See also: `docs/decisions/023-self-hosted-openbao-on-r730xd.md` for the architec
 Before `deploy-openbao.yml` can run, there must be an Infisical project with a universal-auth machine identity. This is the only piece of the stack that is not captured as IaC (Infisical configuration sits outside this repo). The actual project used is the one referenced by `workspaceId` in `.infisical.json` at the repo root.
 
 1. Log in to Infisical (https://app.infisical.com) as Bear.
-2. Either reuse the existing lab-iac project (whose ID is in `.infisical.json`) or create a new one and update that file's `workspaceId` to match.
+2. Either reuse the existing grizzly-platform project (whose ID is in `.infisical.json`) or create a new one and update that file's `workspaceId` to match.
 3. Ensure the project has an environment with slug `prod` (the role's `openbao_infisical_env` default).
 4. Organization → Access Control → Identities → Create Identity:
    - Name: `openbao-r730xd` (or similar)

@@ -134,7 +134,7 @@
     }
   ],
   "schemaVersion": 39,
-  "tags": ["homelab", "docker", "containers"],
+  "tags": ["grizzly-platform", "docker", "containers"],
   "templating": { "list": [] },
   "time": { "from": "now-1h", "to": "now" },
   "timepicker": {},

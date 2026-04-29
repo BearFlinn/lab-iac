@@ -1,14 +1,14 @@
 # Residuum Feedback Ingestion — Lab Changes
 
-What needs to land in `lab-iac` to stand up the feedback ingestion feature. See `~/Projects/residuum-feedback-decisions.md` for the architectural decisions this implements.
+What needs to land in `grizzly-platform` to stand up the feedback ingestion feature. See `~/Projects/residuum-feedback-decisions.md` for the architectural decisions this implements.
 
-Database schema is locked in [`residuum-feedback-schema.md`](./residuum-feedback-schema.md). **Provisioning of the `residuum_feedback` database and owning role is NOT a lab-iac concern** — it's owned by the feedback-ingest repo via a `workflow_dispatch` gh Actions job that runs on the self-hosted lab runner. lab-iac owns the PG instance itself (the `r730xd-postgres` role) and the superuser credential in Ansible Vault, and that's where its responsibility ends for this feature's database.
+Database schema is locked in [`residuum-feedback-schema.md`](./residuum-feedback-schema.md). **Provisioning of the `residuum_feedback` database and owning role is NOT a grizzly-platform concern** — it's owned by the feedback-ingest repo via a `workflow_dispatch` gh Actions job that runs on the self-hosted runner. grizzly-platform owns the PG instance itself (the `r730xd-postgres` role) and the superuser credential in Ansible Vault, and that's where its responsibility ends for this feature's database.
 
 ---
 
 ## Status (2026-04-15)
 
-Nothing in this plan has landed in `lab-iac` yet. The feedback-ingest service itself is scaffolded and verified end-to-end against the live `r730xd-postgres` (`residuum_feedback` database + role provisioned by the feedback-ingest repo's bootstrap workflow), but every item below is still pending:
+Nothing in this plan has landed in `grizzly-platform` yet. The feedback-ingest service itself is scaffolded and verified end-to-end against the live `r730xd-postgres` (`residuum_feedback` database + role provisioned by the feedback-ingest repo's bootstrap workflow), but every item below is still pending:
 
 - **K8s manifests** in `kubernetes/apps/residuum-feedback/` — not started
 - **DNS A record** for `residuum-feedback.bearflinn.com` — not added
@@ -46,13 +46,13 @@ Add an A record for `residuum-feedback.bearflinn.com` pointing at the Hetzner pr
 
 ## Tempo multi-tenancy
 
-The ingest service sends report traces to a dedicated tenant `residuum-feedback` via `X-Scope-OrgID: residuum-feedback`, keeping them completely isolated from existing homelab traces.
+The ingest service sends report traces to a dedicated tenant `residuum-feedback` via `X-Scope-OrgID: residuum-feedback`, keeping them completely isolated from existing platform traces.
 
 **Required changes:**
 
 1. **Verify or enable multi-tenancy in the `r730xd-tempo` role.** By default Tempo runs single-tenant; multi-tenancy requires `multitenancy_enabled: true` in `tempo-config.yml`. Check the current template and add the flag if absent, then re-deploy with `deploy-observability.yml`.
 
-2. **Add a second Grafana data source** (via the `r730xd-grafana` role's datasource provisioning) pointed at Tempo with `X-Scope-OrgID: residuum-feedback`. This keeps report traces queryable without polluting the existing homelab Tempo data source or dashboards.
+2. **Add a second Grafana data source** (via the `r730xd-grafana` role's datasource provisioning) pointed at Tempo with `X-Scope-OrgID: residuum-feedback`. This keeps report traces queryable without polluting the existing platform Tempo data source or dashboards.
 
 3. **Document the tenant** in `docs/monitoring-integration.md` so it's clear the `residuum-feedback` tenant is reserved for report traces and shouldn't be used for anything else.
 
@@ -95,6 +95,6 @@ Number assigned at the time of writing.
 
 ## Still open
 
-- ~~PG database and role provisioning via the `r730xd-postgres` role~~ — **No longer a lab-iac concern.** Provisioning moved to the feedback-ingest repo (`.github/workflows/bootstrap-db.yml` + `scripts/bootstrap-db.sh`). Already live: `residuum_feedback` DB + role exist on `r730xd-postgres` and the feedback-ingest service connects to them successfully. lab-iac's only remaining responsibility here is keeping `vault_postgres_password` current in Ansible Vault — that's the credential the bootstrap workflow consumes via the `PG_SUPERUSER_PASSWORD` gh secret.
+- ~~PG database and role provisioning via the `r730xd-postgres` role~~ — **No longer a grizzly-platform concern.** Provisioning moved to the feedback-ingest repo (`.github/workflows/bootstrap-db.yml` + `scripts/bootstrap-db.sh`). Already live: `residuum_feedback` DB + role exist on `r730xd-postgres` and the feedback-ingest service connects to them successfully. grizzly-platform's only remaining responsibility here is keeping `vault_postgres_password` current in Ansible Vault — that's the credential the bootstrap workflow consumes via the `PG_SUPERUSER_PASSWORD` gh secret.
 - Whether to add an Alertmanager rule for the ingest service's health (e.g., no successful submissions in the last N hours, or high error rate) — low priority but worth noting for the operational readiness checklist
 - Image pull configuration — verify the `residuum-feedback` namespace can pull from the lab registry with the same credentials already configured for other app namespaces (likely a non-issue since the lab registry is anonymous within the cluster per `kubernetes/apps/caz-portfolio/`, but confirm when the manifests land)

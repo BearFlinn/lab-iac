@@ -19,11 +19,11 @@ spec:
   data:
     - secretKey: accesskey
       remoteRef:
-        key: lab-iac/cicd/sccache-minio
+        key: grizzly-platform/cicd/sccache-minio
         property: access_key
     - secretKey: secretkey
       remoteRef:
-        key: lab-iac/cicd/sccache-minio
+        key: grizzly-platform/cicd/sccache-minio
         property: secret_key
 ---
 apiVersion: external-secrets.io/v1
@@ -42,5 +42,5 @@ spec:
   data:
     - secretKey: github_token
       remoteRef:
-        key: lab-iac/platform/github-runner
+        key: grizzly-platform/platform/github-runner
         property: pat

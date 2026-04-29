@@ -291,8 +291,8 @@
 
     - name: Re-template alert rules
       ansible.builtin.template:
-        src: "{{ playbook_dir }}/../roles/r730xd-prometheus/templates/rules/homelab.yml.j2"
-        dest: "/opt/observability/prometheus/rules/homelab.yml"
+        src: "{{ playbook_dir }}/../roles/r730xd-prometheus/templates/rules/grizzly-platform.yml.j2"
+        dest: "/opt/observability/prometheus/rules/grizzly-platform.yml"
         mode: "0644"
       become: yes
       register: prom_rules

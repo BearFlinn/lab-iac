@@ -1,5 +1,5 @@
 # Personal / third-party app deployments live in the lab-apps repo.
-# Platform pieces stay in this repo (lab-iac); lab-apps is pure manifests.
+# Platform pieces stay in this repo (grizzly-platform); lab-apps is pure manifests.
 #
 # Auth uses the same GitHub App credentials as other GitRepository sources
 # (see github-app-credentials secret in flux-system).

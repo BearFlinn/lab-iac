@@ -28,7 +28,7 @@ First-stop pointer for "where do I find / do X with OpenBao?" Everything else li
 | Rotation runbook | `docs/runbooks/openbao-rotation.md` |
 | DR runbook | `docs/runbooks/openbao-disaster-recovery.md` |
 | Prometheus target | `ansible/roles/r730xd-prometheus/templates/targets.d/openbao.yml.j2` |
-| Prometheus alerts | `rules/homelab.yml.j2` → `openbao` group |
+| Prometheus alerts | `rules/grizzly-platform.yml.j2` → `openbao` group |
 
 ## Infisical bootstrap project
 
@@ -51,7 +51,7 @@ ROOT=$(infisical secrets get OPENBAO_ROOT_TOKEN \
 bao login "$ROOT"
 
 # Better: mint a short-lived admin token instead of sitting on the root
-bao token create -policy=lab-iac-admin -ttl=24h
+bao token create -policy=grizzly-platform-admin -ttl=24h
 ```
 
 ## Policies bootstrapped
@@ -60,12 +60,12 @@ Applied by `bootstrap-openbao.yml`. Re-apply by re-running that playbook (idempo
 
 | Policy | Scope |
 |---|---|
-| `lab-iac-admin` | Full CRUD on `secret/*`, read sys mounts/policies |
-| `ansible-readonly` | Read `secret/data/lab-iac/*` |
-| `ansible-readwrite` | Read/write `secret/data/lab-iac/*` |
+| `grizzly-platform-admin` | Full CRUD on `secret/*`, read sys mounts/policies |
+| `ansible-readonly` | Read `secret/data/grizzly-platform/*` |
+| `ansible-readwrite` | Read/write `secret/data/grizzly-platform/*` |
 | `prometheus-readonly` | Read `sys/metrics` only (for future scrape token) |
-| `ansible-platform-read` | Read `secret/data/lab-iac/*` — for AppRole consumers (Phase C+) |
-| `eso-platform-read` | Read `secret/data/lab-iac/*` — for Kubernetes auth consumers (ESO, Phase D+) |
+| `ansible-platform-read` | Read `secret/data/grizzly-platform/*` — for AppRole consumers (Phase C+) |
+| `eso-platform-read` | Read `secret/data/grizzly-platform/*` — for Kubernetes auth consumers (ESO, Phase D+) |
 
 ## Auth methods
 
@@ -77,28 +77,28 @@ Applied by `bootstrap-openbao.yml`. Re-apply by re-running that playbook (idempo
 
 ## Secret path layout
 
-All platform secrets live under `secret/lab-iac/<domain>/<name>` (KV v2):
+All platform secrets live under `secret/grizzly-platform/<domain>/<name>` (KV v2):
 
 | Path | Keys |
 |---|---|
-| `secret/lab-iac/platform/cloudflare` | `api_token` |
-| `secret/lab-iac/platform/idrac` | `password` |
-| `secret/lab-iac/platform/github-app` | `app_id`, `installation_id`, `private_key` |
-| `secret/lab-iac/platform/github-runner` | `pat` |
-| `secret/lab-iac/stores/postgres` | `password` |
-| `secret/lab-iac/stores/redis` | `password` |
-| `secret/lab-iac/stores/minio-obs` | `root_user`, `root_password` |
-| `secret/lab-iac/stores/minio-bulk` | `root_user`, `root_password` |
-| `secret/lab-iac/observability/grafana` | `admin_password` |
-| `secret/lab-iac/observability/minio-client` | `access_key`, `secret_key` |
-| `secret/lab-iac/observability/discord-webhook` | `url` |
-| `secret/lab-iac/cicd/sccache-minio` | `access_key`, `secret_key` |
-| `secret/lab-iac/cicd/argo-minio` | `access_key`, `secret_key` |
-| `secret/lab-iac/flux/discord-webhook` | `url` |
+| `secret/grizzly-platform/platform/cloudflare` | `api_token` |
+| `secret/grizzly-platform/platform/idrac` | `password` |
+| `secret/grizzly-platform/platform/github-app` | `app_id`, `installation_id`, `private_key` |
+| `secret/grizzly-platform/platform/github-runner` | `pat` |
+| `secret/grizzly-platform/stores/postgres` | `password` |
+| `secret/grizzly-platform/stores/redis` | `password` |
+| `secret/grizzly-platform/stores/minio-obs` | `root_user`, `root_password` |
+| `secret/grizzly-platform/stores/minio-bulk` | `root_user`, `root_password` |
+| `secret/grizzly-platform/observability/grafana` | `admin_password` |
+| `secret/grizzly-platform/observability/minio-client` | `access_key`, `secret_key` |
+| `secret/grizzly-platform/observability/discord-webhook` | `url` |
+| `secret/grizzly-platform/cicd/sccache-minio` | `access_key`, `secret_key` |
+| `secret/grizzly-platform/cicd/argo-minio` | `access_key`, `secret_key` |
+| `secret/grizzly-platform/flux/discord-webhook` | `url` |
 
 ### Adding a new platform secret
 
-1. `bao kv put secret/lab-iac/<domain>/<name> k1=v1 k2=v2`
+1. `bao kv put secret/grizzly-platform/<domain>/<name> k1=v1 k2=v2`
 2. Add a Jinja lookup for each key to `ansible/vars/openbao_secrets.yml`
    (redefines `vault_*` as a `vault_kv2_get` lookup).
 3. If the secret is consumed in K8s, add an `ExternalSecret` next to
@@ -110,7 +110,7 @@ All platform secrets live under `secret/lab-iac/<domain>/<name>` (KV v2):
 
 ### Rotating a platform secret
 
-1. Update the value: `bao kv put secret/lab-iac/<domain>/<name> k=<new>`
+1. Update the value: `bao kv put secret/grizzly-platform/<domain>/<name> k=<new>`
 2. Ansible consumers: re-run the relevant playbook — lookups fetch
    fresh on each run.
 3. K8s consumers: ESO refreshes every `refreshInterval` (default 1h);
@@ -127,8 +127,8 @@ ssh r730xd 'systemctl is-active foundation-openbao openbao-auto-unseal'
 ssh r730xd 'bao status -address=https://127.0.0.1:8200 -ca-cert=/etc/openbao/tls/ca.crt'
 
 # Put / get a secret
-bao kv put secret/lab-iac/foo my_key=my_value
-bao kv get secret/lab-iac/foo
+bao kv put secret/grizzly-platform/foo my_key=my_value
+bao kv get secret/grizzly-platform/foo
 
 # Manual unseal (if auto-unseal failed)
 ssh r730xd

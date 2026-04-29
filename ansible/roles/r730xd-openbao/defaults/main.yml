@@ -35,7 +35,7 @@ openbao_tls_dir: "{{ openbao_config_dir }}/tls"
 # Self-signed TLS — regenerated if missing or within this many days of expiry
 openbao_tls_cert_valid_days: 3650
 openbao_tls_renew_within_days: 30
-openbao_tls_ca_common_name: "lab-iac OpenBao CA"
+openbao_tls_ca_common_name: "grizzly-platform OpenBao CA"
 openbao_tls_server_common_name: "r730xd.lab"
 openbao_tls_server_alt_names:
   - "DNS:r730xd"

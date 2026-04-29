@@ -1,11 +1,11 @@
 ---
 name: security-review
-description: Audit homelab infrastructure security posture. Use when setting up new machines, roles, or services; when reviewing existing IaC for security gaps; when the user asks about attack surface, hardening, or exposure; or when preparing a machine or service for production use. Covers SSH, firewalls, network segmentation, secrets handling, service exposure, BMC/iDRAC, backup security, and supply chain.
+description: Audit grizzly-platform infrastructure security posture. Use when setting up new machines, roles, or services; when reviewing existing IaC for security gaps; when the user asks about attack surface, hardening, or exposure; or when preparing a machine or service for production use. Covers SSH, firewalls, network segmentation, secrets handling, service exposure, BMC/iDRAC, backup security, and supply chain.
 ---
 
 # Security Review
 
-Structured audit of homelab infrastructure security. Operate in two modes:
+Structured audit of self-hosted infrastructure security. Operate in two modes:
 
 1. **Targeted review** — Audit a specific file, role, playbook, or machine config being worked on.
 2. **Posture assessment** — Broad sweep across the repo and (optionally) live machines.
@@ -33,7 +33,7 @@ If the user wants live verification (SSH into machines), confirm before doing so
 
 ## Principles
 
-- Never recommend security theater. Every recommendation must address a real threat in a homelab context (e.g., don't recommend WAF for an internal-only service).
+- Never recommend security theater. Every recommendation must address a real threat in a self-hosted infrastructure context (e.g., don't recommend WAF for an internal-only service).
 - Recommendations must be implementable as IaC. If something can't be automated, flag it as a manual step requiring documentation.
-- Consider the threat model: homelab on a residential network, internet-exposed via VPN tunnel to VPS, iDRAC/BMC on the local network.
+- Consider the threat model: self-hosted infrastructure on a residential network, internet-exposed via VPN tunnel to VPS, iDRAC/BMC on the local network.
 - Don't just find problems — prioritize them. A missing firewall rule on an internet-facing service matters more than a missing log rotation config.

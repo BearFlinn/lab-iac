@@ -270,7 +270,7 @@
           - targets:
               - "{{ ansible_host }}:9100"
             labels:
-              env: "homelab"
+              env: "grizzly-platform"
               instance: "{{ inventory_hostname }}"
         dest: "{{ prometheus_targets_dir }}/node-{{ inventory_hostname }}.yml"
         mode: "0644"
@@ -282,7 +282,7 @@
           - targets:
               - "{{ ansible_host }}:9290"
             labels:
-              env: "homelab"
+              env: "grizzly-platform"
               instance: "{{ inventory_hostname }}"
         dest: "{{ prometheus_targets_dir }}/ipmi-{{ inventory_hostname }}.yml"
         mode: "0644"

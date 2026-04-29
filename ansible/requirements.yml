@@ -1,5 +1,5 @@
 ---
-# Ansible collection requirements for lab-iac.
+# Ansible collection requirements for grizzly-platform.
 #
 # Install:
 #   ansible-galaxy collection install -r ansible/requirements.yml \

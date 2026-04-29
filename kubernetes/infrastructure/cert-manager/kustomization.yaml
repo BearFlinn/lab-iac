@@ -6,6 +6,6 @@ resources:
   - helmrelease.yaml
   - metrics-service.yaml
   # ClusterIssuer is applied by a separate Flux Kustomization
-  # (kubernetes/clusters/homelab/cert-manager-issuers.yaml) that depends
+  # (kubernetes/clusters/grizzly-platform/cert-manager-issuers.yaml) that depends
   # on this Kustomization — required because the cert-manager CRDs only
   # exist after the HelmRelease succeeds.

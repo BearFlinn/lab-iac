@@ -93,4 +93,4 @@ openbao_api_addr: "https://{{ r730xd_ip }}:{{ openbao_api_port }}"
 # jumpbox/bear-desktop controller, fetch it via:
 #   scripts/fetch-openbao-ca.sh
 # Override via `-e openbao_tls_ca_path=/alt/path/ca.crt`.
-openbao_tls_ca_path: "/usr/local/share/ca-certificates/lab-iac-openbao-ca.crt"
+openbao_tls_ca_path: "/usr/local/share/ca-certificates/grizzly-platform-openbao-ca.crt"

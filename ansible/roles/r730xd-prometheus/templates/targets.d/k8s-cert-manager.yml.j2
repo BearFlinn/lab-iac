@@ -3,6 +3,6 @@
 - targets:
     - "{{ hostvars[groups['k8s_control_plane'][0]]['ansible_host'] }}:30888"
   labels:
-    env: "homelab"
+    env: "grizzly-platform"
     instance: "cert-manager-controller"
     component: "cert-manager"

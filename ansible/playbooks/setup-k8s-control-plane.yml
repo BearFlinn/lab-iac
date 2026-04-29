@@ -127,7 +127,7 @@
           - targets:
               - "{{ k8s_control_plane_endpoint }}:2381"
             labels:
-              env: "homelab"
+              env: "grizzly-platform"
               instance: "{{ inventory_hostname }}"
               component: "etcd"
         dest: "{{ prometheus_compose_dir }}/targets.d/k8s-etcd.yml"
@@ -171,8 +171,8 @@
 
     - name: Re-template alert rules with K8s alerts
       ansible.builtin.template:
-        src: "{{ playbook_dir }}/../roles/r730xd-prometheus/templates/rules/homelab.yml.j2"
-        dest: "/opt/observability/prometheus/rules/homelab.yml"
+        src: "{{ playbook_dir }}/../roles/r730xd-prometheus/templates/rules/grizzly-platform.yml.j2"
+        dest: "/opt/observability/prometheus/rules/grizzly-platform.yml"
         mode: "0644"
       become: yes
       register: prom_rules

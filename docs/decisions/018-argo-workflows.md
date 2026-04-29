@@ -12,7 +12,7 @@ Phase 5 of the K8s cluster standup requires a workflow engine for CI/CD pipeline
 Deploy **Argo Workflows** (chart v1.0.7, app v4.0.4) as the cluster workflow engine.
 
 Key configuration choices:
-- **Server enabled** with `authMode: server` (no authentication). Internal homelab only — no external ingress until Phase 6.
+- **Server enabled** with `authMode: server` (no authentication). Internal only — no external ingress until Phase 6.
 - **Artifact repository**: MinIO bulk instance at `10.0.0.200:9002`, bucket `argo-artifacts`. Insecure (private LAN, no TLS). Dedicated MinIO user with scoped policy.
 - **Controller metrics enabled** on port 9090 for Prometheus scraping.
 - **Namespace**: `argo` (upstream default).
@@ -28,6 +28,6 @@ Key configuration choices:
 
 - **Near-zero idle footprint.** Controller (~200MB RAM, minimal CPU) and server are the only always-on components. Workflow pods are ephemeral — they don't exist until triggered.
 - **MinIO dependency.** Artifact storage requires the MinIO bulk instance on R730xd to be available. If MinIO is down, workflows can still run but can't store/retrieve artifacts.
-- **No authentication.** The Argo Server API is open to anyone on the lab network. Acceptable for a homelab; would need SSO or `client` auth mode before any external exposure.
+- **No authentication.** The Argo Server API is open to anyone on the lab network. Acceptable for this self-hosted environment; would need SSO or `client` auth mode before any external exposure.
 - **Composes with Ray later.** An Argo workflow step can submit a `RayJob` resource, enabling the Argo-orchestrates-Ray pattern described in the exploration doc. No changes needed to Argo's config when KubeRay is added.
 - **Log archival.** `archiveLogs: true` stores container logs as artifacts in MinIO, enabling post-mortem debugging of completed workflows without relying on Loki retention.
