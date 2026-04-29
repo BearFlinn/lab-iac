@@ -15,11 +15,11 @@ The remaining options are: (a) drop personal-app manifests into `grizzly-platfor
 
 **Personal self-hosted apps live in a new repo, `grizzly-endeavors/lab-apps`.** Layout is `apps/<name>/` per service, each folder containing the Flux/Kubernetes manifests needed to stand the app up (namespace, `HelmRepository` or `GitRepository`, `HelmRelease`, `ExternalSecret`, `Ingress`). `apps/kustomization.yaml` lists the enabled apps.
 
-**lab-iac registers the repo once** via `kubernetes/clusters/grizzly-platform/personal-apps.yaml` — a `GitRepository` + top-level `Kustomization` pointing at `./apps` in lab-apps. After that, adding a new personal app is one PR in lab-apps (new folder + one line in `apps/kustomization.yaml`). grizzly-platform is not touched.
+**grizzly-platform registers the repo once** via `kubernetes/clusters/grizzly-platform/personal-apps.yaml` — a `GitRepository` + top-level `Kustomization` pointing at `./apps` in lab-apps. After that, adding a new personal app is one PR in lab-apps (new folder + one line in `apps/kustomization.yaml`). grizzly-platform is not touched.
 
 **Conventions inherit from the platform:**
 - PVCs default to the `nfs-mergerfs` storage class (democratic-csi on R730xd) per ADR-015.
-- Secrets use `ExternalSecret` → `ClusterSecretStore/openbao` with paths under `secret/lab-apps/<app>/<name>` — parallel to the `lab-iac/` prefix used for platform secrets in ADR-024.
+- Secrets use `ExternalSecret` → `ClusterSecretStore/openbao` with paths under `secret/lab-apps/<app>/<name>` — parallel to the `grizzly-platform/` prefix used for platform secrets in ADR-024.
 - External TLS stays terminated at the Hetzner VPS Caddy (ADR-019); in-cluster ingress is plain HTTP on subdomains covered by the existing wildcard.
 
 ## Alternatives Considered
@@ -31,7 +31,7 @@ The remaining options are: (a) drop personal-app manifests into `grizzly-platfor
 ## Consequences
 
 - **Personal apps deploy independently of platform changes.** A bad CouchDB values tweak can't block infrastructure reconciliation, and vice versa. The top-level `personal-apps` Kustomization has `wait: false` so a single broken app doesn't pin the parent unready.
-- **Two repos to clone for full cluster reconstruction.** `flux bootstrap` reads lab-iac, which references lab-apps as a `GitRepository`; disaster recovery is still one command, but the audit story now spans two git histories.
+- **Two repos to clone for full cluster reconstruction.** `flux bootstrap` reads grizzly-platform, which references lab-apps as a `GitRepository`; disaster recovery is still one command, but the audit story now spans two git histories.
 - **OpenBao path layout grows a sibling prefix.** `secret/lab-apps/...` sits next to `secret/grizzly-platform/...`. The `eso-platform-read` policy must grant read on both prefixes, or a new `eso-apps-read` policy is added — revisit once there's more than one app to see which is cleaner.
 - **The `register-app.yaml` workflow does not apply here.** Onboarding a new personal app is a hand-written PR in lab-apps. Low friction given the cadence (single-digit apps/year expected), but if it grows, a mirror workflow template in lab-apps is additive.
 - **`prune: true` on the personal-apps Kustomization** means removing an app folder from lab-apps deletes its in-cluster resources — including PVCs unless retained by storage class policy. Document per-app backup expectations in the app's own README.
