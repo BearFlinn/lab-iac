@@ -19,6 +19,7 @@ RUN apt-get update -qq && \
       rsync \
       gcc-aarch64-linux-gnu \
       libc6-dev-arm64-cross \
+      gcc-mingw-w64-x86-64 \
       libgtk-4-dev \
       libwebkitgtk-6.0-dev \
       meson \
@@ -76,7 +77,7 @@ ENV RUSTUP_HOME=/home/runner/.rustup \
     PATH=/home/runner/.cargo/bin:$PATH
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile default && \
     rustup component add clippy rustfmt && \
-    rustup target add aarch64-unknown-linux-gnu && \
+    rustup target add aarch64-unknown-linux-gnu x86_64-pc-windows-gnu && \
     cargo install cargo-deny --locked
 
 # sccache — prebuilt static binary (much faster than cargo install)
@@ -93,6 +94,10 @@ USER root
 RUN for bin in /home/runner/.cargo/bin/*; do \
       ln -sf "$bin" /usr/local/bin/; \
     done
+
+# Cargo linker config for cross-compilation targets
+RUN printf '[target.x86_64-pc-windows-gnu]\nlinker = "x86_64-w64-mingw32-gcc"\n' \
+    >> /home/runner/.cargo/config.toml
 
 # Verify all tools are accessible
 RUN helm version && \
